@@ -28,8 +28,8 @@ This audit evaluates the codebase across 10 critical dimensions to guide the tra
 ## 2. What Is Broken / Malfunctioning
 
 - **Invalid `requirements.txt` Syntax:** Every line contains `pip install <package>` instead of standard `<package>==<version>`, breaking `pip install -r requirements.txt`.
-- **Hardcoded Database Credentials:** `Config.DB_CONFIG` contains hardcoded password (`JChandra@2003`), causing immediate failure in standard environments without that specific setup.
-- **Hardcoded Admin Authentication:** `/login` directly matches strings `'admin'` and `'admin123'` in Python code rather than querying the `users` table or verifying hashes.
+- **Hardcoded Database Credentials:** `Config.DB_CONFIG` contains a hardcoded personal database password, causing immediate failure in standard environments without that specific setup.
+- **Hardcoded Admin Authentication:** `/login` directly matches strings `'admin'` and a hardcoded default administrator password in Python code rather than querying the `users` table or verifying hashes.
 - **Rule-Based Score Normalization Flaw:** `len(matches) / len(BULLYING_PHRASES)` produces extremely deflated scores (e.g. 1 match out of 40 yields 0.025), rendering the rule-based weight ineffective.
 - **In-Memory Email Credentials:** Credentials in `EmailIntegration` reside only in memory and are lost on restart.
 - **Broken Drill-Down in UI:** Analysis history "View Details" button triggers a placeholder alert (`alert('Viewing analysis details...')`) rather than rendering actual report data.
