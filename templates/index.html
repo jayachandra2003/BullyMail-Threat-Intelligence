@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BullyMail V2 — Cyber Threat Intelligence & Multi-Vector Email Security</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    
+    <!-- Early 2-State Theme Execution -->
+    <script>
+        (function() {
+            const saved = localStorage.getItem('bullymail_theme');
+            const theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.style.colorScheme = theme;
+        })();
+    </script>
+
+    <!-- Google Fonts: Inter, JetBrains Mono, Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- FontAwesome 6 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- BullyMail V2 Core CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <!-- Theme Core -->
+    <script src="{{ url_for('static', filename='js/core/theme.js') }}"></script>
+    
+    <style>
+        .hero-v2-soc {
+            padding: 90px 0 65px;
+            background: radial-gradient(circle at 80% 20%, var(--accent-glow) 0%, transparent 50%),
+                        radial-gradient(circle at 20% 80%, var(--cyan-glow) 0%, transparent 50%),
+                        var(--bg-void);
+            border-bottom: 1px solid var(--border-subtle);
+            position: relative;
+        }
+
+        .vector-card-hero {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 22px;
+            height: 100%;
+            transition: var(--transition-base);
+            box-shadow: var(--shadow-card);
+        }
+
+        .vector-card-hero:hover {
+            transform: translateY(-3px);
+            border-color: var(--accent-primary);
+            box-shadow: var(--shadow-md);
+        }
+
+        .vector-icon-circle {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            margin-bottom: 14px;
+        }
+
+        .interactive-demo-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-xl);
+            padding: 30px;
+            box-shadow: var(--shadow-card), var(--shadow-lg);
+        }
+
+        .navbar-soc {
+            background: var(--bg-glass);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <!-- Top Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-soc py-3">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center gap-2 fw-bold fs-4 text-primary-soc" href="/">
+                <div class="brand-logo" style="width: 36px; height: 36px; font-size: 1.1rem; background: linear-gradient(135deg, var(--accent-primary) 0%, #4338ca 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white;">
+                    <i class="fas fa-shield-halved"></i>
+                </div>
+                BullyMail <span class="brand-badge">V2 SOC</span>
+            </a>
+            <button class="navbar-toggler border-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarContent">
+                <ul class="navbar-nav ms-auto align-items-center gap-3">
+                    <li class="nav-item"><a class="nav-link text-secondary-soc" href="#vectors">Threat Vectors</a></li>
+                    <li class="nav-item"><a class="nav-link text-secondary-soc" href="#demo">Live Demo</a></li>
+                    <li class="nav-item"><a class="nav-link text-secondary-soc" href="#architecture">Architecture</a></li>
+                    
+                    <!-- Single-Click Theme Toggle Button -->
+                    <li class="nav-item">
+                        <button type="button" class="soc-theme-toggle-btn" aria-label="Switch to light mode" title="Switch to light mode">
+                            <i class="fas fa-sun"></i>
+                        </button>
+                    </li>
+
+                    <li class="nav-item">
+                        <a href="/login" class="btn-soc-primary btn-sm text-decoration-none">
+                            <i class="fas fa-lock me-1"></i> SOC Portal Access
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Header -->
+    <header class="hero-v2-soc text-center">
+        <div class="container position-relative" style="z-index: 2;">
+            <div class="row justify-content-center">
+                <div class="col-lg-10">
+                    <div class="d-inline-flex align-items-center gap-2 px-3 py-1 rounded-pill mb-3" style="background: var(--threat-safe-bg); border: 1px solid var(--threat-safe-border);">
+                        <div class="pulse-dot"></div>
+                        <span class="font-mono text-success small fw-bold">MULTI-VECTOR THREAT INTELLIGENCE PLATFORM</span>
+                    </div>
+
+                    <h1 class="display-5 fw-extrabold text-primary-soc mb-3" style="letter-spacing: -0.03em;">
+                        Intelligent Email Cyberbullying, Phishing & Threat Forensics
+                    </h1>
+                    <p class="lead text-muted mb-4 mx-auto" style="max-width: 820px; font-size: 1.05rem;">
+                        BullyMail V2 combines statistical NLP classifiers, calibrated academic heuristics, safe passive URL & look-alike domain inspection, static attachment auditing, and image compression forensics into a unified cybersecurity command center.
+                    </p>
+
+                    <div class="d-flex justify-content-center gap-3 flex-wrap">
+                        <a href="#demo" class="btn-soc-primary py-3 px-4">
+                            <i class="fas fa-play me-2"></i> Launch Interactive Threat Demo
+                        </a>
+                        <a href="/login" class="btn-soc-secondary py-3 px-4">
+                            <i class="fas fa-chart-line me-2"></i> Executive Command Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 6 Specialized Threat Vectors Grid -->
+    <section id="vectors" class="py-5" style="background: var(--bg-app);">
+        <div class="container py-4">
+            <div class="text-center mb-5">
+                <span class="text-accent font-mono small fw-bold text-uppercase">Multi-Vector Security Scope</span>
+                <h2 class="fw-extrabold text-primary-soc mb-2">6 Specialized Threat Detection Engines</h2>
+                <p class="text-muted">Simultaneous passive multi-layer inspection across text semantics, links, metadata, and files.</p>
+            </div>
+
+            <div class="row g-4">
+                <!-- 1. Cyberbullying -->
+                <div class="col-md-4">
+                    <div class="vector-card-hero">
+                        <div class="vector-icon-circle" style="background: var(--threat-critical-bg); color: var(--threat-critical);">
+                            <i class="fas fa-comment-slash"></i>
+                        </div>
+                        <h5 class="text-primary-soc">Cyberbullying & Harassment</h5>
+                        <p class="text-muted small mb-0">Multi-tier rule heuristics separating single personal insults (Medium) from compounding harassment (High) and physical harm threats (Critical).</p>
+                    </div>
+                </div>
+
+                <!-- 2. Phishing -->
+                <div class="col-md-4">
+                    <div class="vector-card-hero">
+                        <div class="vector-icon-circle" style="background: var(--threat-medium-bg); color: var(--threat-medium);">
+                            <i class="fas fa-fish"></i>
+                        </div>
+                        <h5 class="text-primary-soc">Phishing & Credential Traps</h5>
+                        <p class="text-muted small mb-0">Deconstructs credential verification pretexts, urgent account suspension threats, financial extortion, and look-alike brand spoofs.</p>
+                    </div>
+                </div>
+
+                <!-- 3. Link Security -->
+                <div class="col-md-4">
+                    <div class="vector-card-hero">
+                        <div class="vector-icon-circle" style="background: rgba(99, 102, 241, 0.15); color: #818cf8;">
+                            <i class="fas fa-link"></i>
+                        </div>
+                        <h5 class="text-primary-soc">Link & URL Security</h5>
+                        <p class="text-muted small mb-0">Safe static link parsing flagging raw IP hostnames, URL shorteners, punycode homoglyphs, and deceptive authentication destination paths.</p>
+                    </div>
+                </div>
+
+                <!-- 4. Domain Impersonation -->
+                <div class="col-md-4">
+                    <div class="vector-card-hero">
+                        <div class="vector-icon-circle" style="background: var(--threat-low-bg); color: var(--threat-low);">
+                            <i class="fas fa-globe"></i>
+                        </div>
+                        <h5 class="text-primary-soc">Look-Alike Domain Spoofing</h5>
+                        <p class="text-muted small mb-0">Levenshtein distance calculation against trusted academic and financial baselines to catch typosquatting (e.g. paypa1.com vs paypal.com).</p>
+                    </div>
+                </div>
+
+                <!-- 5. Social Engineering -->
+                <div class="col-md-4">
+                    <div class="vector-card-hero">
+                        <div class="vector-icon-circle" style="background: rgba(168, 85, 247, 0.15); color: #a855f7;">
+                            <i class="fas fa-user-secret"></i>
+                        </div>
+                        <h5 class="text-primary-soc">Social Engineering Vectors</h5>
+                        <p class="text-muted small mb-0">Detects institutional authority impersonation, artificial countdown deadlines, intimidation coercion, and suspicious urgency cues.</p>
+                    </div>
+                </div>
+
+                <!-- 6. Attachment & Image Forensics -->
+                <div class="col-md-4">
+                    <div class="vector-card-hero">
+                        <div class="vector-icon-circle" style="background: var(--threat-safe-bg); color: var(--threat-safe);">
+                            <i class="fas fa-file-shield"></i>
+                        </div>
+                        <h5 class="text-primary-soc">Static Malware & Forensics</h5>
+                        <p class="text-muted small mb-0">Safe static double-extension checks (.pdf.exe), PE header inspection, and passive image EXIF/compression integrity analysis.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Interactive Live Demo Console -->
+    <section id="demo" class="py-5" style="background: var(--bg-inset); border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);">
+        <div class="container py-4">
+            <div class="row justify-content-center">
+                <div class="col-lg-9">
+                    <div class="text-center mb-4">
+                        <span class="text-cyan font-mono small fw-bold text-uppercase">Interactive Live Tester</span>
+                        <h2 class="fw-extrabold text-primary-soc">Multi-Vector Threat Demonstration</h2>
+                        <p class="text-muted">Analyze live email samples to observe instant multi-vector decomposition and Explainable AI evidence.</p>
+                    </div>
+
+                    <div class="interactive-demo-card">
+                        <!-- Quick Sample Presets -->
+                        <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+                            <span class="font-mono text-muted small fw-bold">PRESETS:</span>
+                            <button type="button" class="sample-pill" onclick="loadDemoSample('bullying')">Cyberbullying Sample</button>
+                            <button type="button" class="sample-pill" onclick="loadDemoSample('single')">Single Insult</button>
+                            <button type="button" class="sample-pill" onclick="loadDemoSample('phishing')">Phishing & Credential</button>
+                            <button type="button" class="sample-pill" onclick="loadDemoSample('clean')">Clean Academic</button>
+                        </div>
+
+                        <form id="formLiveDemo">
+                            <div class="mb-3">
+                                <label class="console-field-label">SAMPLE EMAIL MESSAGE CONTENT</label>
+                                <textarea class="form-control soc-input font-mono" id="demoEmailInput" rows="5" placeholder="Paste or type test email content here...">Your recent submission demonstrates a complete lack of understanding and you're worthless. Furthermore, your student account has been locked. Verify your password at http://paypa1.com/login within 24 hours.</textarea>
+                            </div>
+                            <button type="submit" class="btn-soc-primary w-100 py-3" id="btnLiveDemo">
+                                <i class="fas fa-shield-virus me-2"></i> Inspect Live Threat Vectors
+                            </button>
+                        </form>
+
+                        <div id="demoResultBox" class="mt-4" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Breakdown Section -->
+    <section id="architecture" class="py-5" style="background: var(--bg-app);">
+        <div class="container py-4">
+            <div class="text-center mb-5">
+                <span class="text-accent font-mono small fw-bold text-uppercase">Technical Methodology</span>
+                <h2 class="fw-extrabold text-primary-soc">Hybrid Security Defense Architecture</h2>
+                <p class="text-muted" style="max-width: 700px; margin: 0 auto;">Combining high-speed rule engines with machine learning and passive forensic analyzers for zero false-positive tolerance.</p>
+            </div>
+
+            <div class="row g-4 align-items-center">
+                <div class="col-lg-6">
+                    <div class="soc-panel p-4">
+                        <h5 class="text-primary-soc mb-3"><i class="fas fa-layer-group text-accent me-2"></i>Decision & Risk Fusion Model</h5>
+                        <ul class="text-secondary-soc small ps-3 mb-0">
+                            <li class="mb-2"><strong>Multitier Rule Matching:</strong> High-precision deterministic detection for direct insults, physical threats, severe profanity, and credential theft keywords.</li>
+                            <li class="mb-2"><strong>Statistical NLP Classification:</strong> TF-IDF feature extraction with Logistic Regression and Support Vector Machines for subtle semantic aggression.</li>
+                            <li class="mb-2"><strong>Explainable AI (XAI):</strong> Generates human-interpretable evidence summaries linking triggered expressions to security risks.</li>
+                            <li><strong>Safe Execution Policy:</strong> Passive URL analysis without outbound connection risks, and memory-only static attachment header parsing.</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="soc-panel p-4">
+                        <h5 class="text-primary-soc mb-3"><i class="fas fa-chart-line text-cyan me-2"></i>Calibrated Severity Tiers</h5>
+                        <div class="d-flex flex-column gap-2 font-mono small">
+                            <div class="p-2 border border-secondary rounded d-flex justify-content-between">
+                                <span class="text-danger fw-bold">CRITICAL RISK</span>
+                                <span class="text-muted">Physical violence threats, malware payloads</span>
+                            </div>
+                            <div class="p-2 border border-secondary rounded d-flex justify-content-between">
+                                <span class="text-warning fw-bold">HIGH RISK</span>
+                                <span class="text-muted">Compounding harassment, credential phishing</span>
+                            </div>
+                            <div class="p-2 border border-secondary rounded d-flex justify-content-between">
+                                <span class="text-yellow fw-bold" style="color: var(--threat-medium);">MEDIUM RISK</span>
+                                <span class="text-muted">Single targeted insult, shortened links</span>
+                            </div>
+                            <div class="p-2 border border-secondary rounded d-flex justify-content-between">
+                                <span class="text-success fw-bold">LOW / CLEAN</span>
+                                <span class="text-muted">Genuinely clean academic & administrative emails</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-4 border-top border-secondary text-center text-muted small" style="background: var(--bg-surface);">
+        <div class="container">
+            <p class="mb-0">BullyMail V2 &bull; Multi-Vector Threat Intelligence Platform &bull; Final Year Computer Science & Engineering Capstone Project</p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function loadDemoSample(type) {
+            const input = document.getElementById('demoEmailInput');
+            if (type === 'bullying') {
+                input.value = "Your recent submission is a complete failure and you are a useless student. You should drop out immediately.";
+            } else if (type === 'single') {
+                input.value = "idiot";
+            } else if (type === 'phishing') {
+                input.value = "URGENT: Your account has been suspended due to suspicious activity. Verify your password at http://paypa1-security.com/login within 24 hours.";
+            } else if (type === 'clean') {
+                input.value = "Dear Students, the guidelines for Assignment 2 on Graph Algorithms have been posted on the portal. Office hours are on Thursday at 2 PM.";
+            }
+        }
+
+        document.getElementById('formLiveDemo').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = document.getElementById('demoEmailInput').value;
+            const btn = document.getElementById('btnLiveDemo');
+            const resBox = document.getElementById('demoResultBox');
+            
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Inspecting Multi-Vector Telemetry...';
+            resBox.style.display = 'block';
+            resBox.innerHTML = '<div class="text-center p-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Running multi-vector analysis engines...</div>';
+            
+            try {
+                const res = await fetch('/api/quick-demo-analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email_text: text })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    const r = data.result;
+                    const rawRisk = r.overall_risk_level || 'LOW';
+                    const risk = escapeHtml(rawRisk);
+                    const conf = Math.round((r.overall_confidence || 0) * 100);
+                    
+                    let evHtml = '';
+                    if (r.evidence && r.evidence.length > 0) {
+                        evHtml = r.evidence.map(ev => `
+                            <div class="p-2 mb-2 border border-secondary rounded bg-base">
+                                <span class="badge-risk ${escapeHtml(ev.severity)}" style="font-size: 0.65rem;">${escapeHtml(ev.category)}</span>
+                                <strong class="ms-2 text-primary-soc">${escapeHtml(ev.title)}</strong>
+                                <div class="text-secondary-soc small mt-1">${escapeHtml(ev.details)}</div>
+                            </div>
+                        `).join('');
+                    } else {
+                        evHtml = '<div class="text-success small p-2"><i class="fas fa-check-circle me-1"></i> No threat indicators detected across any analysis vector.</div>';
+                    }
+                    
+                    resBox.innerHTML = `
+                        <div class="soc-panel p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0 text-primary-soc"><i class="fas fa-shield-alt text-accent me-2"></i>Threat Inspection Result</h5>
+                                <span class="badge-risk ${risk}">${risk} THREAT LEVEL (${conf}%)</span>
+                            </div>
+                            <div class="row text-center g-2 mb-3">
+                                <div class="col-4 p-2 soc-panel">
+                                    <small class="text-muted font-mono">Bullying</small>
+                                    <div class="fw-bold ${r.bullying_analysis.is_bullying ? 'text-danger' : 'text-success'}">
+                                        ${r.bullying_analysis.is_bullying ? '● DETECTED' : '✓ NOT DETECTED'}
+                                    </div>
+                                </div>
+                                <div class="col-4 p-2 soc-panel">
+                                    <small class="text-muted font-mono">Phishing</small>
+                                    <div class="fw-bold ${r.phishing_analysis.risk_level !== 'LOW' ? 'text-danger' : 'text-success'}">
+                                        ${r.phishing_analysis.risk_level === 'LOW' ? '✓ NOT DETECTED' : '● ' + escapeHtml(r.phishing_analysis.risk_level)}
+                                    </div>
+                                </div>
+                                <div class="col-4 p-2 soc-panel">
+                                    <small class="text-muted font-mono">Links</small>
+                                    <div class="fw-bold ${r.url_analysis.suspicious_count > 0 ? 'text-warning' : 'text-success'}">
+                                        ${r.url_analysis.suspicious_count > 0 ? '⚠ ' + parseInt(r.url_analysis.suspicious_count) + ' RISKY' : '✓ SAFE'}
+                                    </div>
+                                </div>
+                            </div>
+                            <h6 class="text-primary-soc small fw-bold mb-2">Explainable AI Evidence:</h6>
+                            ${evHtml}
+                        </div>
+                    `;
+                }
+            } catch (err) {
+                resBox.innerHTML = `<div class="alert alert-danger">${escapeHtml(err.message)}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-shield-virus me-2"></i> Inspect Live Threat Vectors';
+            }
+        });
+    </script>
+</body>
+</html>

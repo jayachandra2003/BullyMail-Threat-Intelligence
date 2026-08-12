@@ -1,0 +1,77 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+
+# Local SQLite Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Editor / IDE settings
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+
+# Runtime Uploads & Generated Outputs
+uploads/
+reports/
+logs/
+tmp/
+temp/
+
+# Historical Model Artifacts (Track only latest active runtime pair)
+saved_models/*.joblib
+!saved_models/latest_model.joblib
+!saved_models/latest_vectorizer.joblib
+
+# Legacy root files (preserved in archive/v1/)
+/app_v1_backup.py
+/V1_AUDIT.md
+
+# Operating System files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+
+# Python Build / Distribution artifacts
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Log files
+*.log

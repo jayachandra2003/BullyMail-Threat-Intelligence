@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOC Authentication — BullyMail V2 Threat Intelligence</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    
+    <!-- Early 2-State Theme Execution -->
+    <script>
+        (function() {
+            const saved = localStorage.getItem('bullymail_theme');
+            const theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.style.colorScheme = theme;
+        })();
+    </script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- FontAwesome 6 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- BullyMail V2 Core CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <!-- Theme Core -->
+    <script src="{{ url_for('static', filename='js/core/theme.js') }}"></script>
+    
+    <style>
+        body {
+            background-color: var(--bg-app);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            position: relative;
+        }
+
+        .login-card-v2 {
+            max-width: 440px;
+            width: 100%;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-card), var(--shadow-lg);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .login-card-v2::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--cyan), var(--accent-primary), var(--purple));
+        }
+
+        .login-header-v2 {
+            padding: 36px 32px 20px;
+            text-align: center;
+        }
+
+        .login-brand-logo {
+            width: 52px;
+            height: 52px;
+            background: linear-gradient(135deg, var(--accent-primary) 0%, #4338ca 100%);
+            border-radius: var(--radius-md);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            color: #ffffff;
+            margin-bottom: 14px;
+            box-shadow: var(--shadow-accent-glow);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .login-title {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+            margin-bottom: 4px;
+        }
+
+        .login-subtitle {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .login-body-v2 {
+            padding: 10px 32px 32px;
+        }
+
+        .back-nav-link {
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.85rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: var(--transition-fast);
+            z-index: 10;
+        }
+
+        .back-nav-link:hover {
+            color: var(--text-primary);
+            transform: translateX(-3px);
+        }
+
+        .top-right-theme-toggle {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            z-index: 10;
+        }
+
+        .demo-chip {
+            background: var(--bg-inset);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 12px 14px;
+            margin-top: 20px;
+            font-size: 0.78rem;
+        }
+
+        .demo-badge {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--threat-safe-bg);
+            color: var(--threat-safe);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-nav-link">
+        <i class="fas fa-arrow-left"></i> Return to Overview
+    </a>
+
+    <!-- Single-Click Theme Toggle on Login Screen -->
+    <div class="top-right-theme-toggle">
+        <button type="button" class="soc-theme-toggle-btn" aria-label="Switch to light mode" title="Switch to light mode">
+            <i class="fas fa-sun"></i>
+        </button>
+    </div>
+
+    <div class="login-card-v2 animate-fade-in">
+        <div class="login-header-v2">
+            <div class="login-brand-logo">
+                <i class="fas fa-shield-halved"></i>
+            </div>
+            <h2 class="login-title">BullyMail <span class="brand-badge">V2 SOC</span></h2>
+            <div class="login-subtitle">Command Center Authentication</div>
+        </div>
+
+        <div class="login-body-v2">
+            {% if error %}
+            <div class="alert alert-danger d-flex align-items-center mb-3" style="background: var(--threat-critical-bg); border-color: var(--threat-critical-border); color: var(--threat-critical); font-size: 0.85rem;" role="alert">
+                <i class="fas fa-shield-virus me-2 font-lg"></i>
+                <div>{{ error }}</div>
+            </div>
+            {% endif %}
+
+            <form method="POST" action="/login">
+                <div class="mb-3">
+                    <label class="console-field-label" for="username">OPERATOR USERNAME</label>
+                    <div class="input-group">
+                        <span class="input-group-text soc-input border-end-0 text-muted"><i class="fas fa-user-shield"></i></span>
+                        <input type="text" class="form-control soc-input border-start-0" id="username" name="username" placeholder="e.g. admin" required autofocus>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="console-field-label" for="password">SECURE KEY / PASSWORD</label>
+                    <div class="input-group">
+                        <span class="input-group-text soc-input border-end-0 text-muted"><i class="fas fa-key"></i></span>
+                        <input type="password" class="form-control soc-input border-start-0 border-end-0 font-mono" id="password" name="password" placeholder="••••••••••••" required>
+                        <button class="btn soc-input border-start-0 text-muted" type="button" id="togglePasswordBtn">
+                            <i class="fas fa-eye" id="togglePasswordIcon"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-soc-primary w-100 py-3 mt-2">
+                    <i class="fas fa-lock-open me-2"></i> Authenticate Session
+                </button>
+
+                <!-- SOC Authentication Policy Notice -->
+                <div class="demo-chip">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="text-muted"><i class="fas fa-shield-halved me-1"></i> SOC Access Control:</span>
+                        <span class="badge-risk SAFE" style="font-size: 0.65rem;">PROTECTED</span>
+                    </div>
+                    <div class="text-muted small">
+                        Institutional operators must authenticate using provisioned credentials.
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const toggleBtn = document.getElementById('togglePasswordBtn');
+            const passInput = document.getElementById('password');
+            const passIcon = document.getElementById('togglePasswordIcon');
+            
+            if (toggleBtn && passInput && passIcon) {
+                toggleBtn.addEventListener('click', () => {
+                    const isPass = passInput.type === 'password';
+                    passInput.type = isPass ? 'text' : 'password';
+                    passIcon.className = isPass ? 'fas fa-eye-slash' : 'fas fa-eye';
+                });
+            }
+        });
+    </script>
+</body>
+</html>

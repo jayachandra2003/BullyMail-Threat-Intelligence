@@ -1,0 +1,1168 @@
+/* ==========================================================================
+   BullyMail V2 — Next-Gen Cyber Threat Intelligence Platform Stylesheet
+   Mission Control SOC Layout • Digital Forensics Workstation • High-Density Matrix
+   ========================================================================== */
+
+.dashboard-layout {
+    display: flex;
+    min-height: 100vh;
+    background-color: var(--bg-app);
+    position: relative;
+    transition: background-color var(--transition-base);
+}
+
+/* ==========================================================================
+   1. Intelligent Navigation Rail (Left Sidebar)
+   ========================================================================== */
+.sidebar-v2 {
+    width: 260px;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 1000;
+    padding: 16px 12px;
+    transition: width var(--transition-base), transform var(--transition-base), background-color var(--transition-base);
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.sidebar-v2.collapsed {
+    width: 76px;
+}
+
+.brand-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 6px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: 14px;
+}
+
+.brand-logo {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    background: linear-gradient(135deg, var(--accent-primary) 0%, #3730a3 100%);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    color: #ffffff;
+    box-shadow: 0 0 16px var(--accent-glow);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.brand-info {
+    display: flex;
+    flex-direction: column;
+    transition: opacity var(--transition-fast);
+}
+
+.sidebar-v2.collapsed .brand-info {
+    display: none;
+}
+
+.brand-name {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.2;
+}
+
+.brand-badge {
+    font-size: 0.6rem;
+    padding: 1px 6px;
+    background: var(--threat-safe-bg);
+    border: 1px solid var(--threat-safe-border);
+    color: var(--threat-safe);
+    border-radius: var(--radius-full);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+}
+
+.brand-subtitle {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+/* Sidebar Nav Groups */
+.nav-group {
+    margin-bottom: 12px;
+}
+
+.nav-group-title {
+    font-size: 0.65rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0 10px 6px;
+    font-weight: 700;
+}
+
+.sidebar-v2.collapsed .nav-group-title {
+    opacity: 0;
+    height: 0;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+}
+
+.nav-menu {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+/* Illuminated Active Rail Navigation Link */
+.nav-link-v2 {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 8px 12px;
+    color: var(--text-muted);
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: var(--transition-fast);
+    cursor: pointer;
+    border: 1px solid transparent;
+    position: relative;
+    white-space: nowrap;
+}
+
+.nav-link-v2 i {
+    font-size: 1rem;
+    min-width: 20px;
+    text-align: center;
+    color: var(--text-dim);
+    transition: color var(--transition-fast);
+}
+
+.nav-link-v2:hover {
+    color: var(--text-primary);
+    background: var(--bg-surface-hover);
+    border-color: var(--border-subtle);
+}
+
+.nav-link-v2:hover i {
+    color: var(--accent-light);
+}
+
+.nav-link-v2.active {
+    color: #ffffff !important;
+    background: linear-gradient(90deg, rgba(99, 102, 241, 0.22) 0%, rgba(99, 102, 241, 0.05) 100%) !important;
+    border-color: rgba(99, 102, 241, 0.35);
+    font-weight: 600;
+}
+
+.nav-link-v2.active i {
+    color: var(--accent-light) !important;
+}
+
+/* Glowing Left Rail Accent Line */
+.nav-link-v2.active::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 5px;
+    bottom: 5px;
+    width: 3px;
+    background: var(--accent-primary);
+    border-radius: 0 4px 4px 0;
+    box-shadow: 0 0 10px var(--accent-primary);
+}
+
+.sidebar-v2.collapsed .nav-link-v2 span {
+    display: none;
+}
+
+/* Sidebar Footer */
+.sidebar-footer {
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.system-pulse-card {
+    background: var(--bg-inset);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 7px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.sidebar-v2.collapsed .system-pulse-card {
+    display: none;
+}
+
+.pulse-dot {
+    width: 7px;
+    height: 7px;
+    background: var(--threat-safe);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--threat-safe);
+    animation: livePulse 2s infinite;
+}
+
+@keyframes livePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(1.3); }
+}
+
+.user-profile-widget {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: var(--radius-md);
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border-subtle);
+}
+
+.user-avatar {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--cyan) 0%, var(--accent-primary) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.78rem;
+    color: #ffffff;
+}
+
+.user-meta {
+    flex: 1;
+    overflow: hidden;
+}
+
+.user-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-role {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.sidebar-v2.collapsed .user-meta {
+    display: none;
+}
+
+/* ==========================================================================
+   2. Main Command Workspace & Header
+   ========================================================================== */
+.main-wrapper {
+    margin-left: 260px;
+    flex: 1;
+    min-width: 0;
+    padding: 16px 24px 36px;
+    transition: margin-left var(--transition-base);
+}
+
+.sidebar-v2.collapsed ~ .main-wrapper {
+    margin-left: 76px;
+}
+
+/* Compact Command Header */
+.top-command-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 14px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--border-subtle);
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.command-bar-title h1 {
+    font-size: 1.35rem;
+    margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-primary);
+}
+
+.command-bar-title p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 0;
+    line-height: 1.3;
+}
+
+.telemetry-chip-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.status-badge-pill {
+    background: var(--threat-safe-bg);
+    border: 1px solid var(--threat-safe-border);
+    color: var(--threat-safe);
+    padding: 5px 11px;
+    border-radius: var(--radius-full);
+    font-size: 0.72rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    letter-spacing: 0.04em;
+}
+
+.telemetry-chip {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    padding: 5px 10px;
+    border-radius: var(--radius-md);
+    font-size: 0.74rem;
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+}
+
+.telemetry-chip strong {
+    color: var(--text-primary);
+}
+
+/* ==========================================================================
+   3. Executive Dashboard 2.0 (Mission Control Architecture)
+   ========================================================================== */
+
+/* A. Security Posture Hero Banner */
+.security-posture-banner {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    margin-bottom: 18px;
+    display: grid;
+    grid-template-columns: 1.2fr 1fr auto;
+    gap: 20px;
+    align-items: center;
+    box-shadow: var(--shadow-card);
+    position: relative;
+    overflow: hidden;
+}
+
+.security-posture-banner::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--threat-safe);
+    box-shadow: 0 0 12px var(--threat-safe);
+}
+
+.posture-header-tag {
+    font-size: 0.68rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.posture-headline {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.posture-subtext {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 3px;
+    margin-bottom: 0;
+}
+
+.posture-vectors-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.posture-vector-pip {
+    background: var(--bg-inset);
+    border: 1px solid var(--border-subtle);
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 0.72rem;
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+}
+
+.posture-throughput-box {
+    text-align: right;
+    border-left: 1px solid var(--border-subtle);
+    padding-left: 20px;
+}
+
+.posture-throughput-val {
+    font-size: 1.8rem;
+    font-weight: 900;
+    font-family: 'Outfit', sans-serif;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+/* B. Asymmetrical Threat Metrics Grid */
+.asym-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.metric-module {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: var(--transition-fast);
+}
+
+.metric-module:hover {
+    border-color: var(--border-medium);
+    transform: translateY(-1px);
+}
+
+.metric-module-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.metric-module-val {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    font-family: 'Outfit', sans-serif;
+    margin-top: 6px;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.metric-module-sub {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+/* C. Mission Control Visualizations (Radar + Severity Matrix + Live Activity) */
+.mission-control-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+/* Threat Severity Distribution Matrix */
+.severity-matrix-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    box-shadow: var(--shadow-card);
+}
+
+.severity-row-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+}
+
+.severity-label-col {
+    width: 100px;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.severity-bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--bg-inset);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    position: relative;
+}
+
+.severity-bar-fill {
+    height: 100%;
+    border-radius: var(--radius-full);
+    transition: width 0.8s ease;
+}
+
+.severity-bar-fill.CRITICAL { background: var(--threat-critical); }
+.severity-bar-fill.HIGH { background: var(--threat-high); }
+.severity-bar-fill.MEDIUM { background: var(--threat-medium); }
+.severity-bar-fill.LOW { background: var(--threat-safe); }
+
+.severity-count-col {
+    width: 70px;
+    text-align: right;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Live Threat Activity Stream (SOC Timeline) */
+.live-stream-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+}
+
+.stream-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 280px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.stream-event-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--bg-inset);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    transition: var(--transition-fast);
+    cursor: pointer;
+}
+
+.stream-event-item:hover {
+    border-color: var(--border-medium);
+    background: var(--bg-surface-hover);
+}
+
+.stream-time-badge {
+    font-size: 0.7rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+    white-space: nowrap;
+    margin-top: 2px;
+}
+
+.stream-event-content {
+    flex: 1;
+    overflow: hidden;
+}
+
+.stream-event-title {
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stream-event-meta {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* ==========================================================================
+   4. Threat Analyzer 2.0 (Forensic Workstation Console)
+   ========================================================================== */
+.forensic-workstation {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 22px 24px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow-card);
+}
+
+.case-banner-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 14px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.case-id-tag {
+    font-size: 0.82rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent-light);
+    font-weight: 700;
+}
+
+/* Horizontal Preset Hub */
+.preset-intelligence-hub {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.preset-card-btn {
+    background: var(--bg-inset);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 8px 10px;
+    text-align: left;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.preset-card-btn:hover {
+    border-color: var(--accent-primary);
+    background: var(--bg-surface-hover);
+    transform: translateY(-1px);
+}
+
+.preset-card-tag {
+    font-size: 0.68rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.preset-card-sub {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Forensic Intake Metadata Grid */
+.analyst-intake-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.intake-field-label {
+    font-size: 0.7rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.soc-textarea {
+    resize: vertical;
+    min-height: 120px;
+    font-family: 'Inter', sans-serif;
+    line-height: 1.55;
+    font-size: 0.88rem;
+}
+
+/* Forensic File Intake Dropzones */
+.forensic-dropzone-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.forensic-intake-box {
+    border: 2px dashed var(--border-medium);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    text-align: center;
+    background: var(--bg-inset);
+    transition: var(--transition-fast);
+    cursor: pointer;
+    position: relative;
+}
+
+.forensic-intake-box:hover, .forensic-intake-box.dragover {
+    border-color: var(--accent-primary);
+    background: var(--bg-surface-hover);
+}
+
+.forensic-icon {
+    font-size: 1.5rem;
+    color: var(--accent-light);
+    margin-bottom: 4px;
+}
+
+.forensic-title {
+    font-weight: 700;
+    font-size: 0.84rem;
+    color: var(--text-primary);
+    margin-bottom: 1px;
+}
+
+.forensic-sub {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.file-preview-list {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    text-align: left;
+}
+
+.file-preview-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: 0.74rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-secondary);
+}
+
+.btn-scan-action {
+    width: 100%;
+    padding: 12px 20px;
+    font-size: 0.95rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-family: 'Outfit', sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+/* ==========================================================================
+   5. Security Assessment Matrix & XAI Reasoning
+   ========================================================================== */
+.assessment-matrix-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 24px 26px;
+    margin-top: 24px;
+    box-shadow: var(--shadow-card);
+}
+
+.assessment-hero-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 22px;
+    align-items: center;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: 20px;
+}
+
+/* SVG Circular Gauge */
+.risk-gauge-wrap {
+    position: relative;
+    width: 95px;
+    height: 95px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.risk-gauge-circle {
+    transform: rotate(-90deg);
+}
+
+.risk-gauge-bg {
+    fill: none;
+    stroke: var(--border-subtle);
+    stroke-width: 7;
+}
+
+.risk-gauge-bar {
+    fill: none;
+    stroke-width: 7;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s ease, stroke 0.4s ease;
+}
+
+.risk-gauge-val {
+    position: absolute;
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.35rem;
+    font-weight: 900;
+    color: var(--text-primary);
+}
+
+/* Threat Vector Matrix */
+.threat-matrix-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+    margin-bottom: 22px;
+}
+
+.matrix-vector-card {
+    background: var(--bg-inset);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 13px 12px;
+    text-align: center;
+    transition: var(--transition-fast);
+    position: relative;
+    overflow: hidden;
+}
+
+.matrix-vector-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--border-medium);
+}
+
+.matrix-vector-card.detected::before { background: var(--threat-critical); }
+.matrix-vector-card.clean::before { background: var(--threat-safe); }
+
+.matrix-vector-icon {
+    font-size: 1.15rem;
+    margin-bottom: 4px;
+    color: var(--text-muted);
+}
+
+.matrix-vector-card.detected .matrix-vector-icon { color: var(--threat-critical); }
+.matrix-vector-card.clean .matrix-vector-icon { color: var(--threat-safe); }
+
+.matrix-vector-name {
+    font-size: 0.7rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+
+.matrix-vector-status {
+    font-size: 0.88rem;
+    font-weight: 800;
+    font-family: 'Outfit', sans-serif;
+}
+
+.matrix-vector-detail {
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    margin-top: 2px;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* Multi-Stage Threat Pipeline Flow */
+.pipeline-flow-container {
+    background: var(--bg-inset);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    margin-bottom: 22px;
+}
+
+.pipeline-nodes {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+}
+
+.pipeline-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    z-index: 2;
+}
+
+.node-dot {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--bg-surface);
+    border: 2px solid var(--border-medium);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    transition: var(--transition-fast);
+}
+
+.pipeline-node.completed .node-dot {
+    background: var(--threat-safe-bg);
+    border-color: var(--threat-safe);
+    color: var(--threat-safe);
+}
+
+.pipeline-node.flagged .node-dot {
+    background: var(--threat-critical-bg);
+    border-color: var(--threat-critical);
+    color: var(--threat-critical);
+}
+
+.node-label {
+    font-size: 0.65rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+/* Explainable AI Evidence Cards */
+.evidence-feed-matrix {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.evidence-reasoning-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-left: 4px solid var(--accent-primary);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    padding: 12px 16px;
+    transition: var(--transition-fast);
+}
+
+.evidence-reasoning-card:hover {
+    border-color: var(--border-medium);
+    background: var(--bg-surface-hover);
+}
+
+.evidence-reasoning-card.CRITICAL { border-left-color: var(--threat-critical); }
+.evidence-reasoning-card.HIGH { border-left-color: var(--threat-high); }
+.evidence-reasoning-card.MEDIUM { border-left-color: var(--threat-medium); }
+.evidence-reasoning-card.LOW { border-left-color: var(--threat-low); }
+
+.evidence-reasoning-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.evidence-reasoning-cat {
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--accent-primary);
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+}
+
+.evidence-reasoning-title {
+    font-weight: 700;
+    color: var(--text-primary);
+    font-size: 0.88rem;
+    margin-bottom: 2px;
+}
+
+.evidence-reasoning-details {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-family: 'Inter', sans-serif;
+    line-height: 1.45;
+}
+
+/* ==========================================================================
+   6. Data Tables & Confusion Matrix
+   ========================================================================== */
+.soc-table-wrapper {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+}
+
+.soc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+    color: var(--text-secondary);
+}
+
+.soc-table th {
+    background: var(--bg-inset);
+    padding: 10px 14px;
+    font-size: 0.7rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.soc-table td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+}
+
+.soc-table tbody tr:hover td {
+    background: var(--bg-surface-hover);
+}
+
+/* Confusion Matrix Grid */
+.confusion-matrix-grid {
+    display: grid;
+    grid-template-columns: 80px 105px 105px;
+    gap: 5px;
+    text-align: center;
+    font-size: 0.82rem;
+    margin-top: 10px;
+}
+
+.cm-cell {
+    padding: 9px;
+    border-radius: var(--radius-sm);
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.cm-tp { background: var(--threat-safe-bg); color: var(--threat-safe); border: 1px solid var(--threat-safe-border); }
+.cm-tn { background: rgba(99, 102, 241, 0.15); color: var(--accent-light); border: 1px solid rgba(99, 102, 241, 0.35); }
+.cm-fp, .cm-fn { background: var(--threat-critical-bg); color: var(--threat-critical); border: 1px solid var(--threat-critical-border); }
+
+/* ==========================================================================
+   7. Responsive Design Breakpoints
+   ========================================================================== */
+@media (max-width: 1200px) {
+    .security-posture-banner {
+        grid-template-columns: 1fr 1fr;
+    }
+    .posture-throughput-box {
+        grid-column: span 2;
+        text-align: left;
+        border-left: none;
+        border-top: 1px solid var(--border-subtle);
+        padding-left: 0;
+        padding-top: 12px;
+    }
+    .mission-control-grid {
+        grid-template-columns: 1fr;
+    }
+    .analyst-intake-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 992px) {
+    .sidebar-v2 {
+        transform: translateX(-100%);
+        width: 260px !important;
+    }
+    .sidebar-v2.mobile-open {
+        transform: translateX(0);
+    }
+    .main-wrapper {
+        margin-left: 0 !important;
+        padding: 14px 16px;
+    }
+    .forensic-dropzone-grid {
+        grid-template-columns: 1fr;
+    }
+    .assessment-hero-row {
+        grid-template-columns: 1fr;
+        text-align: center;
+        justify-items: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .security-posture-banner {
+        grid-template-columns: 1fr;
+    }
+    .posture-throughput-box {
+        grid-column: span 1;
+    }
+    .analyst-intake-grid {
+        grid-template-columns: 1fr;
+    }
+    .top-command-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+}

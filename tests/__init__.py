@@ -1,0 +1,1 @@
+# BullyMail Automated Test Suite

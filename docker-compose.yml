@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: bullymail_app
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - DB_TYPE=mysql
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=${DB_USER:-bullymail_user}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME:-bullymail_db}
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+    depends_on:
+      - db
+    volumes:
+      - ./saved_models:/app/saved_models
+      - ./datasets:/app/datasets
+      - ./uploads:/app/uploads
+
+  db:
+    image: mysql:8.0
+    container_name: bullymail_db
+    restart: unless-stopped
+    environment:
+      - MYSQL_DATABASE=${DB_NAME:-bullymail_db}
+      - MYSQL_USER=${DB_USER:-bullymail_user}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database_setup.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  mysql_data:

@@ -1,0 +1,586 @@
+/* ==========================================================================
+   BullyMail V2 — Cyber SOC Enterprise Design Token System & Base Stylesheet
+   Next-Gen Cyber Threat Intelligence Platform • Full WCAG AA Contrast Compliance
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700;800;900&display=swap');
+
+/* ==========================================================================
+   1. Design Token Architecture (:root & Theme Variations)
+   ========================================================================== */
+:root, [data-theme="dark"] {
+    /* Backgrounds - Flagship Deep Cyber Foundation */
+    --bg-app: #05070d;
+    --bg-void: #030408;
+    --bg-sidebar: #080c16;
+    --bg-surface: #0c1220;
+    --bg-surface-elevated: #111a2d;
+    --bg-surface-hover: #16223b;
+    --bg-input: #070b14;
+    --bg-inset: #04060b;
+    --bg-glass: rgba(12, 18, 32, 0.88);
+
+    /* Borders */
+    --border-subtle: rgba(255, 255, 255, 0.07);
+    --border-medium: rgba(99, 102, 241, 0.22);
+    --border-highlight: rgba(99, 102, 241, 0.45);
+    --border-focus: #6366f1;
+    --border-glow: rgba(99, 102, 241, 0.35);
+
+    /* High-Contrast WCAG-Compliant Typography */
+    --text-primary: #ffffff;
+    --text-secondary: #e2e8f0;
+    --text-tertiary: #cbd5e1;
+    --text-muted: #94a3b8;
+    --text-dim: #64748b;
+    --text-inverse: #05070d;
+    --text-link: #818cf8;
+
+    /* Core Brand Accents */
+    --accent-primary: #6366f1;
+    --accent-hover: #4f46e5;
+    --accent-light: #818cf8;
+    --accent-glow: rgba(99, 102, 241, 0.3);
+    
+    --cyan: #06b6d4;
+    --cyan-glow: rgba(6, 182, 212, 0.25);
+    --purple: #a855f7;
+    --purple-glow: rgba(168, 85, 247, 0.25);
+
+    /* Threat Severity Spectrum */
+    --threat-safe: #10b981;
+    --threat-safe-bg: rgba(16, 185, 129, 0.14);
+    --threat-safe-border: rgba(16, 185, 129, 0.35);
+
+    --threat-low: #06b6d4;
+    --threat-low-bg: rgba(6, 182, 212, 0.14);
+    --threat-low-border: rgba(6, 182, 212, 0.35);
+
+    --threat-medium: #f59e0b;
+    --threat-medium-bg: rgba(245, 158, 11, 0.14);
+    --threat-medium-border: rgba(245, 158, 11, 0.35);
+
+    --threat-high: #f97316;
+    --threat-high-bg: rgba(249, 115, 22, 0.15);
+    --threat-high-border: rgba(249, 115, 22, 0.4);
+
+    --threat-critical: #ef4444;
+    --threat-critical-bg: rgba(239, 68, 68, 0.18);
+    --threat-critical-border: #dc2626;
+
+    /* Shadows */
+    --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.55);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.7);
+    --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+    /* Form Controls */
+    --input-bg: #070b14;
+    --input-border: rgba(255, 255, 255, 0.1);
+    --input-color: #ffffff;
+    --input-placeholder: #64748b;
+
+    /* Toggle Button Theme Specifics */
+    --toggle-bg: #111a2d;
+    --toggle-border: rgba(99, 102, 241, 0.25);
+    --toggle-icon-color: #fbbf24;
+    --toggle-hover-border: #6366f1;
+    --toggle-hover-glow: rgba(99, 102, 241, 0.3);
+
+    /* Radii & Transitions */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 18px;
+    --radius-full: 9999px;
+    --transition-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    --transition-base: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ==========================================================================
+   2. Light Theme Specification (Enterprise Cyber SOC SaaS)
+   ========================================================================== */
+[data-theme="light"] {
+    /* Backgrounds */
+    --bg-app: #f2f5fa;
+    --bg-void: #e8ecf4;
+    --bg-sidebar: #ffffff;
+    --bg-surface: #ffffff;
+    --bg-surface-elevated: #f8fafc;
+    --bg-surface-hover: #f0f4f9;
+    --bg-input: #ffffff;
+    --bg-inset: #eef2f7;
+    --bg-glass: rgba(255, 255, 255, 0.92);
+
+    /* Borders */
+    --border-subtle: #e2e8f0;
+    --border-medium: #cbd5e1;
+    --border-highlight: #94a3b8;
+    --border-focus: #4f46e5;
+    --border-glow: rgba(79, 70, 229, 0.2);
+
+    /* High-Contrast WCAG-Compliant Typography */
+    --text-primary: #090d16;
+    --text-secondary: #1e293b;
+    --text-tertiary: #334155;
+    --text-muted: #52637f;
+    --text-dim: #64748b;
+    --text-inverse: #ffffff;
+    --text-link: #4f46e5;
+
+    /* Core Brand Accents */
+    --accent-primary: #4f46e5;
+    --accent-hover: #4338ca;
+    --accent-light: #6366f1;
+    --accent-glow: rgba(79, 70, 229, 0.25);
+    
+    --cyan: #0284c7;
+    --cyan-glow: rgba(2, 132, 199, 0.2);
+    --purple: #9333ea;
+    --purple-glow: rgba(147, 51, 234, 0.2);
+
+    /* Threat Severity Spectrum (Calibrated for Light Backgrounds) */
+    --threat-safe: #059669;
+    --threat-safe-bg: rgba(5, 150, 105, 0.09);
+    --threat-safe-border: rgba(5, 150, 105, 0.3);
+
+    --threat-low: #0284c7;
+    --threat-low-bg: rgba(2, 132, 199, 0.09);
+    --threat-low-border: rgba(2, 132, 199, 0.3);
+
+    --threat-medium: #d97706;
+    --threat-medium-bg: rgba(217, 119, 6, 0.09);
+    --threat-medium-border: rgba(217, 119, 6, 0.3);
+
+    --threat-high: #ea580c;
+    --threat-high-bg: rgba(234, 88, 12, 0.09);
+    --threat-high-border: rgba(234, 88, 12, 0.3);
+
+    --threat-critical: #dc2626;
+    --threat-critical-bg: rgba(220, 38, 38, 0.09);
+    --threat-critical-border: rgba(220, 38, 38, 0.35);
+
+    /* Shadows */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06);
+    --shadow-lg: 0 10px 25px rgba(15, 23, 42, 0.08);
+    --shadow-card: 0 2px 10px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+
+    /* Form Controls */
+    --input-bg: #ffffff;
+    --input-border: #cbd5e1;
+    --input-color: #090d16;
+    --input-placeholder: #94a3b8;
+
+    /* Toggle Button Theme Specifics */
+    --toggle-bg: #ffffff;
+    --toggle-border: #cbd5e1;
+    --toggle-icon-color: #4f46e5;
+    --toggle-hover-border: #4f46e5;
+    --toggle-hover-glow: rgba(79, 70, 229, 0.15);
+}
+
+/* ==========================================================================
+   3. Global Reset & Cybernetic Grid Foundation
+   ========================================================================== */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+    background-color: var(--bg-app);
+    color: var(--text-secondary);
+    min-height: 100vh;
+    line-height: 1.55;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color var(--transition-base), color var(--transition-base);
+    background-image: 
+        radial-gradient(circle at 100% 0%, rgba(99, 102, 241, 0.04) 0%, transparent 40%),
+        radial-gradient(circle at 0% 100%, rgba(6, 182, 212, 0.03) 0%, transparent 40%);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', 'Inter', sans-serif;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    font-weight: 700;
+}
+
+p, span, li, label, td {
+    color: var(--text-secondary);
+}
+
+code, pre, .font-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+}
+
+/* Semantic Typography Utility Classes */
+.text-primary-soc { color: var(--text-primary) !important; }
+.text-secondary-soc { color: var(--text-secondary) !important; }
+.text-tertiary-soc { color: var(--text-tertiary) !important; }
+.text-muted-soc { color: var(--text-muted) !important; }
+.text-dim-soc { color: var(--text-dim) !important; }
+
+/* Bootstrap Override Safety */
+.text-muted { color: var(--text-muted) !important; }
+.text-white { color: var(--text-primary) !important; }
+.text-light { color: var(--text-secondary) !important; }
+.text-secondary { color: var(--text-tertiary) !important; }
+.text-dark { color: var(--text-primary) !important; }
+
+/* Custom Scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-app); }
+::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-primary); }
+
+/* ==========================================================================
+   4. Single-Click Theme Toggle Button
+   ========================================================================== */
+.soc-theme-toggle-btn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    background: var(--toggle-bg);
+    border: 1px solid var(--toggle-border);
+    border-radius: var(--radius-md);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--toggle-icon-color);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    box-shadow: var(--shadow-sm);
+    outline: none;
+    position: relative;
+}
+
+.soc-theme-toggle-btn:hover {
+    border-color: var(--toggle-hover-border);
+    box-shadow: 0 0 12px var(--toggle-hover-glow);
+    transform: translateY(-1px);
+}
+
+.soc-theme-toggle-btn:active {
+    transform: scale(0.92);
+}
+
+.soc-theme-toggle-btn:focus-visible {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px var(--border-glow);
+}
+
+.soc-theme-toggle-btn i {
+    transition: transform var(--transition-base), color var(--transition-fast);
+}
+
+.soc-theme-toggle-btn:hover i {
+    transform: rotate(15deg);
+}
+
+/* ==========================================================================
+   5. Workstation Panels, Cards & Glassmorphic Surfaces
+   ========================================================================== */
+.soc-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    transition: var(--transition-base);
+    position: relative;
+}
+
+.soc-panel:hover {
+    border-color: var(--border-medium);
+}
+
+.soc-panel.interactive:hover {
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-card), var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.glass-card {
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    transition: var(--transition-base);
+}
+
+/* ==========================================================================
+   6. Threat Badges (WCAG Dual-Indicator Architecture)
+   ========================================================================== */
+.badge-risk {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap;
+}
+
+.badge-risk::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.badge-risk.SAFE, .badge-risk.LOW {
+    background: var(--threat-safe-bg);
+    color: var(--threat-safe);
+    border: 1px solid var(--threat-safe-border);
+}
+.badge-risk.SAFE::before, .badge-risk.LOW::before {
+    background: var(--threat-safe);
+}
+
+.badge-risk.MEDIUM, .badge-risk.SUSPICIOUS {
+    background: var(--threat-medium-bg);
+    color: var(--threat-medium);
+    border: 1px solid var(--threat-medium-border);
+}
+.badge-risk.MEDIUM::before, .badge-risk.SUSPICIOUS::before {
+    background: var(--threat-medium);
+}
+
+.badge-risk.HIGH, .badge-risk.HIGH_RISK {
+    background: var(--threat-high-bg);
+    color: var(--threat-high);
+    border: 1px solid var(--threat-high-border);
+}
+.badge-risk.HIGH::before, .badge-risk.HIGH_RISK::before {
+    background: var(--threat-high);
+}
+
+.badge-risk.CRITICAL, .badge-risk.MALICIOUS {
+    background: var(--threat-critical-bg);
+    color: var(--threat-critical);
+    border: 1px solid var(--threat-critical-border);
+}
+.badge-risk.CRITICAL::before, .badge-risk.MALICIOUS::before {
+    background: var(--threat-critical);
+}
+
+/* ==========================================================================
+   7. Button Suites
+   ========================================================================== */
+.btn-soc-primary {
+    background: linear-gradient(135deg, var(--accent-primary) 0%, #4338ca 100%);
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 9px 20px;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.88rem;
+    cursor: pointer;
+    transition: var(--transition-base);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-decoration: none;
+    box-shadow: 0 4px 14px var(--accent-glow);
+}
+
+.btn-soc-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px var(--accent-glow);
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-soc-secondary {
+    background: var(--bg-surface-elevated);
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-medium);
+    padding: 7px 15px;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    font-size: 0.84rem;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+}
+
+.btn-soc-secondary:hover {
+    background: var(--bg-surface-hover);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary) !important;
+}
+
+.btn-soc-danger {
+    background: var(--threat-critical-bg);
+    color: var(--threat-critical) !important;
+    border: 1px solid var(--threat-critical-border);
+    padding: 7px 15px;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.84rem;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+}
+
+.btn-soc-danger:hover {
+    background: var(--threat-critical);
+    color: #ffffff !important;
+}
+
+/* ==========================================================================
+   8. Form Controls
+   ========================================================================== */
+.form-control, .form-select, .soc-input {
+    background-color: var(--input-bg) !important;
+    border: 1px solid var(--input-border) !important;
+    color: var(--input-color) !important;
+    border-radius: var(--radius-md) !important;
+    padding: 9px 13px !important;
+    font-size: 0.88rem !important;
+    transition: var(--transition-fast) !important;
+}
+
+.form-control:focus, .form-select:focus, .soc-input:focus {
+    border-color: var(--accent-primary) !important;
+    box-shadow: 0 0 0 3px var(--border-glow) !important;
+    outline: none !important;
+}
+
+.form-control::placeholder, .soc-input::placeholder {
+    color: var(--input-placeholder) !important;
+    opacity: 0.85;
+}
+
+/* ==========================================================================
+   9. Right-Side Contextual Sliding Drawer (.soc-drawer)
+   ========================================================================== */
+.soc-drawer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(6px);
+    z-index: 1050;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--transition-base), visibility var(--transition-base);
+}
+
+.soc-drawer-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.soc-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 640px;
+    max-width: 90vw;
+    height: 100vh;
+    background: var(--bg-surface);
+    border-left: 1px solid var(--border-medium);
+    box-shadow: var(--shadow-lg);
+    z-index: 1060;
+    transform: translateX(100%);
+    transition: transform var(--transition-base);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.soc-drawer.active {
+    transform: translateX(0);
+}
+
+.soc-drawer-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-surface-elevated);
+}
+
+.soc-drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+}
+
+/* ==========================================================================
+   10. Toast Notifications
+   ========================================================================== */
+#socToastContainer {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 380px;
+    pointer-events: none;
+}
+
+.soc-toast {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    box-shadow: var(--shadow-lg);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 0.86rem;
+    pointer-events: auto;
+    animation: toastSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.soc-toast.success { border-left: 4px solid var(--threat-safe); }
+.soc-toast.warning { border-left: 4px solid var(--threat-medium); }
+.soc-toast.danger { border-left: 4px solid var(--threat-critical); }
+.soc-toast.info { border-left: 4px solid var(--accent-primary); }
+
+.soc-toast-icon { font-size: 1.1rem; margin-top: 1px; }
+.soc-toast.success .soc-toast-icon { color: var(--threat-safe); }
+.soc-toast.warning .soc-toast-icon { color: var(--threat-medium); }
+.soc-toast.danger .soc-toast-icon { color: var(--threat-critical); }
+.soc-toast.info .soc-toast-icon { color: var(--accent-primary); }
+
+.soc-toast-content { flex: 1; }
+.soc-toast-title { font-weight: 700; color: var(--text-primary); margin-bottom: 2px; font-size: 0.84rem; }
+.soc-toast-close { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 2px; font-size: 1.1rem; }
+.soc-toast-close:hover { color: var(--text-primary); }
+
+@keyframes toastSlideIn {
+    from { opacity: 0; transform: translateX(30px) scale(0.95); }
+    to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes toastSlideOut {
+    from { opacity: 1; transform: translateX(0) scale(1); }
+    to { opacity: 0; transform: translateX(30px) scale(0.95); }
+}

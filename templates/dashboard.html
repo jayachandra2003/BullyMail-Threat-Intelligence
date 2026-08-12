@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BullyMail V2 — Next-Gen Cyber Threat Intelligence Platform</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    
+    <!-- Early 2-State Theme Execution to prevent FOUC -->
+    <script>
+        (function() {
+            const saved = localStorage.getItem('bullymail_theme');
+            const theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.style.colorScheme = theme;
+        })();
+    </script>
+    
+    <!-- Google Fonts: Inter, JetBrains Mono, Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- FontAwesome 6 Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- BullyMail V2 Cyber SOC Stylesheets -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    
+    <!-- Chart.js 4 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Theme Core -->
+    <script src="{{ url_for('static', filename='js/core/theme.js') }}"></script>
+</head>
+<body>
+    <div class="dashboard-layout">
+        <!-- ==================================================================
+             1. Intelligent Navigation Rail (Left Sidebar)
+             ================================================================== -->
+        <aside class="sidebar-v2">
+            <!-- Brand Header -->
+            <div class="brand-header">
+                <div class="brand-logo">
+                    <i class="fas fa-shield-halved"></i>
+                </div>
+                <div class="brand-info">
+                    <div class="brand-name">
+                        BullyMail <span class="brand-badge">V2 SOC</span>
+                    </div>
+                    <div class="brand-subtitle">Threat Intelligence</div>
+                </div>
+            </div>
+
+            <!-- Navigation Groups -->
+            <div class="nav-group">
+                <div class="nav-group-title">Command</div>
+                <ul class="nav-menu">
+                    <li>
+                        <a class="nav-link-v2 active" data-tab="tab-dashboard">
+                            <i class="fas fa-chart-pie"></i>
+                            <span>Executive Dashboard</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-group-title">Investigate</div>
+                <ul class="nav-menu">
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-analyze">
+                            <i class="fas fa-microscope"></i>
+                            <span>Threat Analyzer</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-history">
+                            <i class="fas fa-clock-rotate-left"></i>
+                            <span>Analysis History</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-group-title">Intelligence</div>
+                <ul class="nav-menu">
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-models">
+                            <i class="fas fa-brain"></i>
+                            <span>Model Studio</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-datasets">
+                            <i class="fas fa-database"></i>
+                            <span>Dataset Studio</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-group-title">Integration</div>
+                <ul class="nav-menu">
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-email">
+                            <i class="fas fa-envelope-shield"></i>
+                            <span>Secure Mailbox</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Sidebar Telemetry & User Controls -->
+            <div class="sidebar-footer">
+                <!-- System Status Pulse -->
+                <div class="system-pulse-card">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="pulse-dot"></div>
+                        <span class="text-primary-soc fw-bold">SOC ONLINE</span>
+                    </div>
+                    <span class="text-muted">v2.4-PRO</span>
+                </div>
+
+                <!-- User Profile Widget -->
+                <div class="user-profile-widget">
+                    <div class="user-avatar">
+                        {{ session.get('username', 'A')[0].upper() }}
+                    </div>
+                    <div class="user-meta">
+                        <div class="user-name">{{ session.get('username', 'Administrator') }}</div>
+                        <div class="user-role">{{ session.get('role', 'SOC Operator') }}</div>
+                    </div>
+                    <a href="/logout" class="btn-soc-danger btn-sm p-2" title="Sign Out">
+                        <i class="fas fa-right-from-bracket"></i>
+                    </a>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ==================================================================
+             2. Main Command Workspace & Header
+             ================================================================== -->
+        <main class="main-wrapper">
+            <!-- Compact Command Header -->
+            <header class="top-command-bar">
+                <div class="command-bar-title d-flex align-items-center gap-3">
+                    <button class="btn-soc-secondary d-lg-none" id="mobileMenuBtn" aria-label="Toggle Menu">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <div>
+                        <h1 class="page-title text-primary-soc mb-0">
+                            <i class="fas fa-shield-alt text-accent me-2"></i>
+                            Security Operations Center
+                        </h1>
+                        <p class="text-muted small mb-0">Multi-vector email threat detection, machine learning NLP, static file inspection, and link safety analytics.</p>
+                    </div>
+                </div>
+
+                <div class="telemetry-chip-group">
+                    <!-- Status Badge -->
+                    <div class="status-badge-pill">
+                        <div class="pulse-dot"></div>
+                        <span>OPERATIONAL</span>
+                    </div>
+
+                    <!-- Latency Chip -->
+                    <div class="telemetry-chip d-none d-lg-flex">
+                        <i class="fas fa-bolt text-warning"></i>
+                        <span>~16ms</span>
+                    </div>
+
+                    <!-- Sync Action -->
+                    <button class="btn-soc-secondary btn-sm" onclick="loadDashboardStats()" title="Sync Telemetry" aria-label="Sync Telemetry">
+                        <i class="fas fa-arrows-rotate me-1"></i> Sync
+                    </button>
+
+                    <!-- Single-Click Theme Toggle Button -->
+                    <button type="button" class="soc-theme-toggle-btn" aria-label="Switch to light mode" title="Switch to light mode">
+                        <i class="fas fa-sun"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- ==============================================================
+                 SECTION 1: Executive Dashboard Tab (Mission Control Layout)
+                 ============================================================== -->
+            <section id="tab-dashboard" class="tab-content-pane">
+                <!-- A. Security Posture Hero Banner -->
+                <div class="security-posture-banner">
+                    <div>
+                        <div class="posture-header-tag">
+                            <i class="fas fa-shield-halved text-accent me-1"></i> Aggregate Security Posture
+                        </div>
+                        <div class="posture-headline" id="postureThreatLevel">
+                            <span class="text-success">LOW RISK POSTURE</span> 
+                            <small class="text-muted font-mono" style="font-size: 0.85rem;">(95% Confidence)</small>
+                        </div>
+                        <p class="posture-subtext" id="postureSubtext">
+                            Environment currently shows low threat activity across all inspected vectors.
+                        </p>
+                    </div>
+
+                    <div>
+                        <div class="posture-header-tag">Multi-Vector Quick State</div>
+                        <div class="posture-vectors-row">
+                            <div class="posture-vector-pip"><i class="fas fa-comment-slash text-danger"></i> Bully</div>
+                            <div class="posture-vector-pip"><i class="fas fa-fish text-warning"></i> Phish</div>
+                            <div class="posture-vector-pip"><i class="fas fa-link text-cyan"></i> Links</div>
+                            <div class="posture-vector-pip"><i class="fas fa-file-shield text-success"></i> Files</div>
+                        </div>
+                    </div>
+
+                    <div class="posture-throughput-box">
+                        <div class="posture-header-tag text-end">Total Throughput</div>
+                        <div class="posture-throughput-val" id="postureTotalScanned">0</div>
+                        <div class="text-muted small font-mono">Communications Analyzed</div>
+                    </div>
+                </div>
+
+                <!-- B. Asymmetrical Threat Metrics Grid -->
+                <div class="asym-metrics-grid">
+                    <!-- Total Analyzed -->
+                    <div class="metric-module">
+                        <div class="metric-module-header">
+                            <span>TOTAL SCANNED</span>
+                            <i class="fas fa-envelope-open-text text-accent"></i>
+                        </div>
+                        <div class="metric-module-val" id="statTotalAnalyses">0</div>
+                        <div class="metric-module-sub">Processed messages</div>
+                    </div>
+
+                    <!-- Cyberbullying Detected -->
+                    <div class="metric-module">
+                        <div class="metric-module-header">
+                            <span>CYBERBULLYING</span>
+                            <i class="fas fa-comment-slash text-danger"></i>
+                        </div>
+                        <div class="metric-module-val text-danger" id="statBullying">0</div>
+                        <div class="metric-module-sub">Hostile/insult flags</div>
+                    </div>
+
+                    <!-- Phishing Incidents -->
+                    <div class="metric-module">
+                        <div class="metric-module-header">
+                            <span>PHISHING</span>
+                            <i class="fas fa-fish text-warning"></i>
+                        </div>
+                        <div class="metric-module-val text-warning" id="statPhishing">0</div>
+                        <div class="metric-module-sub">Credential lures</div>
+                    </div>
+
+                    <!-- Risky URLs -->
+                    <div class="metric-module">
+                        <div class="metric-module-header">
+                            <span>RISKY URLS</span>
+                            <i class="fas fa-link text-cyan"></i>
+                        </div>
+                        <div class="metric-module-val text-cyan" id="statUrls">0</div>
+                        <div class="metric-module-sub">Look-alike links</div>
+                    </div>
+
+                    <!-- Malware / File Risks -->
+                    <div class="metric-module">
+                        <div class="metric-module-header">
+                            <span>MALWARE RISK</span>
+                            <i class="fas fa-file-code text-danger"></i>
+                        </div>
+                        <div class="metric-module-val text-danger" id="statMalware">0</div>
+                        <div class="metric-module-sub">Static file flags</div>
+                    </div>
+
+                    <!-- Social Engineering -->
+                    <div class="metric-module">
+                        <div class="metric-module-header">
+                            <span>SOCIAL ENG.</span>
+                            <i class="fas fa-user-secret text-purple"></i>
+                        </div>
+                        <div class="metric-module-val text-purple" id="statSocialEng">0</div>
+                        <div class="metric-module-sub">Coercion pretexts</div>
+                    </div>
+                </div>
+
+                <!-- C. Mission Control Visualizations (Radar + Severity Matrix) -->
+                <div class="mission-control-grid">
+                    <!-- Threat Vector Radar Profile -->
+                    <div class="soc-panel p-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0 text-primary-soc font-mono text-uppercase" style="font-size: 0.78rem; letter-spacing: 0.08em;">
+                                <i class="fas fa-radar text-accent me-2"></i>Threat Vector Radar Profile
+                            </h6>
+                            <span class="badge-risk SAFE" style="font-size: 0.65rem;">TELEMETRY ACTIVE</span>
+                        </div>
+                        <div style="position: relative; height: 250px;">
+                            <canvas id="chartThreatRadar"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Threat Severity Distribution Matrix -->
+                    <div class="severity-matrix-panel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0 text-primary-soc font-mono text-uppercase" style="font-size: 0.78rem; letter-spacing: 0.08em;">
+                                <i class="fas fa-layer-group text-accent me-2"></i>Severity Density Distribution
+                            </h6>
+                            <span class="badge-risk SAFE" style="font-size: 0.65rem;">REAL-TIME</span>
+                        </div>
+
+                        <!-- Critical Row -->
+                        <div class="severity-row-item">
+                            <div class="severity-label-col text-danger">CRITICAL</div>
+                            <div class="severity-bar-track">
+                                <div class="severity-bar-fill CRITICAL" id="distBar_CRITICAL" style="width: 4%;"></div>
+                            </div>
+                            <div class="severity-count-col text-danger" id="distCount_CRITICAL">0 (0%)</div>
+                        </div>
+
+                        <!-- High Row -->
+                        <div class="severity-row-item">
+                            <div class="severity-label-col text-warning">HIGH RISK</div>
+                            <div class="severity-bar-track">
+                                <div class="severity-bar-fill HIGH" id="distBar_HIGH" style="width: 4%;"></div>
+                            </div>
+                            <div class="severity-count-col text-warning" id="distCount_HIGH">0 (0%)</div>
+                        </div>
+
+                        <!-- Medium Row -->
+                        <div class="severity-row-item">
+                            <div class="severity-label-col" style="color: var(--threat-medium);">MEDIUM</div>
+                            <div class="severity-bar-track">
+                                <div class="severity-bar-fill MEDIUM" id="distBar_MEDIUM" style="width: 4%;"></div>
+                            </div>
+                            <div class="severity-count-col" style="color: var(--threat-medium);" id="distCount_MEDIUM">0 (0%)</div>
+                        </div>
+
+                        <!-- Low / Clean Row -->
+                        <div class="severity-row-item">
+                            <div class="severity-label-col text-success">LOW / CLEAN</div>
+                            <div class="severity-bar-track">
+                                <div class="severity-bar-fill LOW" id="distBar_LOW" style="width: 4%;"></div>
+                            </div>
+                            <div class="severity-count-col text-success" id="distCount_LOW">0 (0%)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- D. Live Threat Activity Stream (SOC Timeline) -->
+                <div class="live-stream-panel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0 text-primary-soc font-mono text-uppercase" style="font-size: 0.78rem; letter-spacing: 0.08em;">
+                            <i class="fas fa-wave-square text-accent me-2"></i>Live Threat Activity Stream
+                        </h6>
+                        <span class="text-muted small font-mono">Click event to inspect in drawer &rarr;</span>
+                    </div>
+                    <div class="stream-timeline" id="liveThreatStreamContainer">
+                        <div class="p-3 text-center text-muted small">Loading threat activity stream...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==============================================================
+                 SECTION 2: Threat Analyzer Tab (Digital Forensics Workstation)
+                 ============================================================== -->
+            <section id="tab-analyze" class="tab-content-pane" style="display: none;">
+                <div class="forensic-workstation">
+                    <!-- Case Banner Bar -->
+                    <div class="case-banner-bar">
+                        <div>
+                            <span class="case-id-tag"><i class="fas fa-terminal me-1"></i> WORKSTATION INTAKE // CASE-STREAM</span>
+                            <h4 class="text-primary-soc mb-0 mt-1" style="font-size: 1.3rem;">Digital Forensic Investigation Console</h4>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge-risk SAFE">ENGINE: HYBRID TF-IDF/RULES</span>
+                        </div>
+                    </div>
+
+                    <!-- Preset Intelligence Hub -->
+                    <div class="preset-intelligence-hub">
+                        <button type="button" class="preset-card-btn" onclick="loadSampleEmail('clean')">
+                            <span class="preset-card-tag text-success"><i class="fas fa-check-circle"></i> Clean</span>
+                            <span class="preset-card-sub">Academic Notice</span>
+                        </button>
+                        <button type="button" class="preset-card-btn" onclick="loadSampleEmail('single_insult')">
+                            <span class="preset-card-tag" style="color: var(--threat-medium);"><i class="fas fa-bolt"></i> Single</span>
+                            <span class="preset-card-sub">Insult ("idiot")</span>
+                        </button>
+                        <button type="button" class="preset-card-btn" onclick="loadSampleEmail('bullying')">
+                            <span class="preset-card-tag text-danger"><i class="fas fa-comment-slash"></i> Bullying</span>
+                            <span class="preset-card-sub">Hostile Harassment</span>
+                        </button>
+                        <button type="button" class="preset-card-btn" onclick="loadSampleEmail('violence')">
+                            <span class="preset-card-tag text-danger"><i class="fas fa-skull-crossbones"></i> Threat</span>
+                            <span class="preset-card-sub">Physical Violence</span>
+                        </button>
+                        <button type="button" class="preset-card-btn" onclick="loadSampleEmail('phishing')">
+                            <span class="preset-card-tag text-warning"><i class="fas fa-fish"></i> Phishing</span>
+                            <span class="preset-card-sub">Credential Theft</span>
+                        </button>
+                        <button type="button" class="preset-card-btn" onclick="loadSampleEmail('url')">
+                            <span class="preset-card-tag text-cyan"><i class="fas fa-link"></i> Link</span>
+                            <span class="preset-card-sub">IP Hostname / Spoof</span>
+                        </button>
+                        <button type="button" class="preset-card-btn" onclick="loadSampleEmail('social')">
+                            <span class="preset-card-tag text-purple"><i class="fas fa-user-secret"></i> Social Eng</span>
+                            <span class="preset-card-sub">Coercive Urgency</span>
+                        </button>
+                    </div>
+
+                    <form id="formAnalyzeEmail" enctype="multipart/form-data">
+                        <!-- Analyst Intake Metadata Grid -->
+                        <div class="analyst-intake-grid">
+                            <div>
+                                <label class="intake-field-label">
+                                    <span><i class="fas fa-heading me-1"></i> SUBJECT HEADER</span>
+                                </label>
+                                <input type="text" class="form-control soc-input font-mono" id="inputEmailSubject" name="email_subject" placeholder="e.g. Disciplinary Notice / Academic Inquiry">
+                            </div>
+                            <div>
+                                <label class="intake-field-label">
+                                    <span><i class="fas fa-at me-1"></i> SENDER IDENTITY</span>
+                                </label>
+                                <input type="text" class="form-control soc-input font-mono" id="inputEmailFrom" name="email_from" placeholder="e.g. advisor@university.edu">
+                            </div>
+                            <div>
+                                <label class="intake-field-label">
+                                    <span><i class="fas fa-user-tag me-1"></i> TARGET RECIPIENT</span>
+                                </label>
+                                <input type="text" class="form-control soc-input font-mono" id="inputEmailTo" name="email_to" placeholder="e.g. student@university.edu">
+                            </div>
+                        </div>
+
+                        <!-- Message Content Editor -->
+                        <div class="mb-3">
+                            <div class="intake-field-label">
+                                <span><i class="fas fa-align-left me-1"></i> MESSAGE BODY PAYLOAD</span>
+                                <span class="text-muted font-mono" id="charCountDisplay">0 chars • 0 words</span>
+                            </div>
+                            <textarea class="form-control soc-input soc-textarea" id="inputEmailText" name="email_text" rows="5" placeholder="Paste or type raw email content for multi-vector threat inspection..."></textarea>
+                        </div>
+
+                        <!-- Forensic File Intake Dropzones -->
+                        <div class="forensic-dropzone-grid">
+                            <!-- Attachments -->
+                            <div class="forensic-intake-box" id="attachmentDropzone">
+                                <input type="file" id="inputAttachments" name="attachments" multiple style="display: none;">
+                                <div class="forensic-icon"><i class="fas fa-paperclip"></i></div>
+                                <div class="forensic-title">ATTACHMENT FORENSICS</div>
+                                <div class="forensic-sub">Drop suspicious files or browse • Safe static in-memory inspection</div>
+                                <div class="file-preview-list" id="attachmentPreviewList"></div>
+                            </div>
+
+                            <!-- Images -->
+                            <div class="forensic-intake-box" id="imageDropzone">
+                                <input type="file" id="inputImages" name="images" accept="image/*" multiple style="display: none;">
+                                <div class="forensic-icon"><i class="fas fa-image"></i></div>
+                                <div class="forensic-title">IMAGE FORENSICS</div>
+                                <div class="forensic-sub">Drop images or browse • Passive EXIF metadata & compression check</div>
+                                <div class="file-preview-list" id="imagePreviewList"></div>
+                            </div>
+                        </div>
+
+                        <!-- Scan Action Button -->
+                        <button type="submit" class="btn-soc-primary btn-scan-action" id="btnSubmitAnalysis">
+                            <i class="fas fa-shield-virus"></i> INITIATE THREAT ANALYSIS
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Dynamic Threat Assessment Target -->
+                <div id="analysisResultContainer" style="display: none;"></div>
+            </section>
+
+            <!-- ==============================================================
+                 SECTION 3: Model Operations Console (Model Studio)
+                 ============================================================== -->
+            <section id="tab-models" class="tab-content-pane" style="display: none;">
+                <div class="row g-3">
+                    <!-- Training Panel -->
+                    <div class="col-lg-5">
+                        <div class="soc-panel p-4 h-100">
+                            <h6 class="text-primary-soc font-mono text-uppercase mb-3" style="font-size: 0.8rem; letter-spacing: 0.08em;">
+                                <i class="fas fa-cogs text-accent me-2"></i>Train & Benchmark Classifier
+                            </h6>
+                            <form id="formTrainModel">
+                                <div class="mb-3">
+                                    <label class="intake-field-label">ALGORITHM ARCHITECTURE</label>
+                                    <select class="form-select soc-input" id="selectModelType">
+                                        <option value="logistic">Logistic Regression (Calibrated & Fast)</option>
+                                        <option value="svm">Support Vector Machine (Linear SVC)</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">SAMPLE SIZE</label>
+                                    <select class="form-select soc-input" id="selectTrainingSamples">
+                                        <option value="1000">1,000 Samples (Quick Test)</option>
+                                        <option value="2000" selected>2,000 Samples (Standard)</option>
+                                        <option value="5000">5,000 Samples (Comprehensive)</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn-soc-primary w-100 py-2" id="btnTrainModel">
+                                    <i class="fas fa-play me-2"></i> Train & Evaluate Classifier
+                                </button>
+                            </form>
+                            <div id="trainingResultBox"></div>
+                        </div>
+                    </div>
+
+                    <!-- Active Model Info -->
+                    <div class="col-lg-7">
+                        <div class="soc-panel p-4 h-100">
+                            <h6 class="text-primary-soc font-mono text-uppercase mb-3" style="font-size: 0.8rem; letter-spacing: 0.08em;">
+                                <i class="fas fa-microchip text-accent me-2"></i>Active Machine Learning Engine
+                            </h6>
+                            <div id="currentModelStatus" class="mb-4">
+                                <div class="text-muted small">Loading active model status...</div>
+                            </div>
+
+                            <div class="p-3 soc-panel bg-base border-subtle">
+                                <h6 class="text-primary-soc mb-2 font-mono" style="font-size: 0.82rem;"><i class="fas fa-shield-alt text-accent me-2"></i>Hybrid Defense Architecture:</h6>
+                                <p class="text-muted small mb-0">
+                                    BullyMail fuses statistical TF-IDF NLP models with calibrated multitier rule sets, physical threat detectors, and context-aware lexical analyzers. Single insults are detected at medium severity, while compounding harassment escalates to high/critical risk.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==============================================================
+                 SECTION 4: Dataset Intelligence Lab (Dataset Studio)
+                 ============================================================== -->
+            <section id="tab-datasets" class="tab-content-pane" style="display: none;">
+                <div class="row g-3">
+                    <div class="col-lg-5">
+                        <div class="soc-panel p-4">
+                            <h6 class="text-primary-soc font-mono text-uppercase mb-3" style="font-size: 0.8rem; letter-spacing: 0.08em;">
+                                <i class="fas fa-file-excel text-accent me-2"></i>Synthesize Academic Corpus
+                            </h6>
+                            <form id="formGenerateDataset">
+                                <div class="mb-3">
+                                    <label class="intake-field-label">TOTAL SAMPLES</label>
+                                    <select class="form-select soc-input" id="selectDatasetSize">
+                                        <option value="1000">1,000 Samples</option>
+                                        <option value="2000" selected>2,000 Samples (Standard)</option>
+                                        <option value="5000">5,000 Samples (Large)</option>
+                                        <option value="10000">10,000 Samples (Benchmark)</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn-soc-primary w-100 py-2" id="btnGenerateDataset">
+                                    <i class="fas fa-file-excel me-2"></i> Generate Excel Dataset (.xlsx)
+                                </button>
+                            </form>
+                            <div id="datasetResultBox"></div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-7">
+                        <div class="soc-panel p-4">
+                            <h6 class="text-primary-soc font-mono text-uppercase mb-3" style="font-size: 0.8rem; letter-spacing: 0.08em;">
+                                <i class="fas fa-folder-open text-accent me-2"></i>Available Datasets
+                            </h6>
+                            <div id="availableDatasetsContainer"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==============================================================
+                 SECTION 5: Threat Incident Archive (Analysis History)
+                 ============================================================== -->
+            <section id="tab-history" class="tab-content-pane" style="display: none;">
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <div>
+                        <h4 class="text-primary-soc mb-1"><i class="fas fa-history text-accent me-2"></i>Threat Incident Archive</h4>
+                        <p class="text-muted small mb-0">Search, filter, and inspect past security assessments via the contextual drawer.</p>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <select class="form-select soc-input form-select-sm" onchange="loadAnalysisHistory(this.value)" style="width: 150px;">
+                            <option value="">All Risk Levels</option>
+                            <option value="CRITICAL">Critical Threats</option>
+                            <option value="HIGH">High Risk</option>
+                            <option value="MEDIUM">Medium Risk</option>
+                            <option value="LOW">Low / Clean</option>
+                        </select>
+                        <a href="/api/reports/download-csv" class="btn-soc-secondary btn-sm">
+                            <i class="fas fa-file-csv me-1"></i> Export CSV
+                        </a>
+                    </div>
+                </div>
+
+                <div class="soc-table-wrapper">
+                    <div class="table-responsive">
+                        <table class="soc-table">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Subject</th>
+                                    <th>Sender</th>
+                                    <th>Overall Risk</th>
+                                    <th>Confidence</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                                <tr><td colspan="6" class="text-center text-muted py-4">Loading security audit records...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==============================================================
+                 SECTION 6: Secure Mailbox Integration
+                 ============================================================== -->
+            <section id="tab-email" class="tab-content-pane" style="display: none;">
+                <div class="soc-panel p-4">
+                    <h4 class="text-primary-soc mb-1"><i class="fas fa-envelope-shield text-accent me-2"></i>Secure Mailbox Integration</h4>
+                    <p class="text-muted small mb-4">Connect institutional mailboxes via TLS-encrypted IMAP/SMTP for automated threat ingestion.</p>
+                    
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="intake-field-label">INSTITUTIONAL EMAIL ADDRESS</label>
+                                <input type="email" class="form-control soc-input" id="inputEmailAddress" placeholder="e.g. security-desk@university.edu">
+                            </div>
+                            <div class="mb-3">
+                                <label class="intake-field-label">16-CHARACTER APP PASSWORD</label>
+                                <input type="password" class="form-control soc-input font-mono" id="inputEmailAppPassword" placeholder="•••• •••• •••• ••••">
+                            </div>
+                            <button type="button" class="btn-soc-primary w-100" onclick="SOCToast.success('Mailbox settings stored in secure memory vault.', 'Mailbox Saved')">
+                                <i class="fas fa-lock me-2"></i> Test & Save Mailbox Connection
+                            </button>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="p-3 soc-panel bg-base">
+                                <h6 class="text-primary-soc mb-2 font-mono"><i class="fas fa-shield-alt text-accent me-2"></i>Security Policy:</h6>
+                                <ul class="text-muted small mb-0 ps-3">
+                                    <li class="mb-1">Requires Google / Microsoft generated <strong>App Passwords</strong>. Primary passwords are strictly rejected.</li>
+                                    <li class="mb-1">All transport connections strictly enforce TLS v1.3 encryption.</li>
+                                    <li>Email attachments are safely parsed in volatile memory and are never executed on the host.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ==================================================================
+         Right-Side Contextual Sliding Investigation Drawer (.soc-drawer)
+         ================================================================== -->
+    <div class="soc-drawer-overlay" id="socDrawerOverlay"></div>
+    <div class="soc-drawer" id="socDrawer">
+        <div class="soc-drawer-header">
+            <div class="d-flex align-items-center gap-2">
+                <i class="fas fa-shield-alt text-accent"></i>
+                <h5 class="mb-0 text-primary-soc" id="socDrawerTitle" style="font-size: 1.1rem;">Incident Case Details</h5>
+            </div>
+            <button type="button" class="btn btn-sm btn-soc-secondary" id="socDrawerCloseBtn" aria-label="Close Drawer">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="soc-drawer-body" id="socDrawerBody">
+            <!-- Populated dynamically by dashboard.js -->
+        </div>
+    </div>
+
+    <!-- Toast Notification System Hook -->
+    <div id="socToastContainer"></div>
+
+    <!-- Bootstrap 5 Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- BullyMail Toast & Dashboard Controller -->
+    <script src="{{ url_for('static', filename='js/core/toast.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

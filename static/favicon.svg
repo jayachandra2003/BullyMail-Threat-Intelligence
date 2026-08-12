@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#4338ca" />
+    </linearGradient>
+    <linearGradient id="pulseGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+  </defs>
+  <!-- Background Shield -->
+  <path d="M32 4L10 14V30C10 44 20 54 32 60C44 54 54 44 54 30V14L32 4Z" fill="url(#shieldGrad)" stroke="#818cf8" stroke-width="2" />
+  <!-- Inner Shield Core -->
+  <path d="M32 10L16 18V29C16 39.5 23 47.5 32 52.5C41 47.5 48 39.5 48 29V18L32 10Z" fill="#0b0f19" opacity="0.85" />
+  <!-- Cyber Threat Pulse Wave -->
+  <path d="M22 33H27L30 24L34 40L37 31H42" stroke="url(#pulseGrad)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  <!-- Center Core Node -->
+  <circle cx="32" cy="32" r="2.5" fill="#38bdf8" />
+</svg>
