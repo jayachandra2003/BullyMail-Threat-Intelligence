@@ -7,12 +7,12 @@ This document describes the API endpoints provided by BullyMail V2 for integrati
 ## 1. Authentication Endpoints
 
 ### `POST /login`
-Authenticates a user and establishes an HTTP session.
+Authenticates a user and establishes an HTTP session. Real administrator credentials must be configured through the supported environment (`ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env`).
 - **Request Body (JSON or Form):**
   ```json
   {
-    "username": "admin",
-    "password": "admin123"
+    "username": "<your-admin-username>",
+    "password": "<your-admin-password>"
   }
   ```
 - **Response (200 OK):**

@@ -41,6 +41,14 @@ LEETSPEAK_MAP = {
     '$': 's'
 }
 
+KNOWN_COLLAPSE_WORDS = {
+    'idiot', 'moron', 'loser', 'useless', 'stupid', 'fool', 'dumbass', 'imbecile',
+    'pathetic', 'worthless', 'failure', 'garbage', 'disaster', 'clueless', 'ignorant',
+    'incompetent', 'clown', 'jerk', 'scumbag', 'coward', 'liar', 'bitch', 'bastard',
+    'asshole', 'cunt', 'dickhead', 'dipshit', 'twat', 'wanker', 'slut', 'whore',
+    'hate', 'kill', 'hurt', 'harm', 'beat', 'attack', 'quit', 'leave', 'drop'
+}
+
 class TextPreprocessor:
     """Text Normalization & NLP Preprocessing Pipeline with Adversarial Awareness"""
     
@@ -56,6 +64,8 @@ class TextPreprocessor:
         """Expands English contractions in text."""
         if not text:
             return ""
+        # Normalize unicode apostrophes
+        text = text.replace('’', "'").replace('‘', "'").replace('`', "'")
         pattern = re.compile(r'\b(' + '|'.join(re.escape(k) for k in CONTRACTIONS.keys()) + r')\b', re.IGNORECASE)
         def replace(match):
             key = match.group(0).lower()
@@ -84,10 +94,30 @@ class TextPreprocessor:
             
         norm = re.sub(r'\b(?:[a-z0-9][.\-_*\/~]){2,}[a-z0-9]\b', _collapse_punct_spaced, norm)
         
-        # 4. Collapse spaced single-letter words (sequence of 3 or more single letters separated by space)
-        # e.g. "i d i o t" -> "idiot", "m o r o n" -> "moron", "u s e l e s s" -> "useless"
+        # 4. Collapse spaced single-letter words (handles single words and compound spaced words)
+        # e.g. "i d i o t" -> "idiot", "m o r o n" -> "moron", "u s e l e s s  l o s e r" -> "useless loser"
         def _collapse_spaced_letters(match):
-            return match.group(0).replace(' ', '')
+            text_chunk = match.group(0)
+            sub_words = re.split(r'\s{2,}', text_chunk)
+            collapsed_words = []
+            for sw in sub_words:
+                sw = sw.strip()
+                if not sw:
+                    continue
+                full_c = sw.replace(' ', '')
+                # Handle single-letter article/pronoun 'a' or 'i' preceding spaced sequence (e.g. "a u s e l e s s")
+                if (sw.startswith('a ') or sw.startswith('i ')) and len(sw) > 4:
+                    lead = sw[0]
+                    rest_c = sw[2:].replace(' ', '')
+                    if full_c in KNOWN_COLLAPSE_WORDS:
+                        collapsed_words.append(full_c)
+                    elif rest_c in KNOWN_COLLAPSE_WORDS or len(rest_c) >= 3:
+                        collapsed_words.append(f"{lead} {rest_c}")
+                    else:
+                        collapsed_words.append(full_c)
+                else:
+                    collapsed_words.append(full_c)
+            return ' '.join(collapsed_words)
             
         norm = re.sub(r'\b(?:[a-z]\s+){2,}[a-z]\b', _collapse_spaced_letters, norm)
         

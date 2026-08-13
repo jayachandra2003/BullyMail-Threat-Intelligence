@@ -180,18 +180,28 @@
             </div>
             {% endif %}
 
+            {% if success %}
+            <div class="alert alert-success d-flex align-items-center mb-3" style="background: var(--threat-safe-bg); border-color: var(--threat-safe-border); color: var(--threat-safe); font-size: 0.85rem;" role="alert">
+                <i class="fas fa-check-circle me-2 font-lg"></i>
+                <div>{{ success }}</div>
+            </div>
+            {% endif %}
+
             <form method="POST" action="/login">
                 <div class="mb-3">
-                    <label class="console-field-label" for="username">OPERATOR USERNAME</label>
+                    <label class="console-field-label" for="username">OPERATOR USERNAME / EMAIL</label>
                     <div class="input-group">
                         <span class="input-group-text soc-input border-end-0 text-muted"><i class="fas fa-user-shield"></i></span>
-                        <input type="text" class="form-control soc-input border-start-0" id="username" name="username" placeholder="e.g. admin" required autofocus>
+                        <input type="text" class="form-control soc-input border-start-0" id="username" name="username" placeholder="e.g. admin or operator@org.com" required autofocus>
                     </div>
                 </div>
 
                 <div class="mb-3">
-                    <label class="console-field-label" for="password">SECURE KEY / PASSWORD</label>
-                    <div class="input-group">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <label class="console-field-label mb-0" for="password">SECURE KEY / PASSWORD</label>
+                        <a href="/forgot-password" class="text-cyan small text-decoration-none" style="font-size: 0.75rem;">Forgot Password?</a>
+                    </div>
+                    <div class="input-group mt-1">
                         <span class="input-group-text soc-input border-end-0 text-muted"><i class="fas fa-key"></i></span>
                         <input type="password" class="form-control soc-input border-start-0 border-end-0 font-mono" id="password" name="password" placeholder="••••••••••••" required>
                         <button class="btn soc-input border-start-0 text-muted" type="button" id="togglePasswordBtn">
@@ -204,8 +214,12 @@
                     <i class="fas fa-lock-open me-2"></i> Authenticate Session
                 </button>
 
+                <div class="text-center mt-3 small text-muted">
+                    Need operator access? <a href="/signup" class="text-cyan">Register here</a>
+                </div>
+
                 <!-- SOC Authentication Policy Notice -->
-                <div class="demo-chip">
+                <div class="demo-chip mt-3">
                     <div class="d-flex justify-content-between align-items-center mb-1">
                         <span class="text-muted"><i class="fas fa-shield-halved me-1"></i> SOC Access Control:</span>
                         <span class="badge-risk SAFE" style="font-size: 0.65rem;">PROTECTED</span>

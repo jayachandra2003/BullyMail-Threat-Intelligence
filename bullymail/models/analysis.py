@@ -16,6 +16,8 @@ class AnalysisModel:
         phishing_indicators_json = json.dumps(report_data.get('phishing_analysis', {}).get('indicators', []))
         social_techniques_json = json.dumps(report_data.get('social_eng_analysis', {}).get('techniques', []))
         bullying_matches_str = ', '.join(report_data.get('bullying_analysis', {}).get('rule_based_matches', []))
+        explanation_json = json.dumps(report_data.get('bullying_analysis', {}).get('explanation', {}))
+        top_factors_json = json.dumps(report_data.get('top_risk_factors', report_data.get('evidence', [])))
         
         query = '''
             INSERT INTO analyzed_emails (
@@ -27,9 +29,10 @@ class AnalysisModel:
                 urls_detected, suspicious_urls_count, url_analysis_summary,
                 domain_analysis_summary,
                 social_eng_risk_level, social_eng_confidence, social_eng_techniques,
-                attachments_count, malware_risk_level, attachment_analysis_summary,
-                images_count, image_risk_level, image_analysis_summary,
-                evidence_summary, email_date
+                attachments_count, malware_detected, malicious_attachments_count,
+                attachment_risk_level, attachment_findings,
+                images_count, suspicious_images_count, image_forensics_summary,
+                explanation, top_risk_factors, email_date
             ) VALUES (
                 %s, %s, %s, %s,
                 %s, %s, %s,
@@ -40,10 +43,14 @@ class AnalysisModel:
                 %s,
                 %s, %s, %s,
                 %s, %s, %s,
+                %s, %s,
                 %s, %s, %s,
-                %s, %s
+                %s, %s, %s
             )
         '''
+        
+        malware = report_data.get('malware_analysis', {})
+        image = report_data.get('image_analysis', {})
         
         params = (
             report_data.get('email_subject', 'No Subject'),
@@ -76,15 +83,18 @@ class AnalysisModel:
             report_data.get('social_eng_analysis', {}).get('confidence', 0.0),
             social_techniques_json,
             
-            report_data.get('malware_analysis', {}).get('total_attachments', 0),
-            report_data.get('malware_analysis', {}).get('risk_level', 'LOW'),
+            malware.get('total_attachments', 0),
+            1 if malware.get('malware_detected') else 0,
+            malware.get('malicious_count', 0),
+            malware.get('risk_level', 'LOW'),
             attachment_summary_json,
             
-            report_data.get('image_analysis', {}).get('total_images', 0),
-            report_data.get('image_analysis', {}).get('risk_level', 'LOW'),
+            image.get('total_images', 0),
+            image.get('suspicious_count', 0),
             image_summary_json,
             
-            evidence_json,
+            explanation_json,
+            top_factors_json,
             datetime.now()
         )
         
