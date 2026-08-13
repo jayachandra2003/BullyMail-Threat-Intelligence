@@ -17,9 +17,46 @@ CREATE TABLE IF NOT EXISTS `users` (
   `password_hash` varchar(255) NOT NULL,
   `role` varchar(20) DEFAULT 'admin',
   `email` varchar(100) DEFAULT NULL,
+  `status` varchar(30) DEFAULT 'ACTIVE',
+  `email_verified_at` timestamp NULL DEFAULT NULL,
+  `failed_login_attempts` int(11) DEFAULT 0,
+  `locked_until` timestamp NULL DEFAULT NULL,
+  `last_login_at` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+-- Table structure for table `email_verification_tokens`
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `email_verification_tokens` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `token_hash` varchar(64) NOT NULL,
+  `expires_at` timestamp NOT NULL,
+  `used_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_verif_token_hash` (`token_hash`),
+  KEY `idx_verif_user_id` (`user_id`),
+  CONSTRAINT `fk_verif_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+-- Table structure for table `password_reset_tokens`
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `password_reset_tokens` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `token_hash` varchar(64) NOT NULL,
+  `expires_at` timestamp NOT NULL,
+  `used_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_reset_token_hash` (`token_hash`),
+  KEY `idx_reset_user_id` (`user_id`),
+  CONSTRAINT `fk_reset_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Initial Administrator Account is provisioned securely upon first application startup

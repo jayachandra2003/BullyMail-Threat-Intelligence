@@ -2,29 +2,48 @@ import pytest
 import os
 import tempfile
 from bullymail import create_app
-from bullymail.config import Config
+from bullymail.config import TestConfig
 from bullymail.database.connection import get_db, init_db
+from bullymail.services.rate_limiter import auth_rate_limiter, login_rate_limiter
 
-class TestConfig(Config):
-    TESTING = True
-    DB_TYPE = 'sqlite'
-    SQLITE_DB_PATH = ':memory:'
-    WTF_CSRF_ENABLED = False
-    SECRET_KEY = 'test_secret_key_12345'
-    ADMIN_USERNAME = 'admin'
-    ADMIN_PASSWORD = 'TestSecretPass_2026!Key'
-    ADMIN_EMAIL = 'admin@bullymail.local'
-    SESSION_COOKIE_SECURE = False
-    MODEL_PATH = tempfile.mkdtemp()
-    DATASET_PATH = tempfile.mkdtemp()
-    UPLOAD_PATH = tempfile.mkdtemp()
+@pytest.fixture(autouse=True)
+def reset_rate_limiters():
+    """Reset rate limiter state before and after each test for strict test isolation."""
+    auth_rate_limiter.reset()
+    login_rate_limiter.reset()
+    yield
+    auth_rate_limiter.reset()
+    login_rate_limiter.reset()
 
 @pytest.fixture
 def app():
-    app = create_app(TestConfig)
-    with app.app_context():
+    """Creates a fresh test application with an isolated temporary SQLite database."""
+    temp_db = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+    temp_db_path = temp_db.name
+    temp_db.close()
+
+    class RuntimeTestConfig(TestConfig):
+        TESTING = True
+        DB_TYPE = 'sqlite'
+        SQLITE_DB_PATH = temp_db_path
+        WTF_CSRF_ENABLED = False
+        SECRET_KEY = 'test_secret_key_12345'
+        ADMIN_USERNAME = 'admin'
+        ADMIN_PASSWORD = 'TestSecretPass_2026!Key'
+        ADMIN_EMAIL = 'admin@bullymail.local'
+        SESSION_COOKIE_SECURE = False
+        CAPTCHA_ENABLED = False
+
+    app_instance = create_app(RuntimeTestConfig)
+    with app_instance.app_context():
         init_db()
-        yield app
+        yield app_instance
+
+    try:
+        if os.path.exists(temp_db_path):
+            os.unlink(temp_db_path)
+    except Exception:
+        pass
 
 @pytest.fixture
 def client(app):

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operator Enrollment — BullyMail V2 Threat Intelligence</title>
+    
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <script>
+        (function() {
+            const saved = localStorage.getItem('bullymail_theme');
+            const theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.style.colorScheme = theme;
+        })();
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <script src="{{ url_for('static', filename='js/core/theme.js') }}"></script>
+    
+    <style>
+        body {
+            background-color: var(--bg-app);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .auth-card-v2 {
+            max-width: 480px;
+            width: 100%;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-card), var(--shadow-lg);
+            overflow: hidden;
+            position: relative;
+        }
+        .auth-card-v2::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, var(--cyan), var(--accent-primary), var(--purple));
+        }
+        .auth-header-v2 { padding: 32px 32px 16px; text-align: center; }
+        .auth-brand-logo {
+            width: 52px; height: 52px;
+            background: linear-gradient(135deg, var(--accent-primary) 0%, #4338ca 100%);
+            border-radius: var(--radius-md);
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 1.6rem; color: #ffffff; margin-bottom: 12px;
+        }
+        .auth-body-v2 { padding: 10px 32px 32px; }
+        .back-nav-link {
+            position: absolute; top: 24px; left: 24px;
+            color: var(--text-muted); text-decoration: none; font-size: 0.85rem;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-nav-link"><i class="fas fa-arrow-left"></i> Return to Overview</a>
+
+    <div class="auth-card-v2 animate-fade-in">
+        <div class="auth-header-v2">
+            <div class="auth-brand-logo"><i class="fas fa-user-plus"></i></div>
+            <h2 class="h4 font-weight-bold text-white mb-1">Create Operator Account</h2>
+            <div class="text-muted small">BullyMail V2 Threat Intelligence Platform</div>
+        </div>
+
+        <div class="auth-body-v2">
+            {% if error %}
+            <div class="alert alert-danger d-flex align-items-center mb-3" style="background: var(--threat-critical-bg); border-color: var(--threat-critical-border); color: var(--threat-critical); font-size: 0.85rem;" role="alert">
+                <i class="fas fa-shield-virus me-2 font-lg"></i>
+                <div>{{ error }}</div>
+            </div>
+            {% endif %}
+
+            {% if success %}
+            <div class="alert alert-success d-flex align-items-center mb-3" style="background: var(--threat-safe-bg); border-color: var(--threat-safe-border); color: var(--threat-safe); font-size: 0.85rem;" role="alert">
+                <i class="fas fa-check-circle me-2 font-lg"></i>
+                <div>{{ success }}</div>
+            </div>
+            {% endif %}
+
+            <form method="POST" action="/signup">
+                <div class="mb-3">
+                    <label class="console-field-label" for="username">OPERATOR USERNAME</label>
+                    <div class="input-group">
+                        <span class="input-group-text soc-input border-end-0 text-muted"><i class="fas fa-user"></i></span>
+                        <input type="text" class="form-control soc-input border-start-0" id="username" name="username" placeholder="e.g. jsmith" required autofocus>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="console-field-label" for="email">INSTITUTIONAL EMAIL</label>
+                    <div class="input-group">
+                        <span class="input-group-text soc-input border-end-0 text-muted"><i class="fas fa-envelope"></i></span>
+                        <input type="email" class="form-control soc-input border-start-0" id="email" name="email" placeholder="name@organization.com" required>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="console-field-label" for="password">SECURE PASSPHRASE (MIN 12 CHARS)</label>
+                    <div class="input-group">
+                        <span class="input-group-text soc-input border-end-0 text-muted"><i class="fas fa-lock"></i></span>
+                        <input type="password" class="form-control soc-input border-start-0 font-mono" id="password" name="password" placeholder="••••••••••••" required>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="console-field-label" for="confirm_password">CONFIRM PASSPHRASE</label>
+                    <div class="input-group">
+                        <span class="input-group-text soc-input border-end-0 text-muted"><i class="fas fa-check-double"></i></span>
+                        <input type="password" class="form-control soc-input border-start-0 font-mono" id="confirm_password" name="confirm_password" placeholder="••••••••••••" required>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-soc-primary w-100 py-3 mt-2">
+                    <i class="fas fa-user-shield me-2"></i> Register Account
+                </button>
+
+                <div class="text-center mt-3 small text-muted">
+                    Already have an account? <a href="/login" class="text-cyan">Authenticate here</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

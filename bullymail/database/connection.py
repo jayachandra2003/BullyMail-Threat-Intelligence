@@ -7,19 +7,30 @@ from ..config import Config
 
 _active_engine = None
 
+def _get_config_val(key, default=None):
+    """Retrieves configuration parameter from active Flask application context or Config class."""
+    try:
+        from flask import current_app
+        if current_app and key in current_app.config:
+            return current_app.config[key]
+    except Exception:
+        pass
+    return getattr(Config, key, default)
+
 def get_connection():
     """Returns a database connection based on configuration with fallback to SQLite."""
     global _active_engine
     
-    if Config.DB_TYPE == 'mysql':
+    db_type = _get_config_val('DB_TYPE', 'sqlite')
+    if db_type == 'mysql':
         try:
             import mysql.connector
             conn = mysql.connector.connect(
-                host=Config.DB_HOST,
-                port=Config.DB_PORT,
-                user=Config.DB_USER,
-                password=Config.DB_PASSWORD,
-                database=Config.DB_NAME,
+                host=_get_config_val('DB_HOST', 'localhost'),
+                port=_get_config_val('DB_PORT', 3306),
+                user=_get_config_val('DB_USER', 'root'),
+                password=_get_config_val('DB_PASSWORD', ''),
+                database=_get_config_val('DB_NAME', 'bullymail_db'),
                 charset='utf8mb4',
                 collation='utf8mb4_unicode_ci',
                 autocommit=True
@@ -32,7 +43,7 @@ def get_connection():
     
     # SQLite connection
     _active_engine = 'sqlite'
-    db_path = Config.SQLITE_DB_PATH
+    db_path = _get_config_val('SQLITE_DB_PATH', 'bullymail.db')
     if db_path != ':memory:' and not os.path.isabs(db_path):
         os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
     

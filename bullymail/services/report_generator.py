@@ -1,10 +1,29 @@
 import io
 import csv
 import html
+import re
 from datetime import datetime
 
 class ReportGenerator:
     """PDF & CSV Threat Report Generator Service with Strict XSS Sanitization"""
+
+    @staticmethod
+    def _sanitize_text(val):
+        """
+        Safely neutralizes executable HTML/DOM XSS payloads including inline event handlers
+        and javascript: pseudo-protocols, then HTML-escapes all characters to render purely as inert text.
+        """
+        if val is None:
+            return ''
+        s = str(val)
+        # Neutralize all inline event handler attributes (e.g. onerror=..., onload=..., onclick=...)
+        s = re.sub(r'(?i)\bon[a-z0-9_-]+\s*=\s*(["\']?)(?:(?!\1).)*?\1(?=\s|>|$)', '', s)
+        # Fallback for unquoted/malformed event handler syntax
+        s = re.sub(r'(?i)\bon[a-z0-9_-]+\s*=\s*[^>\s]+', '', s)
+        # Neutralize javascript:, vbscript: pseudo-protocols
+        s = re.sub(r'(?i)\b(?:javascript|vbscript)\s*:', 'sanitized:', s)
+        # HTML entity escape all characters
+        return html.escape(s)
 
     @staticmethod
     def generate_csv_report(analyses):
@@ -44,10 +63,11 @@ class ReportGenerator:
         Generates a clean, standalone, printable HTML security report (printable to PDF).
         Strictly escapes all untrusted user and email data to prevent HTML/XSS injection.
         """
-        created = html.escape(str(analysis.get('created_at', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))))
-        overall_risk = html.escape(str(analysis.get('overall_risk_level', 'LOW')))
+        sanitize = ReportGenerator._sanitize_text
+        created = sanitize(str(analysis.get('created_at', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))))
+        overall_risk = sanitize(str(analysis.get('overall_risk_level', 'LOW')))
         conf_pct = int(float(analysis.get('overall_confidence', 0.0)) * 100)
-        report_id = html.escape(str(analysis.get('id', 'N/A')))
+        report_id = sanitize(str(analysis.get('id', 'N/A')))
         
         # Color coding
         color_map = {
@@ -59,10 +79,10 @@ class ReportGenerator:
         badge_color = color_map.get(overall_risk, '#6c757d')
         
         # Escaped email headers
-        subj_clean = html.escape(str(analysis.get('email_subject') or 'No Subject'))
-        from_clean = html.escape(str(analysis.get('email_from') or 'Unknown'))
-        to_clean = html.escape(str(analysis.get('email_to') or 'N/A'))
-        body_clean = html.escape(str(analysis.get('email_text') or 'No content'))
+        subj_clean = sanitize(analysis.get('email_subject') or 'No Subject')
+        from_clean = sanitize(analysis.get('email_from') or 'Unknown')
+        to_clean = sanitize(analysis.get('email_to') or 'N/A')
+        body_clean = sanitize(analysis.get('email_text') or 'No content')
         
         # Evidence items escaping
         evidence_items = analysis.get('evidence_summary') or analysis.get('evidence') or []
@@ -151,10 +171,10 @@ class ReportGenerator:
 """
         if evidence_items:
             for ev in evidence_items:
-                ev_cat = html.escape(str(ev.get('category', 'Threat Indicator')))
-                ev_sev = html.escape(str(ev.get('severity', 'MEDIUM')))
-                ev_title = html.escape(str(ev.get('title', '')))
-                ev_detail = html.escape(str(ev.get('details', '')))
+                ev_cat = sanitize(ev.get('category') or 'Threat Indicator')
+                ev_sev = sanitize(ev.get('severity') or 'MEDIUM')
+                ev_title = sanitize(ev.get('title') or '')
+                ev_detail = sanitize(ev.get('details') or '')
                 html_doc += f"""
         <div class="evidence-item">
             <div class="evidence-cat">{ev_cat} &bull; Severity: {ev_sev}</div>

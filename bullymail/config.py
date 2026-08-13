@@ -67,6 +67,22 @@ class Config:
     EMAIL_ADDRESS = os.environ.get('EMAIL_ADDRESS', '')
     EMAIL_APP_PASSWORD = os.environ.get('EMAIL_APP_PASSWORD', '')
 
+    # Trusted Public Base URL (Prevents Host Header Poisoning in Auth Emails)
+    APP_BASE_URL = os.environ.get('APP_BASE_URL', 'http://localhost:5000').rstrip('/')
+    
+    # Password Hashing Method (OWASP Recommended PBKDF2-HMAC-SHA256)
+    PASSWORD_HASH_METHOD = os.environ.get('PASSWORD_HASH_METHOD', 'pbkdf2:sha256:600000')
+    
+    # Auth Token Expirations
+    AUTH_EMAIL_TOKEN_EXPIRY_HOURS = int(os.environ.get('AUTH_EMAIL_TOKEN_EXPIRY_HOURS', 24))
+    AUTH_RESET_TOKEN_EXPIRY_MINUTES = int(os.environ.get('AUTH_RESET_TOKEN_EXPIRY_MINUTES', 60))
+    
+    # CAPTCHA / Bot Defense Configuration
+    CAPTCHA_ENABLED = os.environ.get('CAPTCHA_ENABLED', 'False').lower() in ('true', '1', 't')
+    CAPTCHA_PROVIDER = os.environ.get('CAPTCHA_PROVIDER', 'turnstile').lower() # 'turnstile' or 'hcaptcha'
+    CAPTCHA_SECRET_KEY = os.environ.get('CAPTCHA_SECRET_KEY', '')
+    CAPTCHA_SITE_KEY = os.environ.get('CAPTCHA_SITE_KEY', '')
+    
     # Environment-Aware Session Security
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = os.environ.get('SESSION_COOKIE_SAMESITE', 'Lax')
@@ -78,13 +94,14 @@ class Config:
     PERMANENT_SESSION_LIFETIME = int(os.environ.get('PERMANENT_SESSION_LIFETIME', 86400))  # 24 hours
 
 class TestConfig(Config):
-    """Testing Configuration with in-memory SQLite"""
+    """Testing Configuration with SQLite test database"""
     TESTING = True
     DB_TYPE = 'sqlite'
     SQLITE_DB_PATH = ':memory:'
     DEBUG = False
     WTF_CSRF_ENABLED = False
-    ADMIN_USERNAME = 'testadmin'
-    ADMIN_PASSWORD = 'TestAdminSecretPass123!'
-    ADMIN_EMAIL = 'testadmin@bullymail.local'
+    ADMIN_USERNAME = 'admin'
+    ADMIN_PASSWORD = 'TestSecretPass_2026!Key'
+    ADMIN_EMAIL = 'admin@bullymail.local'
     SESSION_COOKIE_SECURE = False
+    CAPTCHA_ENABLED = False

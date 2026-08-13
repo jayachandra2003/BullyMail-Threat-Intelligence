@@ -4,6 +4,85 @@ from werkzeug.security import generate_password_hash
 from ..config import Config
 from .connection import get_db, get_engine_type, execute_query, fetch_one
 
+def _get_existing_columns(cursor, table_name, engine):
+    """
+    Returns a set of lowercase column names present in the specified table.
+    Works seamlessly across SQLite and MySQL.
+    """
+    columns = set()
+    try:
+        if engine == 'sqlite':
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            for row in cursor.fetchall():
+                name = row[1] if isinstance(row, (tuple, list)) else row['name']
+                columns.add(name.lower())
+        else:
+            cursor.execute(f"SHOW COLUMNS FROM `{table_name}`")
+            for row in cursor.fetchall():
+                name = row[0] if isinstance(row, (tuple, list)) else (row.get('Field') or row.get('field'))
+                columns.add(name.lower())
+    except Exception:
+        pass
+    return columns
+
+def apply_migrations(cursor, engine):
+    """
+    Idempotently inspects database tables and applies non-destructive schema migrations
+    to upgrade legacy installations without data loss.
+    """
+    # -------------------------------------------------------------------------
+    # 1. Users Table Migrations
+    # -------------------------------------------------------------------------
+    user_cols = _get_existing_columns(cursor, 'users', engine)
+    if user_cols:
+        if 'status' not in user_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN status VARCHAR(30) DEFAULT 'ACTIVE'")
+
+        if 'email_verified_at' not in user_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN email_verified_at TIMESTAMP NULL")
+
+        if 'failed_login_attempts' not in user_cols:
+            col_type = "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0"
+            cursor.execute(f"ALTER TABLE users ADD COLUMN failed_login_attempts {col_type}")
+
+        if 'locked_until' not in user_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN locked_until TIMESTAMP NULL")
+
+        if 'last_login_at' not in user_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP NULL")
+
+        # Backfill active status for any legacy accounts
+        try:
+            cursor.execute("UPDATE users SET status = 'ACTIVE' WHERE status IS NULL OR status = ''")
+        except Exception:
+            pass
+
+    # -------------------------------------------------------------------------
+    # 2. Multi-Vector Analyzed Emails Migrations
+    # -------------------------------------------------------------------------
+    email_cols = _get_existing_columns(cursor, 'analyzed_emails', engine)
+    if email_cols:
+        missing_defs = {
+            'domain_analysis_summary': 'TEXT DEFAULT "{}"',
+            'social_eng_risk_level': "VARCHAR(20) DEFAULT 'LOW'",
+            'social_eng_confidence': "FLOAT DEFAULT 0.0",
+            'social_eng_techniques': 'TEXT DEFAULT "[]"',
+            'attachments_count': "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0",
+            'malware_detected': "INTEGER DEFAULT 0" if engine == 'sqlite' else "TINYINT(1) DEFAULT 0",
+            'malicious_attachments_count': "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0",
+            'attachment_risk_level': "VARCHAR(20) DEFAULT 'LOW'",
+            'attachment_findings': 'TEXT DEFAULT "[]"',
+            'images_count': "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0",
+            'suspicious_images_count': "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0",
+            'image_forensics_summary': 'TEXT DEFAULT "[]"'
+        }
+        for col_name, col_def in missing_defs.items():
+            if col_name not in email_cols:
+                try:
+                    cursor.execute(f"ALTER TABLE analyzed_emails ADD COLUMN {col_name} {col_def}")
+                except Exception:
+                    pass
+
 def setup_database():
     """Sets up all required database tables with UTF-8 support and idempotent secure administrator initialization."""
     engine = get_engine_type()
@@ -12,15 +91,46 @@ def setup_database():
         cursor = conn.cursor()
         
         if engine == 'sqlite':
-            # Users Table
+            # Users Table with Account Lifecycle Status
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username VARCHAR(50) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
                     role VARCHAR(20) DEFAULT 'admin',
-                    email VARCHAR(100),
+                    email VARCHAR(100) UNIQUE,
+                    status VARCHAR(30) DEFAULT 'ACTIVE',
+                    email_verified_at TIMESTAMP NULL,
+                    failed_login_attempts INTEGER DEFAULT 0,
+                    locked_until TIMESTAMP NULL,
+                    last_login_at TIMESTAMP NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Email Verification Tokens Table (Stores SHA-256 Hashes Only)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS email_verification_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    token_hash VARCHAR(64) UNIQUE NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    used_at TIMESTAMP NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                )
+            ''')
+            
+            # Password Reset Tokens Table (Stores SHA-256 Hashes Only)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    token_hash VARCHAR(64) UNIQUE NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    used_at TIMESTAMP NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 )
             ''')
             
@@ -67,23 +177,27 @@ def setup_database():
                     
                     -- Attachment / Malware Vector
                     attachments_count INTEGER DEFAULT 0,
-                    malware_risk_level VARCHAR(20) DEFAULT 'LOW',
-                    attachment_analysis_summary TEXT DEFAULT '[]',
+                    malware_detected INTEGER DEFAULT 0,
+                    malicious_attachments_count INTEGER DEFAULT 0,
+                    attachment_risk_level VARCHAR(20) DEFAULT 'LOW',
+                    attachment_findings TEXT DEFAULT '[]',
                     
                     -- Image Forensics Vector
                     images_count INTEGER DEFAULT 0,
-                    image_risk_level VARCHAR(20) DEFAULT 'LOW',
-                    image_analysis_summary TEXT DEFAULT '[]',
+                    suspicious_images_count INTEGER DEFAULT 0,
+                    image_forensics_summary TEXT DEFAULT '[]',
                     
-                    -- Explainable Evidence
-                    evidence_summary TEXT DEFAULT '[]',
+                    -- Explanation / XAI
+                    explanation TEXT DEFAULT '{}',
+                    top_risk_factors TEXT DEFAULT '[]',
                     
+                    -- Metadata
+                    analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     email_date TIMESTAMP NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
             
-            # Model Performance History Table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS model_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,7 +206,7 @@ def setup_database():
                     recall_score FLOAT DEFAULT 0.0,
                     f1_score FLOAT DEFAULT 0.0,
                     accuracy FLOAT DEFAULT 0.0,
-                    confusion_matrix TEXT DEFAULT '[]',
+                    confusion_matrix TEXT,
                     training_samples INTEGER DEFAULT 0,
                     test_samples INTEGER DEFAULT 0,
                     evaluation_type VARCHAR(50) DEFAULT 'Synthetic Evaluation',
@@ -101,7 +215,6 @@ def setup_database():
                 )
             ''')
             
-            # Dataset Generation History Table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS dataset_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,7 +228,6 @@ def setup_database():
                 )
             ''')
             
-            # Email Configuration Table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS email_config (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,16 +237,48 @@ def setup_database():
                 )
             ''')
             
+            # Apply schema migrations for existing SQLite databases
+            apply_migrations(cursor, engine)
+            
         else:
-            # MySQL Tables (UTF8mb4)
+            # MySQL Database Engine Setup
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     username VARCHAR(50) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
                     role VARCHAR(20) DEFAULT 'admin',
-                    email VARCHAR(100),
+                    email VARCHAR(100) UNIQUE,
+                    status VARCHAR(30) DEFAULT 'ACTIVE',
+                    email_verified_at TIMESTAMP NULL,
+                    failed_login_attempts INT DEFAULT 0,
+                    locked_until TIMESTAMP NULL,
+                    last_login_at TIMESTAMP NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS email_verification_tokens (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    token_hash VARCHAR(64) UNIQUE NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    used_at TIMESTAMP NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    token_hash VARCHAR(64) UNIQUE NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    used_at TIMESTAMP NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ''')
             
@@ -173,15 +317,19 @@ def setup_database():
                     social_eng_techniques MEDIUMTEXT,
                     
                     attachments_count INT DEFAULT 0,
-                    malware_risk_level VARCHAR(20) DEFAULT 'LOW',
-                    attachment_analysis_summary MEDIUMTEXT,
+                    malware_detected TINYINT(1) DEFAULT 0,
+                    malicious_attachments_count INT DEFAULT 0,
+                    attachment_risk_level VARCHAR(20) DEFAULT 'LOW',
+                    attachment_findings MEDIUMTEXT,
                     
                     images_count INT DEFAULT 0,
-                    image_risk_level VARCHAR(20) DEFAULT 'LOW',
-                    image_analysis_summary MEDIUMTEXT,
+                    suspicious_images_count INT DEFAULT 0,
+                    image_forensics_summary MEDIUMTEXT,
                     
-                    evidence_summary MEDIUMTEXT,
+                    explanation MEDIUMTEXT,
+                    top_risk_factors MEDIUMTEXT,
                     
+                    analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     email_date TIMESTAMP NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     INDEX idx_risk (overall_risk_level),
@@ -228,6 +376,9 @@ def setup_database():
                     status VARCHAR(50) DEFAULT 'inactive'
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ''')
+            
+            # Apply schema migrations for existing MySQL databases
+            apply_migrations(cursor, engine)
             cursor.close()
 
     # -------------------------------------------------------------------------
@@ -235,11 +386,26 @@ def setup_database():
     # -------------------------------------------------------------------------
     admin_user = fetch_one("SELECT * FROM users WHERE role = 'admin' LIMIT 1")
     if not admin_user:
-        admin_username = Config.ADMIN_USERNAME or 'admin'
-        admin_email = Config.ADMIN_EMAIL or 'admin@bullymail.local'
-        admin_password = Config.ADMIN_PASSWORD
-        
-        is_production = Config.FLASK_ENV == 'production'
+        try:
+            from flask import current_app
+            if current_app:
+                admin_username = current_app.config.get('ADMIN_USERNAME') or Config.ADMIN_USERNAME or 'admin'
+                admin_email = current_app.config.get('ADMIN_EMAIL') or Config.ADMIN_EMAIL or 'admin@bullymail.local'
+                admin_password = current_app.config.get('ADMIN_PASSWORD') or Config.ADMIN_PASSWORD
+                is_testing = current_app.config.get('TESTING', False)
+                is_production = current_app.config.get('FLASK_ENV') == 'production'
+            else:
+                admin_username = Config.ADMIN_USERNAME or 'admin'
+                admin_email = Config.ADMIN_EMAIL or 'admin@bullymail.local'
+                admin_password = Config.ADMIN_PASSWORD
+                is_testing = Config.TESTING
+                is_production = Config.FLASK_ENV == 'production'
+        except Exception:
+            admin_username = Config.ADMIN_USERNAME or 'admin'
+            admin_email = Config.ADMIN_EMAIL or 'admin@bullymail.local'
+            admin_password = Config.ADMIN_PASSWORD
+            is_testing = Config.TESTING
+            is_production = Config.FLASK_ENV == 'production'
         
         if not admin_password:
             if is_production:
@@ -247,6 +413,8 @@ def setup_database():
                     "[BullyMail Security Fatal] Production environment detected without ADMIN_PASSWORD configured. "
                     "You must explicitly set ADMIN_PASSWORD in your environment / .env file before starting in production."
                 )
+            elif is_testing:
+                admin_password = "TestSecretPass_2026!Key"
             else:
                 # In development/test mode without explicit password: generate a secure cryptographically random token
                 generated_token = secrets.token_urlsafe(16)
@@ -258,10 +426,11 @@ def setup_database():
                 print(" Set ADMIN_PASSWORD in .env to specify a permanent custom password.")
                 print("==================================================================")
 
-        hashed_pw = generate_password_hash(admin_password)
+        from ..models.user import UserModel
+        hashed_pw = UserModel.hash_password(admin_password)
         execute_query(
-            "INSERT INTO users (username, password_hash, role, email) VALUES (%s, %s, %s, %s)",
-            (admin_username, hashed_pw, 'admin', admin_email)
+            "INSERT INTO users (username, password_hash, role, email, status) VALUES (%s, %s, %s, %s, %s)",
+            (admin_username, hashed_pw, 'admin', admin_email, 'ACTIVE')
         )
         
     return True

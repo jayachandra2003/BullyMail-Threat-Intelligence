@@ -66,15 +66,21 @@ def test_atomic_load_feature_dimension_mismatch_rejected_safely(tmp_path):
     
     # Vectorizer with 10 features
     vec10 = TfidfVectorizer(max_features=10)
-    X10 = vec10.fit_transform(["a b c d e f g h i j k l m n o p q r s t"])
+    X10 = vec10.fit_transform([
+        "alpha bravo charlie delta echo",
+        "foxtrot golf hotel india juliet"
+    ])
     
-    # Model trained on 10 features
+    # Model trained on 10 features with 2 classes
     clf10 = LogisticRegression()
-    clf10.fit(X10, [0])
+    clf10.fit(X10, [0, 1])
     
     # Vectorizer with 20 features
     vec20 = TfidfVectorizer(max_features=20)
-    vec20.fit(["a b c d e f g h i j k l m n o p q r s t u v w x y z"])
+    vec20.fit([
+        "alpha bravo charlie delta echo foxtrot golf hotel india juliet",
+        "kilo lima mike november oscar papa quebec romeo sierra tango"
+    ])
     
     m_path = os.path.join(tmp_path, "model_10.joblib")
     v_path = os.path.join(tmp_path, "vec_20.joblib")

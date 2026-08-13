@@ -46,6 +46,9 @@ TARGETED_INSULT_PATTERNS = [
     # Standalone direct lexical insults (inherently hostile offensive nouns)
     (r'\b(idiot|moron|imbecile|loser|dumbass|fool|useless|incompetent|dumb|worthless)\b', 'Direct Lexical Insult', 0.58),
     
+    # Standalone single-word "pathetic"
+    (r'^\s*pathetic[\.!\?]*\s*$', 'Direct Lexical Insult', 0.58),
+    
     # Targeted personal / work references with "pathetic" (avoids matching untargeted literary "pathetic flaw/fallacy")
     (r'\b(you|he|she|they|[a-z]+)\s+(is|are|\'re|\'s)\s+(a\s+|an\s+|so\s+|totally\s+|completely\s+|utterly\s+|truly\s+|just\s+)?pathetic\b', 'Targeted Personal Insult', 0.58),
     (r'\b(stop\s+being\s+pathetic|so\s+pathetic|such\s+a\s+pathetic\s+(loser|effort|attempt|joke|person|student|excuse|work))\b', 'Targeted Personal Insult', 0.58),
@@ -149,53 +152,43 @@ class BullyingDetector:
         elif hasattr(temp_model, 'coef_'):
             n_model_features = temp_model.coef_.shape[1]
             
-        if n_model_features is not None and hasattr(temp_vectorizer, 'get_feature_names_out'):
-            n_vec_features = len(temp_vectorizer.get_feature_names_out())
-            if n_model_features != n_vec_features:
+        if hasattr(temp_vectorizer, 'vocabulary_') and n_model_features is not None:
+            n_vec_features = len(temp_vectorizer.vocabulary_)
+            if n_vec_features != n_model_features:
                 raise ValueError(
-                    f"Feature dimension mismatch: model expects {n_model_features} features, but vectorizer has {n_vec_features}"
+                    f"Feature dimension mismatch: Model expects {n_model_features} features, "
+                    f"but Vectorizer produces {n_vec_features} features."
                 )
                 
+        # Atomic assignment
         self.model = temp_model
         self.vectorizer = temp_vectorizer
-        self.model_type = getattr(temp_model, '_model_name', type(temp_model).__name__)
+        self.model_type = 'Hybrid'
         return True
 
     def load_latest_model(self):
-        """Attempts to atomically load the latest model and paired vectorizer from disk."""
-        try:
-            latest_model_path = os.path.join(self.model_dir, 'latest_model.joblib')
-            latest_vec_path = os.path.join(self.model_dir, 'latest_vectorizer.joblib')
-            
-            if os.path.exists(latest_model_path) and os.path.exists(latest_vec_path):
-                return self.load_model_pair(latest_model_path, latest_vec_path)
-                
-            # Scan directory for any recent timestamped model + paired vectorizer
-            files = [f for f in os.listdir(self.model_dir) if f.endswith('.joblib') and not f.startswith('vectorizer') and not f.startswith('latest')]
-            if files:
-                for latest_f in reversed(sorted(files)):
-                    parts = latest_f.rsplit('.', 1)[0].split('_')
-                    if len(parts) >= 2:
-                        ts = "_".join(parts[-2:])
-                        vec_name = f"vectorizer_{ts}.joblib"
-                        vec_path = os.path.join(self.model_dir, vec_name)
-                        if os.path.exists(vec_path):
-                            return self.load_model_pair(os.path.join(self.model_dir, latest_f), vec_path)
-        except Exception as e:
-            print(f"[BullyingDetector] Model load notice: {e}")
+        """Loads latest model and vectorizer atomically from disk."""
+        model_path = os.path.join(self.model_dir, 'latest_model.joblib')
+        vectorizer_path = os.path.join(self.model_dir, 'latest_vectorizer.joblib')
+        if os.path.exists(model_path) and os.path.exists(vectorizer_path):
+            try:
+                return self.load_model_pair(model_path, vectorizer_path)
+            except Exception as e:
+                print(f"[BullyingDetector] Failed to load latest model pair: {e}")
+                self.model = None
+                self.vectorizer = None
         return False
 
-    def is_educational_or_quoted_context(self, text_lower):
-        """
-        Detects if profanity/insults are cited within an academic, educational,
-        linguistic, or third-party incident reporting / complaint context.
-        """
-        # 1. Educational / Linguistic Context
+    def is_educational_or_quoted_context(self, text):
+        """Determines whether abusive terms appear strictly inside educational, analytical, or formal complaint reporting context."""
+        text_lower = text.lower()
+        
+        # 1. Educational / Linguistic study context
         for pattern in EDUCATIONAL_CONTEXT_PATTERNS:
             if re.search(pattern, text_lower):
                 return True
                 
-        # 2. Third-Party Reporting / Incident Attribution Context
+        # 2. Formal Complaint / Incident Report context
         for pattern in REPORTING_CONTEXT_PATTERNS:
             if re.search(pattern, text_lower):
                 # Verify that this is not a direct 1st-person sender assertion/attack
@@ -217,18 +210,13 @@ class BullyingDetector:
         # Internal adversarial normalization layer for evading patterns (spaced/dotted/leetspeak)
         norm_text = self.preprocessor.normalize_adversarial_text(text)
         
-        matched = []
-        pattern_weights = []
-        matched_categories = []
-        has_physical_threat = False
-        has_severe_abuse = False
+        matched_items = []
         
         # Check for educational / reporting context
         is_context_mitigated = self.is_educational_or_quoted_context(text_lower)
 
         # Helper to match patterns across both original lower text and normalized adversarial text
         def _match_pattern_group(patterns, is_tier_physical=False, is_tier_abuse=False):
-            nonlocal has_physical_threat, has_severe_abuse
             for pat, label, weight in patterns:
                 found_orig = re.findall(pat, text_lower)
                 found_norm = re.findall(pat, norm_text)
@@ -236,16 +224,16 @@ class BullyingDetector:
                 if found_all:
                     for f in found_all:
                         match_str = f[0] if isinstance(f, tuple) else f
-                        if match_str not in matched:
-                            matched.append(match_str)
+                        match_str = match_str.strip()
+                        if match_str and not any(item['match'] == match_str for item in matched_items):
                             effective_weight = weight if not is_context_mitigated else 0.20
-                            pattern_weights.append(effective_weight)
-                            if is_tier_physical:
-                                has_physical_threat = True
-                            if is_tier_abuse:
-                                has_severe_abuse = True
-                            if label not in matched_categories:
-                                matched_categories.append(label)
+                            matched_items.append({
+                                'match': match_str,
+                                'weight': effective_weight,
+                                'category': label,
+                                'is_physical': is_tier_physical,
+                                'is_abuse': is_tier_abuse
+                            })
 
         # 1. Tier 1: Explicit Physical Threats / Violent Intimidation
         _match_pattern_group(PHYSICAL_THREAT_PATTERNS, is_tier_physical=True)
@@ -262,32 +250,62 @@ class BullyingDetector:
         # 5. Supplementary Curated Bullying Phrases
         for phrase in BULLYING_PHRASES:
             phrase_pat = r'\b' + re.escape(phrase) + r'\b'
-            if (re.search(phrase_pat, text_lower) or re.search(phrase_pat, norm_text)) and phrase not in matched:
-                matched.append(phrase)
-                pattern_weights.append(0.58 if not is_context_mitigated else 0.20)
-                if 'Direct Personal Insult' not in matched_categories:
-                    matched_categories.append('Direct Personal Insult')
+            if (re.search(phrase_pat, text_lower) or re.search(phrase_pat, norm_text)) and not any(item['match'] == phrase for item in matched_items):
+                effective_weight = 0.58 if not is_context_mitigated else 0.20
+                matched_items.append({
+                    'match': phrase,
+                    'weight': effective_weight,
+                    'category': 'Direct Personal Insult',
+                    'is_physical': False,
+                    'is_abuse': False
+                })
 
         # 6. Tier 5: Mild Profanity (only contributes if no higher tier matched)
-        if not matched:
+        if not matched_items:
             _match_pattern_group(MILD_PROFANITY_PATTERNS)
 
-        count = len(matched)
-        if count == 0:
+        # Deduplicate overlapping substring and normalized token matches
+        unique_items = []
+        for item in sorted(matched_items, key=lambda x: len(x['match']), reverse=True):
+            expanded_m = self.preprocessor.expand_contractions(item['match'].lower())
+            m_norm = re.sub(r'[\s\'\.\-_’‘`]+', '', expanded_m)
+            is_sub = False
+            for u in unique_items:
+                expanded_u = self.preprocessor.expand_contractions(u['match'].lower())
+                u_norm = re.sub(r'[\s\'\.\-_’‘`]+', '', expanded_u)
+                if m_norm in u_norm:
+                    is_sub = True
+                    break
+            if not is_sub:
+                unique_items.append(item)
+
+        unique_matches = [item['match'] for item in unique_items]
+        unique_weights = [item['weight'] for item in unique_items]
+        unique_categories = list(dict.fromkeys(item['category'] for item in unique_items))
+        has_physical_threat = any(item['is_physical'] for item in unique_items)
+        has_severe_abuse = any(item['is_abuse'] for item in unique_items)
+
+        distinct_count = len(unique_items)
+        is_only_mild_profanity = bool(unique_categories and all(cat == 'Mild / Colloquial Profanity' for cat in unique_categories))
+
+        if distinct_count == 0:
             score = 0.0
             severity = 'LOW'
         else:
             if is_context_mitigated:
                 score = 0.20  # Neutralized under educational / reporting context
                 severity = 'LOW'
+            elif is_only_mild_profanity:
+                score = 0.20  # Mild expressive profanity without target is not bullying
+                severity = 'LOW'
             elif has_physical_threat:
                 # Level 3: Threats / violence / blackmail -> CRITICAL
-                score = round(max(0.92, max(pattern_weights)), 3)
+                score = round(max(0.92, max(unique_weights)), 3)
                 severity = 'CRITICAL'
-            elif has_severe_abuse or count >= 2 or any(w >= 0.70 for w in pattern_weights):
+            elif has_severe_abuse or distinct_count >= 2 or any(w >= 0.70 for w in unique_weights):
                 # Level 2: Multiple insults, repeated harassment, or severe profane abuse -> HIGH
-                max_w = max(pattern_weights) if pattern_weights else 0.75
-                additional_boost = min(0.15, (count - 1) * 0.08) if count > 1 else 0.0
+                max_w = max(unique_weights) if unique_weights else 0.75
+                additional_boost = min(0.15, (distinct_count - 1) * 0.08) if distinct_count > 1 else 0.0
                 score = round(min(0.88, max(0.75, max_w + additional_boost)), 3)
                 severity = 'HIGH'
             else:
@@ -295,7 +313,7 @@ class BullyingDetector:
                 score = 0.58
                 severity = 'MEDIUM'
             
-        return matched, score, matched_categories, severity
+        return unique_matches, score, unique_categories, severity
 
     def predict(self, email_text):
         """Runs the hybrid cyberbullying detection pipeline with separate detection and severity classification."""
