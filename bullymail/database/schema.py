@@ -414,7 +414,7 @@ def setup_database():
                     "You must explicitly set ADMIN_PASSWORD in your environment / .env file before starting in production."
                 )
             elif is_testing:
-                admin_password = "TestSecretPass_2026!Key"
+                admin_password = getattr(Config, 'ADMIN_PASSWORD', None) or "TEST_ONLY_PASSWORD_DO_NOT_USE_IN_PRODUCTION_123!"
             else:
                 # In development/test mode without explicit password: generate a secure cryptographically random token
                 generated_token = secrets.token_urlsafe(16)

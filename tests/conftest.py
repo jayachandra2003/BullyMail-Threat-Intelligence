@@ -28,11 +28,6 @@ def app():
         SQLITE_DB_PATH = temp_db_path
         WTF_CSRF_ENABLED = False
         SECRET_KEY = 'test_secret_key_12345'
-        ADMIN_USERNAME = 'admin'
-        ADMIN_PASSWORD = 'TestSecretPass_2026!Key'
-        ADMIN_EMAIL = 'admin@bullymail.local'
-        SESSION_COOKIE_SECURE = False
-        CAPTCHA_ENABLED = False
 
     app_instance = create_app(RuntimeTestConfig)
     with app_instance.app_context():
