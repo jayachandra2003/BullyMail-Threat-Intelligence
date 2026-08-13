@@ -101,7 +101,7 @@ class TestConfig(Config):
     DEBUG = False
     WTF_CSRF_ENABLED = False
     ADMIN_USERNAME = 'admin'
-    ADMIN_PASSWORD = 'TestSecretPass_2026!Key'
+    ADMIN_PASSWORD = 'TEST_ONLY_PASSWORD_DO_NOT_USE_IN_PRODUCTION_123!'
     ADMIN_EMAIL = 'admin@bullymail.local'
     SESSION_COOKIE_SECURE = False
     CAPTCHA_ENABLED = False
