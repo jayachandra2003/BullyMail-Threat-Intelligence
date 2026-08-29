@@ -34,14 +34,29 @@ SEVERE_ABUSIVE_PATTERNS = [
     (r'\b(son\s+of\s+a\s+bitch|piece\s+of\s+shit|pos)\b', 'Severe Personal Degradation', 0.80),
     (r'\b(asshole|bastard|cunt|dickhead|dipshit|scumbag|jackass|douchebag|twat|wanker|bitch|slut|whore)\b', 'Severe Personal Epithet', 0.78),
     (r'\b(go\s+to\s+hell|rot\s+in\s+hell|eat\s+shit|drop\s+dead)\b', 'Hostile Degradation / Curse', 0.78),
-    (r'\b(fucking\s+(idiot|moron|loser|fool|liar|coward|failure|bitch|bastard|useless|piece\s+of\s+shit|joke))\b', 'Targeted Profane Insult', 0.85)
+    (r'\b(fucking\s+(idiot|moron|loser|fool|liar|coward|failure|bitch|bastard|useless|piece\s+of\s+shit|joke|pig|dog|rat|scum))\b', 'Targeted Profane Insult', 0.85)
+]
+
+# 2b. Tier 2b: Dehumanizing, Racial, Discriminatory & Hate Harassment (HIGH Severity)
+DEHUMANIZING_DISCRIMINATORY_PATTERNS = [
+    # Racial, ethnic, skin-color, or identity-based dehumanizing attacks
+    (r'\b(you\s+)?(black|white|dark|yellow|brown)\s+skin(ned)?\s+(pig|dog|ape|monkey|rat|animal|scum|trash|bastard|freak|subhuman)\b', 'Dehumanizing Racial / Identity Harassment', 0.88),
+    (r'\b(black|white|dark|yellow|brown)\s+skin(ned)?\s+(pig|dog|ape|monkey|rat|animal|scum|trash)\b', 'Dehumanizing Racial / Identity Harassment', 0.88),
+
+    # Dehumanizing animal/object epithets targeted at a person ("you ... pig", "you ... dog", "you ... rat")
+    (r'\b(you(\s+are|\'re|r)?\s+(a\s+|an\s+|so\s+|totally\s+|completely\s+|utterly\s+|filthy\s+|dirty\s+|ugly\s+|greedy\s+|lazy\s+|disgusting\s+)?(pig|dog|rat|ape|monkey|swine|animal|parasite|subhuman|vermin))\b', 'Dehumanizing Personal Attack', 0.85),
+    (r'\b(you\s+(pig|dog|rat|ape|monkey|swine|parasite|subhuman|vermin))\b', 'Dehumanizing Direct Vocative', 0.85),
+    (r'\b(filthy|dirty|ugly|disgusting)\s+(pig|dog|rat|ape|swine|animal|subhuman|vermin)\b', 'Dehumanizing Degradation', 0.82),
+
+    # Targeted identity / racial degradation
+    (r'\b(racist|sexist|bigoted)\s+(pig|dog|scum|trash|bastard|asshole)\b', 'Discriminatory Personal Attack', 0.80),
 ]
 
 # 3. Tier 3: Targeted Insults & Personal Demeaning (Single: MEDIUM Severity, Multiple: HIGH Severity)
 TARGETED_INSULT_PATTERNS = [
     # Full sentence personal attacks
-    (r'\b(you(\s+are|\'re|r)?\s+(a\s+|an\s+|so\s+|totally\s+|completely\s+|utterly\s+)?(idiot|stupid|moron|loser|useless|pathetic|fool|incompetent|joke|failure|clueless|moronic|worthless|hopeless|garbage|disaster|imbecile|dumbass|ignorant|dumb|jerk))\b', 'Targeted Personal Insult', 0.58),
-    (r'\b(you\s+(idiot|moron|loser|fool|imbecile|dumbass|clown|jerk|failure|scumbag))\b', 'Direct Vocative Insult', 0.58),
+    (r'\b(you(\s+are|\'re|r)?\s+(a\s+|an\s+|so\s+|totally\s+|completely\s+|utterly\s+)?(idiot|stupid|moron|loser|useless|pathetic|fool|incompetent|joke|failure|clueless|moronic|worthless|hopeless|garbage|disaster|imbecile|dumbass|ignorant|dumb|jerk|pig|swine|dog|rat|scum|trash|freak|psycho|creep))\b', 'Targeted Personal Insult', 0.58),
+    (r'\b(you\s+(idiot|moron|loser|fool|imbecile|dumbass|clown|jerk|failure|scumbag|pig|swine|dog|rat|scum|trash|freak|psycho|creep))\b', 'Direct Vocative Insult', 0.58),
     
     # Standalone direct lexical insults (inherently hostile offensive nouns)
     (r'\b(idiot|moron|imbecile|loser|dumbass|fool|useless|incompetent|dumb|worthless)\b', 'Direct Lexical Insult', 0.58),
@@ -218,12 +233,11 @@ class BullyingDetector:
         # Helper to match patterns across both original lower text and normalized adversarial text
         def _match_pattern_group(patterns, is_tier_physical=False, is_tier_abuse=False):
             for pat, label, weight in patterns:
-                found_orig = re.findall(pat, text_lower)
-                found_norm = re.findall(pat, norm_text)
+                found_orig = [m.group(0) for m in re.finditer(pat, text_lower)]
+                found_norm = [m.group(0) for m in re.finditer(pat, norm_text)]
                 found_all = found_orig + found_norm
                 if found_all:
-                    for f in found_all:
-                        match_str = f[0] if isinstance(f, tuple) else f
+                    for match_str in found_all:
                         match_str = match_str.strip()
                         if match_str and not any(item['match'] == match_str for item in matched_items):
                             effective_weight = weight if not is_context_mitigated else 0.20
@@ -240,6 +254,9 @@ class BullyingDetector:
 
         # 2. Tier 2: Severe Abusive Language & Hostile Profanity
         _match_pattern_group(SEVERE_ABUSIVE_PATTERNS, is_tier_abuse=True)
+
+        # 2b. Tier 2b: Dehumanizing, Racial & Discriminatory Harassment
+        _match_pattern_group(DEHUMANIZING_DISCRIMINATORY_PATTERNS, is_tier_abuse=True)
 
         # 3. Tier 3: Targeted Insults & Personal Degradation
         _match_pattern_group(TARGETED_INSULT_PATTERNS)
@@ -315,9 +332,13 @@ class BullyingDetector:
             
         return unique_matches, score, unique_categories, severity
 
-    def predict(self, email_text):
+    def predict(self, email_text, email_subject=""):
         """Runs the hybrid cyberbullying detection pipeline with separate detection and severity classification."""
-        if not email_text or not isinstance(email_text, str):
+        email_text = email_text or ""
+        email_subject = email_subject or ""
+        full_content = f"{email_subject}\n{email_text}".strip() if email_subject else email_text.strip()
+
+        if not full_content:
             return {
                 'is_bullying': False,
                 'confidence': 0.0,
@@ -333,7 +354,7 @@ class BullyingDetector:
             }
             
         # 1. Rule-based check
-        rule_matches, rule_score, matched_categories, severity = self.rule_based_check(email_text)
+        rule_matches, rule_score, matched_categories, severity = self.rule_based_check(full_content)
         
         # 2. ML Prediction (if model loaded)
         ml_pred = False

@@ -34,6 +34,7 @@ def create_app(config_class=Config):
     from .routes.datasets import datasets_bp
     from .routes.email_integration import email_bp
     from .routes.reports import reports_bp
+    from .routes.admin import admin_bp
     
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
@@ -42,6 +43,7 @@ def create_app(config_class=Config):
     app.register_blueprint(datasets_bp)
     app.register_blueprint(email_bp)
     app.register_blueprint(reports_bp)
+    app.register_blueprint(admin_bp)
     
     # Initialize Database Schema
     try:
@@ -89,6 +91,12 @@ def create_app(config_class=Config):
         ]
         response.headers['Content-Security-Policy'] = "; ".join(csp_directives)
         
+        # Force zero-cache response headers for static files to guarantee instant updates
+        if request.path.startswith('/static/'):
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+
         return response
 
     # =========================================================================

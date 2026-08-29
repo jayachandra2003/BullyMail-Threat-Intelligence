@@ -11,15 +11,33 @@ class AuthEmailService:
         self.email_service = EmailService()
 
     @classmethod
-    def get_base_url(cls):
-        return Config.APP_BASE_URL.rstrip('/')
+    def get_base_url(cls) -> str:
+        """Resolves trusted application base URL from active Flask app context or Config."""
+        try:
+            from flask import current_app
+            if current_app and current_app.config.get('APP_BASE_URL'):
+                return current_app.config.get('APP_BASE_URL').rstrip('/')
+        except Exception:
+            pass
+        return (getattr(Config, 'APP_BASE_URL', None) or 'http://localhost:5000').rstrip('/')
 
-    def send_verification_email(self, recipient_email: str, raw_token: str, username: str = "User") -> bool:
+    def get_verification_url(self, raw_token: str) -> str:
+        """Constructs canonical email verification URL."""
+        base_url = self.get_base_url()
+        return f"{base_url}/verify-email?token={raw_token}"
+
+    def get_password_reset_url(self, raw_token: str) -> str:
+        """Constructs canonical password reset URL."""
+        base_url = self.get_base_url()
+        return f"{base_url}/reset-password?token={raw_token}"
+
+    def send_verification_email(self, recipient_email: str, raw_token: str, username: str = "User") -> tuple[bool, str]:
         """
         Dispatches account verification link with trusted base URL and single-use token.
+        Returns:
+            tuple[bool, str]: (is_sent, status_message)
         """
-        base_url = self.get_base_url()
-        verify_url = f"{base_url}/verify-email?token={raw_token}"
+        verify_url = self.get_verification_url(raw_token)
 
         subject = "Action Required: Verify Your BullyMail Account"
         body = (
@@ -34,12 +52,13 @@ class AuthEmailService:
 
         return self.email_service.send_email(recipient_email, subject, body)
 
-    def send_password_reset_email(self, recipient_email: str, raw_token: str, username: str = "User") -> bool:
+    def send_password_reset_email(self, recipient_email: str, raw_token: str, username: str = "User") -> tuple[bool, str]:
         """
         Dispatches password reset link with trusted base URL and single-use token.
+        Returns:
+            tuple[bool, str]: (is_sent, status_message)
         """
-        base_url = self.get_base_url()
-        reset_url = f"{base_url}/reset-password?token={raw_token}"
+        reset_url = self.get_password_reset_url(raw_token)
 
         subject = "BullyMail Security Alert: Password Reset Request"
         body = (

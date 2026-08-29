@@ -231,13 +231,13 @@ def generate_synthetic_samples(num_samples=2000):
     
     return emails, labels, telemetry
 
+from .auth import get_current_user, require_role, require_auth
+
 @datasets_bp.route('/api/generate-dataset', methods=['POST'])
 @datasets_bp.route('/api/generate-large-dataset', methods=['POST'])
-def generate_dataset_route():
-    """Generates diverse, deduplicated synthetic multi-sheet Excel datasets."""
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-        
+@require_role('admin')
+def generate_dataset_route(current_user):
+    """Generates diverse, deduplicated synthetic multi-sheet Excel datasets (Admin Only)."""
     data = request.get_json() or {}
     try:
         num_samples = min(max(int(data.get('num_samples', 2000)), 10), 25000)
@@ -292,11 +292,9 @@ def generate_dataset_route():
         return jsonify({'success': False, 'error': 'Failed to generate synthetic dataset.'}), 500
 
 @datasets_bp.route('/api/download-dataset/<filename>')
-def download_dataset(filename):
+@require_auth
+def download_dataset(current_user, filename):
     """Safely serves generated datasets for download with path traversal defense."""
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-        
     safe_fn = secure_filename(filename)
     filepath = os.path.abspath(os.path.join(Config.DATASET_PATH, safe_fn))
     dataset_dir = os.path.abspath(Config.DATASET_PATH)
@@ -308,11 +306,9 @@ def download_dataset(filename):
     return send_file(filepath, as_attachment=True, download_name=safe_fn)
 
 @datasets_bp.route('/api/available-datasets')
-def available_datasets():
+@require_auth
+def available_datasets(current_user):
     """Lists all available dataset files."""
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-        
     datasets = []
     try:
         if os.path.exists(Config.DATASET_PATH):
@@ -332,11 +328,9 @@ def available_datasets():
         return jsonify({'success': False, 'error': 'Failed to list available datasets.'}), 500
 
 @datasets_bp.route('/api/dataset-history')
-def dataset_history():
+@require_auth
+def dataset_history(current_user):
     """Fetches generation log history."""
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-        
     try:
         history = fetch_all("SELECT * FROM dataset_history ORDER BY created_at DESC LIMIT 10")
         return jsonify({'success': True, 'history': history})

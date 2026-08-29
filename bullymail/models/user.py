@@ -151,7 +151,7 @@ class UserModel:
                 pass
             return None, 'INVALID_CREDENTIALS'
 
-        stored_hash = user.get('password_hash') or ''
+        stored_hash = user.get('password_hash') or user.get('password') or ''
         is_correct = cls.verify_password(stored_hash, password)
 
         if not is_correct:
@@ -161,6 +161,8 @@ class UserModel:
         status = user.get('status', 'ACTIVE')
         if status == 'PENDING_EMAIL_VERIFICATION':
             return None, 'PENDING_VERIFICATION'
+        elif status == 'PENDING_ADMIN_APPROVAL':
+            return None, 'PENDING_ADMIN_APPROVAL'
         elif status == 'LOCKED':
             return None, 'ACCOUNT_LOCKED'
         elif status == 'DISABLED':
@@ -181,9 +183,12 @@ class UserModel:
 
     @classmethod
     def create_user(cls, username: str, password: str, role: str = 'analyst',
-                    email: str = None, status: str = 'ACTIVE', enforce_policy: bool = True) -> int:
+                    email: str = None, status: str = 'PENDING_EMAIL_VERIFICATION', enforce_policy: bool = True,
+                    institution_id: int = None, requested_institution_name: str = None,
+                    requested_institution_domain: str = None) -> int:
         """
         Creates a new user record with password hashing, email normalization, and policy enforcement.
+        Default institution_id is None (must NEVER default to Institution 1).
         """
         username = (username or '').strip()
         if not username:
@@ -199,10 +204,20 @@ class UserModel:
                 raise ValueError(msg)
 
         hashed = cls.hash_password(password)
-        user_id = execute_query(
-            "INSERT INTO users (username, password_hash, role, email, status) VALUES (%s, %s, %s, %s, %s)",
-            (username, hashed, role, clean_email, status)
-        )
+        try:
+            user_id = execute_query(
+                "INSERT INTO users "
+                "(username, password, password_hash, role, email, status, institution_id, requested_institution_name, requested_institution_domain) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (username, hashed, hashed, role, clean_email, status, institution_id, requested_institution_name, requested_institution_domain)
+            )
+        except Exception:
+            user_id = execute_query(
+                "INSERT INTO users "
+                "(username, password_hash, role, email, status, institution_id, requested_institution_name, requested_institution_domain) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                (username, hashed, role, clean_email, status, institution_id, requested_institution_name, requested_institution_domain)
+            )
         return user_id
 
     @classmethod
@@ -222,9 +237,71 @@ class UserModel:
 
     @classmethod
     def activate_user_email(cls, user_id: int) -> bool:
-        """Transitions user from PENDING_EMAIL_VERIFICATION to ACTIVE."""
+        """Transitions user from PENDING_EMAIL_VERIFICATION to PENDING_ADMIN_APPROVAL."""
         execute_query(
-            "UPDATE users SET status = 'ACTIVE', email_verified_at = CURRENT_TIMESTAMP WHERE id = %s",
+            "UPDATE users SET status = 'PENDING_ADMIN_APPROVAL', email_verified_at = CURRENT_TIMESTAMP WHERE id = %s",
             (user_id,)
         )
         return True
+
+    @classmethod
+    def provision_and_approve_user(cls, user_id: int, institution_id: int, role: str = 'analyst') -> bool:
+        """
+        Provisions and activates a pending user account into a specified institution ID and role.
+        """
+        user = cls.get_by_id(user_id)
+        if not user:
+            return False
+
+        if not institution_id:
+            raise ValueError("Institution ID must be specified for account provisioning.")
+
+        valid_roles = {'admin', 'analyst', 'operator'}
+        assigned_role = role if role in valid_roles else 'analyst'
+
+        execute_query(
+            "UPDATE users "
+            "SET status = 'ACTIVE', role = %s, institution_id = %s, "
+            "requested_institution_name = NULL, requested_institution_domain = NULL "
+            "WHERE id = %s",
+            (assigned_role, institution_id, user_id)
+        )
+        return True
+
+    @classmethod
+    def reject_user(cls, user_id: int) -> bool:
+        """Rejects a pending registration request."""
+        execute_query(
+            "UPDATE users SET status = 'REJECTED' WHERE id = %s",
+            (user_id,)
+        )
+        return True
+
+    @classmethod
+    def approve_user_by_admin(cls, user_id: int, role: str = None, institution_id: int = None) -> bool:
+        """Approves a user account, setting status to ACTIVE."""
+        user = cls.get_by_id(user_id)
+        if not user:
+            return False
+
+        new_role = role or user.get('role', 'analyst')
+        new_inst = institution_id if institution_id is not None else user.get('institution_id')
+        if not new_inst:
+            raise ValueError("Institution ID must be specified to approve user.")
+
+        execute_query(
+            "UPDATE users SET status = 'ACTIVE', role = %s, institution_id = %s WHERE id = %s",
+            (new_role, new_inst, user_id)
+        )
+        return True
+
+    @classmethod
+    def get_pending_approval_users(cls, institution_id: int = None):
+        """Retrieves users waiting for administrator approval."""
+        return fetch_all(
+            "SELECT id, username, email, role, status, requested_institution_name, "
+            "requested_institution_domain, created_at, email_verified_at "
+            "FROM users "
+            "WHERE status = 'PENDING_ADMIN_APPROVAL' "
+            "ORDER BY id ASC"
+        )

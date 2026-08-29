@@ -105,16 +105,19 @@ def test_email_verification_token_lifecycle(client):
     verify_res = client.get(f'/verify-email?token={raw_token}')
     assert verify_res.status_code == 200
 
-    # User should now be ACTIVE
+    # User should now be PENDING_ADMIN_APPROVAL
     user = UserModel.get_by_id(user_id)
-    assert user['status'] == 'ACTIVE'
+    assert user['status'] == 'PENDING_ADMIN_APPROVAL'
     assert user['email_verified_at'] is not None
 
     # 2. Replay token: second verification attempt must fail
     replay_res = client.get(f'/verify-email?token={raw_token}')
     assert replay_res.status_code == 400
 
-    # 3. User can now authenticate
+    # 3. Approve user by admin
+    UserModel.approve_user_by_admin(user_id, role='analyst', institution_id=1)
+
+    # 4. User can now authenticate
     login_res = client.post('/login', json={'username': 'token_user', 'password': pw})
     assert login_res.status_code == 200
     assert login_res.get_json()['success'] is True
@@ -220,3 +223,117 @@ def test_session_rotation_and_logout_invalidation(client):
     res_dash_after = client.get('/dashboard')
     assert res_dash_after.status_code == 302
     assert '/login' in res_dash_after.headers['Location']
+
+# =========================================================================
+# 6. AUTH EMAIL SERVICE & APP_BASE_URL GENERATION
+# =========================================================================
+
+def test_auth_email_verification_url_uses_configured_base_url(app):
+    """Verify that email verification URLs use the configured APP_BASE_URL without hardcoding."""
+    from bullymail.services.auth_email_service import auth_email_service
+    raw_token = "sample_verification_token_abc123"
+
+    # 1. Default test app base URL
+    expected_base = app.config.get('APP_BASE_URL', Config.APP_BASE_URL).rstrip('/')
+    verify_url = auth_email_service.get_verification_url(raw_token)
+    assert verify_url.startswith(expected_base)
+    assert f"/verify-email?token={raw_token}" in verify_url
+
+    # 2. Dynamic APP_BASE_URL override (e.g. LAN IP deployment)
+    custom_lan_url = "http://172.20.38.78:5000"
+    app.config['APP_BASE_URL'] = custom_lan_url
+    verify_url_lan = auth_email_service.get_verification_url(raw_token)
+    assert verify_url_lan == f"http://172.20.38.78:5000/verify-email?token={raw_token}"
+
+def test_auth_email_password_reset_url_uses_configured_base_url(app):
+    """Verify that password reset URLs use the configured APP_BASE_URL without hardcoding."""
+    from bullymail.services.auth_email_service import auth_email_service
+    raw_token = "sample_reset_token_xyz789"
+
+    # 1. Default test app base URL
+    expected_base = app.config.get('APP_BASE_URL', Config.APP_BASE_URL).rstrip('/')
+    reset_url = auth_email_service.get_password_reset_url(raw_token)
+    assert reset_url.startswith(expected_base)
+    assert f"/reset-password?token={raw_token}" in reset_url
+
+    # 2. Dynamic APP_BASE_URL override (e.g. production HTTPS domain)
+    custom_prod_url = "https://security.bullymail.org"
+    app.config['APP_BASE_URL'] = custom_prod_url
+    reset_url_prod = auth_email_service.get_password_reset_url(raw_token)
+    assert reset_url_prod == f"https://security.bullymail.org/reset-password?token={raw_token}"
+
+# =========================================================================
+# 7. SIGNUP EMAIL DELIVERY SUCCESS & ERROR HANDLING
+# =========================================================================
+
+def test_signup_successful_email_delivery(client, monkeypatch):
+    """Verify signup with successful email delivery returns PENDING_VERIFICATION."""
+    from bullymail.services.auth_email_service import auth_email_service
+
+    monkeypatch.setattr(
+        auth_email_service,
+        'send_verification_email',
+        lambda recipient_email, raw_token, username: (True, "Email sent successfully.")
+    )
+
+    email = "success_email_user@bullymail.local"
+    pw = "StrongPass_2026!Key"
+    res = client.post('/signup', json={
+        'username': 'success_email_user',
+        'email': email,
+        'password': pw,
+        'confirm_password': pw
+    })
+
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data['success'] is True
+    assert data['status'] == 'PENDING_VERIFICATION'
+    assert "verification link has been dispatched" in data['message']
+
+    # User in database is in PENDING_EMAIL_VERIFICATION status
+    user = UserModel.get_by_email(email)
+    assert user is not None
+    assert user['status'] == 'PENDING_EMAIL_VERIFICATION'
+
+
+def test_signup_failed_email_delivery_error_handling(client, monkeypatch):
+    """Verify signup when email delivery fails: user is created, safe error returned, credentials never leaked."""
+    from bullymail.services.auth_email_service import auth_email_service
+
+    internal_smtp_error = "SMTPServerDisconnected: Connection unexpectedly closed to smtp.gmail.com:587 (password=SecretAppPass123)"
+    monkeypatch.setattr(
+        auth_email_service,
+        'send_verification_email',
+        lambda recipient_email, raw_token, username: (False, f"Failed to send email: {internal_smtp_error}")
+    )
+
+    email = "failed_email_user@bullymail.local"
+    pw = "StrongPass_2026!Key"
+    res = client.post('/signup', json={
+        'username': 'failed_email_user',
+        'email': email,
+        'password': pw,
+        'confirm_password': pw
+    })
+
+    assert res.status_code == 500
+    data = res.get_json()
+    assert data['success'] is False
+    assert data['status'] == 'PENDING_EMAIL_VERIFICATION'
+    assert data['error'] == "Your account was created, but we could not send the verification email. Please try again."
+
+    # Ensure internal exception details and credentials are NEVER exposed to client
+    assert "smtp.gmail.com" not in str(data)
+    assert "SecretAppPass123" not in str(data)
+    assert "SMTPServerDisconnected" not in str(data)
+
+    # User remains stored in database in PENDING_EMAIL_VERIFICATION status
+    user = UserModel.get_by_email(email)
+    assert user is not None
+    assert user['status'] == 'PENDING_EMAIL_VERIFICATION'
+
+    # Unverified user cannot log in
+    login_res = client.post('/login', json={'username': 'failed_email_user', 'password': pw})
+    assert login_res.status_code == 403
+    assert login_res.get_json()['status'] == 'PENDING_VERIFICATION'

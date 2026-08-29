@@ -9,7 +9,7 @@ app = create_app(Config)
 
 if __name__ == '__main__':
     print("==================================================================")
-    print("      🛡️  Starting BullyMail V2 Threat Intelligence Platform     ")
+    print("      [SOC] Starting BullyMail V2 Threat Intelligence Platform     ")
     print("==================================================================")
     print(f"Server running at: http://localhost:{Config.PORT}")
     print(f"Active Storage Path: {Config.MODEL_PATH}")

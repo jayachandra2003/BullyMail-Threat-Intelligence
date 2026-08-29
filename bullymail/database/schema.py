@@ -31,10 +31,53 @@ def apply_migrations(cursor, engine):
     to upgrade legacy installations without data loss.
     """
     # -------------------------------------------------------------------------
+    # 0. Institutions Table Migrations
+    # -------------------------------------------------------------------------
+    inst_cols = _get_existing_columns(cursor, 'institutions', engine)
+    if inst_cols:
+        if 'code' not in inst_cols:
+            cursor.execute("ALTER TABLE institutions ADD COLUMN code VARCHAR(30) NULL")
+        if 'status' not in inst_cols:
+            cursor.execute("ALTER TABLE institutions ADD COLUMN status VARCHAR(20) DEFAULT 'ACTIVE'")
+        if 'updated_at' not in inst_cols:
+            cursor.execute("ALTER TABLE institutions ADD COLUMN updated_at TIMESTAMP NULL")
+        try:
+            cursor.execute("UPDATE institutions SET code = 'BM-DEMO' WHERE (code IS NULL OR code = '') AND id = 1")
+            cursor.execute("UPDATE institutions SET status = 'ACTIVE' WHERE status IS NULL OR status = ''")
+        except Exception:
+            pass
+
+    # Ensure default institution exists
+    try:
+        if engine == 'sqlite':
+            cursor.execute("INSERT OR IGNORE INTO institutions (id, name, domain, code, status) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE')")
+        else:
+            cursor.execute("INSERT IGNORE INTO institutions (id, name, domain, code, status) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE')")
+    except Exception:
+        pass
+
+    # -------------------------------------------------------------------------
     # 1. Users Table Migrations
     # -------------------------------------------------------------------------
     user_cols = _get_existing_columns(cursor, 'users', engine)
     if user_cols:
+        if engine != 'sqlite' and 'password' in user_cols:
+            try:
+                cursor.execute("ALTER TABLE users MODIFY COLUMN password VARCHAR(255) NULL")
+            except Exception:
+                pass
+
+        if 'email' not in user_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN email VARCHAR(100) NULL UNIQUE")
+
+        if 'password_hash' not in user_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NULL")
+
+        try:
+            cursor.execute("UPDATE users SET password_hash = password WHERE (password_hash IS NULL OR password_hash = '') AND password IS NOT NULL")
+        except Exception:
+            pass
+
         if 'status' not in user_cols:
             cursor.execute("ALTER TABLE users ADD COLUMN status VARCHAR(30) DEFAULT 'ACTIVE'")
 
@@ -51,7 +94,17 @@ def apply_migrations(cursor, engine):
         if 'last_login_at' not in user_cols:
             cursor.execute("ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP NULL")
 
-        # Backfill active status for any legacy accounts
+        if 'institution_id' not in user_cols:
+            col_type = "INTEGER NULL" if engine == 'sqlite' else "INT NULL"
+            cursor.execute(f"ALTER TABLE users ADD COLUMN institution_id {col_type}")
+
+        if 'requested_institution_name' not in user_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN requested_institution_name VARCHAR(100) NULL")
+
+        if 'requested_institution_domain' not in user_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN requested_institution_domain VARCHAR(100) NULL")
+
+        # Backfill active status for legacy accounts without altering pending registrations
         try:
             cursor.execute("UPDATE users SET status = 'ACTIVE' WHERE status IS NULL OR status = ''")
         except Exception:
@@ -62,7 +115,35 @@ def apply_migrations(cursor, engine):
     # -------------------------------------------------------------------------
     email_cols = _get_existing_columns(cursor, 'analyzed_emails', engine)
     if email_cols:
+        if 'institution_id' not in email_cols:
+            col_type = "INTEGER DEFAULT 1" if engine == 'sqlite' else "INT DEFAULT 1"
+            cursor.execute(f"ALTER TABLE analyzed_emails ADD COLUMN institution_id {col_type}")
+
+        if 'user_id' not in email_cols:
+            col_type = "INTEGER NULL" if engine == 'sqlite' else "INT NULL"
+            cursor.execute(f"ALTER TABLE analyzed_emails ADD COLUMN user_id {col_type}")
+
+        if 'email_config_id' not in email_cols:
+            col_type = "INTEGER NULL" if engine == 'sqlite' else "INT NULL"
+            cursor.execute(f"ALTER TABLE analyzed_emails ADD COLUMN email_config_id {col_type}")
+
+        try:
+            cursor.execute("UPDATE analyzed_emails SET institution_id = 1 WHERE institution_id IS NULL OR institution_id = 0")
+            cursor.execute("UPDATE analyzed_emails SET email_config_id = (SELECT email_config_id FROM ingested_messages WHERE analyzed_email_id = analyzed_emails.id) WHERE email_config_id IS NULL")
+        except Exception:
+            pass
+
         missing_defs = {
+            'overall_risk_level': "VARCHAR(20) DEFAULT 'LOW'",
+            'overall_confidence': "FLOAT DEFAULT 0.0",
+            'threat_score': "FLOAT DEFAULT 0.0",
+            'phishing_risk_level': "VARCHAR(20) DEFAULT 'LOW'",
+            'phishing_confidence': "FLOAT DEFAULT 0.0",
+            'phishing_indicators': 'TEXT NULL',
+            'urls_detected': "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0",
+            'suspicious_urls_count': "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0",
+            'url_analysis_summary': 'TEXT NULL',
+            'evidence_summary': 'TEXT NULL',
             'domain_analysis_summary': 'TEXT DEFAULT "{}"',
             'social_eng_risk_level': "VARCHAR(20) DEFAULT 'LOW'",
             'social_eng_confidence': "FLOAT DEFAULT 0.0",
@@ -83,6 +164,71 @@ def apply_migrations(cursor, engine):
                 except Exception:
                     pass
 
+    # -------------------------------------------------------------------------
+    # 3. Email Config Migrations
+    # -------------------------------------------------------------------------
+    config_cols = _get_existing_columns(cursor, 'email_config', engine)
+    if config_cols:
+        if 'institution_id' not in config_cols:
+            col_type = "INTEGER" if engine == 'sqlite' else "INT"
+            cursor.execute(f"ALTER TABLE email_config ADD COLUMN institution_id {col_type}")
+
+        if 'encrypted_app_password' not in config_cols:
+            cursor.execute("ALTER TABLE email_config ADD COLUMN encrypted_app_password TEXT")
+
+        if 'imap_server' not in config_cols:
+            cursor.execute("ALTER TABLE email_config ADD COLUMN imap_server VARCHAR(255) DEFAULT 'imap.gmail.com'")
+
+        if 'smtp_server' not in config_cols:
+            cursor.execute("ALTER TABLE email_config ADD COLUMN smtp_server VARCHAR(255) DEFAULT 'smtp.gmail.com'")
+
+        if 'smtp_port' not in config_cols:
+            col_type = "INTEGER DEFAULT 587" if engine == 'sqlite' else "INT DEFAULT 587"
+            cursor.execute(f"ALTER TABLE email_config ADD COLUMN smtp_port {col_type}")
+
+        if 'last_synced_at' not in config_cols:
+            cursor.execute("ALTER TABLE email_config ADD COLUMN last_synced_at TIMESTAMP NULL")
+
+        if 'sync_status' not in config_cols:
+            cursor.execute("ALTER TABLE email_config ADD COLUMN sync_status VARCHAR(30) DEFAULT 'IDLE'")
+
+        if 'sync_lease_id' not in config_cols:
+            cursor.execute("ALTER TABLE email_config ADD COLUMN sync_lease_id VARCHAR(64) NULL")
+
+        if 'sync_lease_expires_at' not in config_cols:
+            cursor.execute("ALTER TABLE email_config ADD COLUMN sync_lease_expires_at TIMESTAMP NULL")
+
+        if 'last_error' not in config_cols:
+            cursor.execute("ALTER TABLE email_config ADD COLUMN last_error TEXT NULL")
+
+        if 'total_ingested_count' not in config_cols:
+            col_type = "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0"
+            cursor.execute(f"ALTER TABLE email_config ADD COLUMN total_ingested_count {col_type}")
+
+        # Check for legacy unencrypted app_password column and migrate idempotently
+        if 'app_password' in config_cols:
+            from ..services.crypto_service import CryptoService
+            cursor.execute("SELECT id, app_password FROM email_config WHERE app_password IS NOT NULL AND app_password != ''")
+            rows = cursor.fetchall()
+            for row in rows:
+                cfg_id = row[0] if isinstance(row, (tuple, list)) else row['id']
+                raw_pw = row[1] if isinstance(row, (tuple, list)) else row['app_password']
+                if raw_pw:
+                    enc_pw = CryptoService.encrypt(raw_pw)
+                    # Verify encryption before nullifying plaintext
+                    dec_pw = CryptoService.decrypt(enc_pw)
+                    if dec_pw == raw_pw:
+                        ph = '?' if engine == 'sqlite' else '%s'
+                        cursor.execute(
+                            f"UPDATE email_config SET encrypted_app_password = {ph}, app_password = NULL WHERE id = {ph}",
+                            (enc_pw, cfg_id)
+                        )
+
+        try:
+            cursor.execute("UPDATE email_config SET institution_id = 1 WHERE institution_id IS NULL OR institution_id = 0")
+        except Exception:
+            pass
+
 def setup_database():
     """Sets up all required database tables with UTF-8 support and idempotent secure administrator initialization."""
     engine = get_engine_type()
@@ -91,20 +237,37 @@ def setup_database():
         cursor = conn.cursor()
         
         if engine == 'sqlite':
-            # Users Table with Account Lifecycle Status
+            # Institutions / Tenants Table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS institutions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(100) NOT NULL,
+                    domain VARCHAR(100) UNIQUE NOT NULL,
+                    code VARCHAR(30) NULL,
+                    status VARCHAR(20) DEFAULT 'ACTIVE',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # Users Table with Account Lifecycle Status & Tenant Association
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    institution_id INTEGER NULL,
                     username VARCHAR(50) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
-                    role VARCHAR(20) DEFAULT 'admin',
+                    role VARCHAR(20) DEFAULT 'analyst',
                     email VARCHAR(100) UNIQUE,
-                    status VARCHAR(30) DEFAULT 'ACTIVE',
+                    status VARCHAR(30) DEFAULT 'PENDING_EMAIL_VERIFICATION',
+                    requested_institution_name VARCHAR(100) NULL,
+                    requested_institution_domain VARCHAR(100) NULL,
                     email_verified_at TIMESTAMP NULL,
                     failed_login_attempts INTEGER DEFAULT 0,
                     locked_until TIMESTAMP NULL,
                     last_login_at TIMESTAMP NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE RESTRICT
                 )
             ''')
             
@@ -231,9 +394,43 @@ def setup_database():
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS email_config (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    institution_id INTEGER NOT NULL,
                     email_address VARCHAR(255),
-                    configured_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    status VARCHAR(50) DEFAULT 'inactive'
+                    app_password TEXT NULL,
+                    encrypted_app_password TEXT,
+                    imap_server VARCHAR(255) DEFAULT 'imap.gmail.com',
+                    smtp_server VARCHAR(255) DEFAULT 'smtp.gmail.com',
+                    smtp_port INTEGER DEFAULT 587,
+                    status VARCHAR(50) DEFAULT 'inactive',
+                    last_synced_at TIMESTAMP NULL,
+                    sync_status VARCHAR(30) DEFAULT 'IDLE',
+                    sync_lease_id VARCHAR(64) NULL,
+                    sync_lease_expires_at TIMESTAMP NULL,
+                    last_error TEXT NULL,
+                    total_ingested_count INTEGER DEFAULT 0,
+                    configured_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ingested_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    institution_id INTEGER NOT NULL,
+                    email_config_id INTEGER NOT NULL,
+                    message_id_hash VARCHAR(64) NOT NULL,
+                    imap_uid INTEGER NULL,
+                    uidvalidity INTEGER NULL,
+                    processing_status VARCHAR(30) DEFAULT 'DISCOVERED',
+                    attempt_count INTEGER DEFAULT 0,
+                    last_attempt_at TIMESTAMP NULL,
+                    error_message TEXT NULL,
+                    analysis_id INTEGER NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE,
+                    FOREIGN KEY (email_config_id) REFERENCES email_config (id) ON DELETE CASCADE,
+                    FOREIGN KEY (analysis_id) REFERENCES analyzed_emails (id) ON DELETE SET NULL,
+                    UNIQUE (institution_id, email_config_id, message_id_hash)
                 )
             ''')
             
@@ -243,18 +440,34 @@ def setup_database():
         else:
             # MySQL Database Engine Setup
             cursor.execute('''
+                CREATE TABLE IF NOT EXISTS institutions (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL,
+                    domain VARCHAR(100) UNIQUE NOT NULL,
+                    code VARCHAR(30) NULL,
+                    status VARCHAR(20) DEFAULT 'ACTIVE',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ''')
+
+            cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     id INT AUTO_INCREMENT PRIMARY KEY,
+                    institution_id INT NULL,
                     username VARCHAR(50) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
-                    role VARCHAR(20) DEFAULT 'admin',
+                    role VARCHAR(20) DEFAULT 'analyst',
                     email VARCHAR(100) UNIQUE,
-                    status VARCHAR(30) DEFAULT 'ACTIVE',
+                    status VARCHAR(30) DEFAULT 'PENDING_EMAIL_VERIFICATION',
+                    requested_institution_name VARCHAR(100) NULL,
+                    requested_institution_domain VARCHAR(100) NULL,
                     email_verified_at TIMESTAMP NULL,
                     failed_login_attempts INT DEFAULT 0,
                     locked_until TIMESTAMP NULL,
                     last_login_at TIMESTAMP NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE RESTRICT
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ''')
             
@@ -285,10 +498,12 @@ def setup_database():
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS analyzed_emails (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    email_subject TEXT,
+                    institution_id INT DEFAULT 1,
+                    user_id INT NULL,
+                    email_subject VARCHAR(255),
                     email_from VARCHAR(255),
                     email_to VARCHAR(255),
-                    email_text MEDIUMTEXT NOT NULL,
+                    email_text MEDIUMTEXT,
                     
                     overall_risk_level VARCHAR(20) NOT NULL DEFAULT 'LOW',
                     overall_confidence FLOAT NOT NULL DEFAULT 0.0,
@@ -362,7 +577,7 @@ def setup_database():
                     total_samples INT DEFAULT 0,
                     bullying_samples INT DEFAULT 0,
                     non_bullying_samples INT DEFAULT 0,
-                    neutral_samples INT DEFAULT 0,
+                    neutral_samples INTEGER DEFAULT 0,
                     file_size VARCHAR(50) DEFAULT '0 MB',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -371,9 +586,44 @@ def setup_database():
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS email_config (
                     id INT AUTO_INCREMENT PRIMARY KEY,
+                    institution_id INT NOT NULL,
                     email_address VARCHAR(255),
+                    app_password TEXT NULL,
+                    encrypted_app_password TEXT,
+                    imap_server VARCHAR(255) DEFAULT 'imap.gmail.com',
+                    smtp_server VARCHAR(255) DEFAULT 'smtp.gmail.com',
+                    smtp_port INT DEFAULT 587,
+                    status VARCHAR(50) DEFAULT 'inactive',
+                    last_synced_at TIMESTAMP NULL,
+                    sync_status VARCHAR(30) DEFAULT 'IDLE',
+                    sync_lease_id VARCHAR(64) NULL,
+                    sync_lease_expires_at TIMESTAMP NULL,
+                    last_error TEXT NULL,
+                    total_ingested_count INT DEFAULT 0,
                     configured_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    status VARCHAR(50) DEFAULT 'inactive'
+                    FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ingested_messages (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    institution_id INT NOT NULL,
+                    email_config_id INT NOT NULL,
+                    message_id_hash VARCHAR(64) NOT NULL,
+                    imap_uid INT NULL,
+                    uidvalidity INT NULL,
+                    processing_status VARCHAR(30) DEFAULT 'DISCOVERED',
+                    attempt_count INT DEFAULT 0,
+                    last_attempt_at TIMESTAMP NULL,
+                    error_message TEXT NULL,
+                    analysis_id INT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE,
+                    FOREIGN KEY (email_config_id) REFERENCES email_config (id) ON DELETE CASCADE,
+                    FOREIGN KEY (analysis_id) REFERENCES analyzed_emails (id) ON DELETE SET NULL,
+                    UNIQUE KEY uq_inst_cfg_msg (institution_id, email_config_id, message_id_hash)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ''')
             
