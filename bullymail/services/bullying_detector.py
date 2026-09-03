@@ -17,13 +17,57 @@ from .preprocessor import TextPreprocessor
 # Categorized Cyberbullying, Harassment & Threat Taxonomy
 # -------------------------------------------------------------------------
 
-# 1. Tier 1: Explicit Physical Harm, Intimidation & Blackmail (CRITICAL Severity)
+# 1. Tier 1: Explicit Physical Harm, Violent Threat Word Families & Intimidation (CRITICAL Severity)
 PHYSICAL_THREAT_PATTERNS = [
-    (r'\b(i\s+will|i\'ll|we\s+will|going\s+to)\s+(hurt|kill|harm|attack|beat|assault|punch|stab|destroy|murder|hunt|shoot|strangle)\s+you\b', 'Physical Violence Threat', 0.95),
-    (r'\b(if\s+you\s+(don\'t|do\s+not)|unless\s+you)\s+.*?\s+(i\s+will|i\'ll)\s+(hurt|kill|harm|beat|destroy|ruin)\s+you\b', 'Coercive Harm Threat', 0.95),
-    (r'\b(watch\s+your\s+back|you\s+will\s+pay\s+for\s+this|you\s+won\'t\s+be\s+safe|i\s+know\s+where\s+you\s+live|you\s+are\s+dead|make\s+you\s+suffer|better\s+watch\s+out)\b', 'Intimidation / Stalking Threat', 0.92),
+    # Direct / Constructed 1st, 2nd, 3rd person threats and passive verb forms
+    (r'\b(you(\s+will|\'ll|\s+are\s+going\s+to|\'re\s+gonna)?\s+(be|get)\s+(killed|murdered|shot|stabbed|beaten|assaulted|attacked|strangled|choked|tortured|poisoned|burned|hung|hanged|drowned|mutilated|slaughtered|executed|destroyed))\b', 'Passive Voice Violence Threat', 0.95),
+    (r"\b(i(\'ll|\s+will|\s+am\s+going\s+to|'m\s+gonna)|\bwe(\'ll|\s+will|\s+are\s+going\s+to))\s+(hurt|kill|harm|attack|beat|assault|punch|stab|destroy|murder|hunt|shoot|strangle|choke|torture|poison|burn|slash|crush|drown|hang|mutilate|slaughter|execute)\s+(you|u|him|her|them)\b", 'Direct 1st-Person Physical Violence Threat', 0.95),
+    (r'\b(you(\'ll|\s+will|\s+are\s+going\s+to|\'re\s+gonna)\s+(die|pay|suffer|bleed|regret\s+this|perish))\b', 'Direct Intimidation / Death Threat', 0.95),
+    (r'\b(i\s+(want|need|wish)\s+(you|u)\s+(dead|killed|to\s+die))\b', 'Expressed Death Wish / Threat', 0.95),
+    (r'\b(threaten(s|ed|ing)?\s+to\s+(kill|murder|hurt|harm|stab|shoot|attack|beat|destroy|ruin|assault))\b', 'Threatening Action Signal', 0.92),
+    (r'\b(if\s+you\s+(don\'t|do\s+not)|unless\s+you)\s+.*?\s+(i(\'ll|\s+will)|\bwe(\'ll|\s+will))\s+(hurt|kill|harm|beat|destroy|ruin|attack|stab|shoot)\s+(you|u)\b', 'Coercive Harm Threat', 0.95),
+    (r'\b(watch\s+your\s+back|you\s+will\s+pay\s+for\s+this|you\s+won\'t\s+be\s+safe|i\s+know\s+where\s+you\s+live|you\s+are\s+dead|make\s+you\s+suffer|better\s+watch\s+(out|yourself))\b', 'Intimidation / Stalking Threat', 0.92),
+    (r'\b(kys|kill\s+yourself|go\s+die|drink\s+bleach|hang\s+yourself|slit\s+your\s+wrists?)\b', 'Suicide Encouragement / Coercive Harm', 0.95),
     (r'\b(i\s+will\s+make\s+sure\s+you\s+(fail|are\s+expelled|get\s+fired|are\s+dismissed|regret\s+this))\b', 'Direct Retaliation Threat', 0.88),
-    (r'\b(ruin\s+your\s+life|destroy\s+your\s+future|end\s+your\s+career)\b', 'Severe Life / Career Destruction Threat', 0.88)
+    (r'\b(ruin\s+your\s+life|destroy\s+your\s+future|end\s+your\s+career)\b', 'Severe Life / Career Destruction Threat', 0.88),
+
+    # High-Recall Word Families (Covers all morphological forms, verbs, nouns, and participles)
+    # KILL family: kill, kills, killed, killing, killer, killers
+    (r'\b(kill|kills|killed|killing|killer|killers)\b', 'Threat Word Family: KILL', 0.90),
+    # MURDER family: murder, murders, murdered, murdering, murderer, murderers
+    (r'\b(murder|murders|murdered|murdering|murderer|murderers)\b', 'Threat Word Family: MURDER', 0.90),
+    # DIE / DEATH family: die, dies, died, dying, death, dead
+    (r'\b(die|dies|died|dying|death|dead)\b', 'Threat Word Family: DIE/DEATH', 0.88),
+    # HURT / HARM family: hurt, hurts, hurting, harm, harms, harmed, harming
+    (r'\b(hurt|hurts|hurting|harm|harms|harmed|harming)\b', 'Threat Word Family: HURT/HARM', 0.88),
+    # STAB family: stab, stabs, stabbed, stabbing, stabber, stabbers
+    (r'\b(stab|stabs|stabbed|stabbing|stabber|stabbers)\b', 'Threat Word Family: STAB', 0.90),
+    # SHOOT family: shoot, shoots, shot, shooting, shooter, shooters
+    (r'\b(shoot|shoots|shot|shooting|shooter|shooters)\b', 'Threat Word Family: SHOOT', 0.90),
+    # BEAT / ASSAULT family: beat, beats, beaten, beating, assault, assaults, assaulted, assaulting, assailant
+    (r'\b(beat|beats|beaten|beating|assault|assaults|assaulted|assaulting|assailant|assailants)\b', 'Threat Word Family: BEAT/ASSAULT', 0.88),
+    # ATTACK family: attack, attacks, attacked, attacking, attacker, attackers
+    (r'\b(attack|attacks|attacked|attacking|attacker|attackers)\b', 'Threat Word Family: ATTACK', 0.88),
+    # STRANGLE / CHOKE family: strangle, strangles, strangled, strangling, strangler, choke, chokes, choked, choking, suffocate, suffocated
+    (r'\b(strangle|strangles|strangled|strangling|strangler|stranglers|choke|chokes|choked|choking|suffocate|suffocates|suffocated|suffocating|asphyxiate|asphyxiated)\b', 'Threat Word Family: STRANGLE/CHOKE', 0.90),
+    # THREATEN family: threaten, threatens, threatened, threatening, threat, threats, intimidate, intimidated, intimidating
+    (r'\b(threaten|threatens|threatened|threatening|threat|threats|intimidate|intimidates|intimidated|intimidating|intimidation)\b', 'Threat Word Family: THREATEN', 0.88),
+    # TORTURE family: torture, tortures, tortured, torturing, torturer, torturers
+    (r'\b(torture|tortures|tortured|torturing|torturer|torturers)\b', 'Threat Word Family: TORTURE', 0.90),
+    # POISON family: poison, poisons, poisoned, poisoning, poisonous
+    (r'\b(poison|poisons|poisoned|poisoning|poisonous)\b', 'Threat Word Family: POISON', 0.88),
+    # BURN / ARSON family: burn, burns, burned, burning, arson, immolate, immolated
+    (r'\b(burn|burns|burned|burning|arson|immolate|immolated)\b', 'Threat Word Family: BURN', 0.88),
+    # PUNCH / HIT family: punch, punches, punched, punching, hit, hits, hitting, batter, battered, battering
+    (r'\b(punch|punches|punched|punching|hit|hits|hitting|batter|batters|battered|battering)\b', 'Threat Word Family: PUNCH/HIT', 0.88),
+    # SMASH / SLASH / CRUSH family: smash, smashes, smashed, smashing, slash, slashes, slashed, slashing, crush, crushes, crushed, crushing
+    (r'\b(smash|smashes|smashed|smashing|slash|slashes|slashed|slashing|crush|crushes|crushed|crushing)\b', 'Threat Word Family: SMASH/SLASH/CRUSH', 0.88),
+    # DESTROY / EXPLODE / BOMB family: destroy, destroys, destroyed, destroying, destruction, explode, explodes, exploded, exploding, bomb, bombs, bombed, bombing
+    (r'\b(destroy|destroys|destroyed|destroying|destruction|explode|explodes|exploded|exploding|explosion|bomb|bombs|bombed|bombing|bomber|bombers)\b', 'Threat Word Family: DESTROY/EXPLODE', 0.88),
+    # DROWN / HANG / MUTILATE family: drown, drowns, drowned, drowning, hang, hangs, hanged, hanging, mutilate, mutilates, mutilated, mutilating
+    (r'\b(drown|drowns|drowned|drowning|hang|hangs|hanged|hanging|mutilate|mutilates|mutilated|mutilating|mutilation)\b', 'Threat Word Family: DROWN/HANG/MUTILATE', 0.90),
+    # EXECUTE / SLAUGHTER / MASSACRE / BEHEAD family: behead, beheaded, beheading, decapitate, decapitated, slaughter, slaughtered, massacre, massacred, execute, executed, assassinate, assassinated
+    (r'\b(behead|beheads|beheaded|beheading|decapitate|decapitates|decapitated|decapitating|slaughter|slaughters|slaughtered|slaughtering|massacre|massacres|massacred|massacring|execute|executes|executed|executing|execution|assassinate|assassinates|assassinated|assassinating|assassination)\b', 'Threat Word Family: EXECUTE/SLAUGHTER', 0.90)
 ]
 
 # 2. Tier 2: Severe Abusive Language & Hostile Profanity (HIGH Severity)
@@ -34,14 +78,29 @@ SEVERE_ABUSIVE_PATTERNS = [
     (r'\b(son\s+of\s+a\s+bitch|piece\s+of\s+shit|pos)\b', 'Severe Personal Degradation', 0.80),
     (r'\b(asshole|bastard|cunt|dickhead|dipshit|scumbag|jackass|douchebag|twat|wanker|bitch|slut|whore)\b', 'Severe Personal Epithet', 0.78),
     (r'\b(go\s+to\s+hell|rot\s+in\s+hell|eat\s+shit|drop\s+dead)\b', 'Hostile Degradation / Curse', 0.78),
-    (r'\b(fucking\s+(idiot|moron|loser|fool|liar|coward|failure|bitch|bastard|useless|piece\s+of\s+shit|joke))\b', 'Targeted Profane Insult', 0.85)
+    (r'\b(fucking\s+(idiot|moron|loser|fool|liar|coward|failure|bitch|bastard|useless|piece\s+of\s+shit|joke|pig|dog|rat|scum))\b', 'Targeted Profane Insult', 0.85)
+]
+
+# 2b. Tier 2b: Dehumanizing, Racial, Discriminatory & Hate Harassment (HIGH Severity)
+DEHUMANIZING_DISCRIMINATORY_PATTERNS = [
+    # Racial, ethnic, skin-color, or identity-based dehumanizing attacks
+    (r'\b(you\s+)?(black|white|dark|yellow|brown)\s+skin(ned)?\s+(pig|dog|ape|monkey|rat|animal|scum|trash|bastard|freak|subhuman)\b', 'Dehumanizing Racial / Identity Harassment', 0.88),
+    (r'\b(black|white|dark|yellow|brown)\s+skin(ned)?\s+(pig|dog|ape|monkey|rat|animal|scum|trash)\b', 'Dehumanizing Racial / Identity Harassment', 0.88),
+
+    # Dehumanizing animal/object epithets targeted at a person ("you ... pig", "you ... dog", "you ... rat")
+    (r'\b(you(\s+are|\'re|r)?\s+(a\s+|an\s+|so\s+|totally\s+|completely\s+|utterly\s+|filthy\s+|dirty\s+|ugly\s+|greedy\s+|lazy\s+|disgusting\s+)?(pig|dog|rat|ape|monkey|swine|animal|parasite|subhuman|vermin))\b', 'Dehumanizing Personal Attack', 0.85),
+    (r'\b(you\s+(pig|dog|rat|ape|monkey|swine|parasite|subhuman|vermin))\b', 'Dehumanizing Direct Vocative', 0.85),
+    (r'\b(filthy|dirty|ugly|disgusting)\s+(pig|dog|rat|ape|swine|animal|subhuman|vermin)\b', 'Dehumanizing Degradation', 0.82),
+
+    # Targeted identity / racial degradation
+    (r'\b(racist|sexist|bigoted)\s+(pig|dog|scum|trash|bastard|asshole)\b', 'Discriminatory Personal Attack', 0.80),
 ]
 
 # 3. Tier 3: Targeted Insults & Personal Demeaning (Single: MEDIUM Severity, Multiple: HIGH Severity)
 TARGETED_INSULT_PATTERNS = [
     # Full sentence personal attacks
-    (r'\b(you(\s+are|\'re|r)?\s+(a\s+|an\s+|so\s+|totally\s+|completely\s+|utterly\s+)?(idiot|stupid|moron|loser|useless|pathetic|fool|incompetent|joke|failure|clueless|moronic|worthless|hopeless|garbage|disaster|imbecile|dumbass|ignorant|dumb|jerk))\b', 'Targeted Personal Insult', 0.58),
-    (r'\b(you\s+(idiot|moron|loser|fool|imbecile|dumbass|clown|jerk|failure|scumbag))\b', 'Direct Vocative Insult', 0.58),
+    (r'\b(you(\s+are|\'re|r)?\s+(a\s+|an\s+|so\s+|totally\s+|completely\s+|utterly\s+)?(idiot|stupid|moron|loser|useless|pathetic|fool|incompetent|joke|failure|clueless|moronic|worthless|hopeless|garbage|disaster|imbecile|dumbass|ignorant|dumb|jerk|pig|swine|dog|rat|scum|trash|freak|psycho|creep))\b', 'Targeted Personal Insult', 0.58),
+    (r'\b(you\s+(idiot|moron|loser|fool|imbecile|dumbass|clown|jerk|failure|scumbag|pig|swine|dog|rat|scum|trash|freak|psycho|creep))\b', 'Direct Vocative Insult', 0.58),
     
     # Standalone direct lexical insults (inherently hostile offensive nouns)
     (r'\b(idiot|moron|imbecile|loser|dumbass|fool|useless|incompetent|dumb|worthless)\b', 'Direct Lexical Insult', 0.58),
@@ -218,15 +277,15 @@ class BullyingDetector:
         # Helper to match patterns across both original lower text and normalized adversarial text
         def _match_pattern_group(patterns, is_tier_physical=False, is_tier_abuse=False):
             for pat, label, weight in patterns:
-                found_orig = re.findall(pat, text_lower)
-                found_norm = re.findall(pat, norm_text)
+                found_orig = [m.group(0) for m in re.finditer(pat, text_lower)]
+                found_norm = [m.group(0) for m in re.finditer(pat, norm_text)]
                 found_all = found_orig + found_norm
                 if found_all:
-                    for f in found_all:
-                        match_str = f[0] if isinstance(f, tuple) else f
+                    for match_str in found_all:
                         match_str = match_str.strip()
                         if match_str and not any(item['match'] == match_str for item in matched_items):
-                            effective_weight = weight if not is_context_mitigated else 0.20
+                            # High recall rule: Physical/violent threats are NEVER mitigated by context
+                            effective_weight = weight if (is_tier_physical or not is_context_mitigated) else 0.20
                             matched_items.append({
                                 'match': match_str,
                                 'weight': effective_weight,
@@ -240,6 +299,9 @@ class BullyingDetector:
 
         # 2. Tier 2: Severe Abusive Language & Hostile Profanity
         _match_pattern_group(SEVERE_ABUSIVE_PATTERNS, is_tier_abuse=True)
+
+        # 2b. Tier 2b: Dehumanizing, Racial & Discriminatory Harassment
+        _match_pattern_group(DEHUMANIZING_DISCRIMINATORY_PATTERNS, is_tier_abuse=True)
 
         # 3. Tier 3: Targeted Insults & Personal Degradation
         _match_pattern_group(TARGETED_INSULT_PATTERNS)
@@ -292,32 +354,38 @@ class BullyingDetector:
             score = 0.0
             severity = 'LOW'
         else:
-            if is_context_mitigated:
-                score = 0.20  # Neutralized under educational / reporting context
-                severity = 'LOW'
-            elif is_only_mild_profanity:
-                score = 0.20  # Mild expressive profanity without target is not bullying
-                severity = 'LOW'
-            elif has_physical_threat:
-                # Level 3: Threats / violence / blackmail -> CRITICAL
+            if has_physical_threat:
+                # Level 3: Threats / violence / violent word family -> CRITICAL
                 score = round(max(0.92, max(unique_weights)), 3)
                 severity = 'CRITICAL'
             elif has_severe_abuse or distinct_count >= 2 or any(w >= 0.70 for w in unique_weights):
-                # Level 2: Multiple insults, repeated harassment, or severe profane abuse -> HIGH
-                max_w = max(unique_weights) if unique_weights else 0.75
-                additional_boost = min(0.15, (distinct_count - 1) * 0.08) if distinct_count > 1 else 0.0
-                score = round(min(0.88, max(0.75, max_w + additional_boost)), 3)
-                severity = 'HIGH'
+                if is_context_mitigated and not has_severe_abuse:
+                    score = 0.20
+                    severity = 'LOW'
+                else:
+                    max_w = max(unique_weights) if unique_weights else 0.75
+                    additional_boost = min(0.15, (distinct_count - 1) * 0.08) if distinct_count > 1 else 0.0
+                    score = round(min(0.88, max(0.75, max_w + additional_boost)), 3)
+                    severity = 'HIGH'
+            elif is_context_mitigated:
+                score = 0.20
+                severity = 'LOW'
+            elif is_only_mild_profanity:
+                score = 0.20
+                severity = 'LOW'
             else:
-                # Level 1: Single targeted mild/moderate insult -> DETECTED, MEDIUM
                 score = 0.58
                 severity = 'MEDIUM'
             
         return unique_matches, score, unique_categories, severity
 
-    def predict(self, email_text):
+    def predict(self, email_text, email_subject=""):
         """Runs the hybrid cyberbullying detection pipeline with separate detection and severity classification."""
-        if not email_text or not isinstance(email_text, str):
+        email_text = email_text or ""
+        email_subject = email_subject or ""
+        full_content = f"{email_subject}\n{email_text}".strip() if email_subject else email_text.strip()
+
+        if not full_content:
             return {
                 'is_bullying': False,
                 'confidence': 0.0,
@@ -333,7 +401,7 @@ class BullyingDetector:
             }
             
         # 1. Rule-based check
-        rule_matches, rule_score, matched_categories, severity = self.rule_based_check(email_text)
+        rule_matches, rule_score, matched_categories, severity = self.rule_based_check(full_content)
         
         # 2. ML Prediction (if model loaded)
         ml_pred = False

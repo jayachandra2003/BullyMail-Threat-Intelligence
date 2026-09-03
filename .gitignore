@@ -12,13 +12,33 @@ ENV/
 
 # Environment Variables & Secrets
 .env
+.env.*
 .env.local
 .env.*.local
+!.env.example
 
-# Local SQLite Databases
+# Local SQLite Databases & Backups
 *.db
 *.sqlite
 *.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Academic, Paper & Review Preparation Artifacts
+research_paper*
+figures/
+TEAM_INDIVIDUAL_CONTRIBUTIONS*
+~$*
+*.docx
+*.pdf
+*.pptx
+
+# Temporary Development & Scratch Scripts
+scratch/
+scratch_*
+test_openrouter.py
+test_prompt*.py
 
 # Editor / IDE settings
 .vscode/

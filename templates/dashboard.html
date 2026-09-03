@@ -29,14 +29,14 @@
     <!-- FontAwesome 6 Icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
-    <!-- BullyMail V2 Cyber SOC Stylesheets -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <!-- BullyMail V2 Cyber SOC Stylesheets (Cache-Busted) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.4.1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=2.4.1">
     
     <!-- Chart.js 4 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Theme Core -->
-    <script src="{{ url_for('static', filename='js/core/theme.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.4.1"></script>
 </head>
 <body>
     <div class="dashboard-layout">
@@ -46,15 +46,18 @@
         <aside class="sidebar-v2">
             <!-- Brand Header -->
             <div class="brand-header">
-                <div class="brand-logo">
+                <div class="brand-logo" title="BullyMail Threat Intelligence">
                     <i class="fas fa-shield-halved"></i>
                 </div>
                 <div class="brand-info">
                     <div class="brand-name">
-                        BullyMail <span class="brand-badge">V2 SOC</span>
+                        BullyMail
                     </div>
                     <div class="brand-subtitle">Threat Intelligence</div>
                 </div>
+                <button type="button" class="btn-sidebar-toggle" id="sidebarToggleBtn" title="Collapse Navigation Rail" aria-label="Toggle Sidebar">
+                    <i class="fas fa-angles-left"></i>
+                </button>
             </div>
 
             <!-- Navigation Groups -->
@@ -110,25 +113,29 @@
                 <div class="nav-group-title">Integration</div>
                 <ul class="nav-menu">
                     <li>
-                        <a class="nav-link-v2" data-tab="tab-email">
-                            <i class="fas fa-envelope-shield"></i>
+                        <a class="nav-link-v2" data-tab="tab-email" id="navSecureMailboxLink">
+                            <i class="fas fa-inbox"></i>
                             <span>Secure Mailbox</span>
                         </a>
+                        {% if session.get('role') == 'admin' %}
+                        <ul class="nav-sub-menu">
+                            <li>
+                                <a class="nav-link-sub" data-tab="tab-pending-approvals" id="navPendingApprovalsLink">
+                                    <span class="d-flex align-items-center">
+                                        <i class="fas fa-user-clock me-2 text-warning"></i>
+                                        <span>Pending Approvals</span>
+                                    </span>
+                                    <span class="badge bg-warning text-dark font-mono d-none" id="sidebarPendingBadge" style="font-size: 0.65rem; padding: 2px 6px;">0</span>
+                                </a>
+                            </li>
+                        </ul>
+                        {% endif %}
                     </li>
                 </ul>
             </div>
 
             <!-- Sidebar Telemetry & User Controls -->
             <div class="sidebar-footer">
-                <!-- System Status Pulse -->
-                <div class="system-pulse-card">
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="pulse-dot"></div>
-                        <span class="text-primary-soc fw-bold">SOC ONLINE</span>
-                    </div>
-                    <span class="text-muted">v2.4-PRO</span>
-                </div>
-
                 <!-- User Profile Widget -->
                 <div class="user-profile-widget">
                     <div class="user-avatar">
@@ -156,210 +163,214 @@
                         <i class="fas fa-bars"></i>
                     </button>
                     <div>
-                        <h1 class="page-title text-primary-soc mb-0">
-                            <i class="fas fa-shield-alt text-accent me-2"></i>
-                            Security Operations Center
+                        <h1 class="page-title text-primary-soc mb-0 d-flex align-items-center flex-wrap">
+                            <span><i class="fas fa-shield-alt text-accent me-2"></i>Security Operations Center</span>
+                            <span class="badge soc-title-badge ms-2">ENTERPRISE SOC PRO v2.4.1</span>
                         </h1>
-                        <p class="text-muted small mb-0">Multi-vector email threat detection, machine learning NLP, static file inspection, and link safety analytics.</p>
+                        <p class="text-muted small mb-0">Multi-vector email threat detection, ML powered analysis & link safety analytics.</p>
                     </div>
                 </div>
 
                 <div class="telemetry-chip-group">
-                    <!-- Status Badge -->
-                    <div class="status-badge-pill">
-                        <div class="pulse-dot"></div>
-                        <span>OPERATIONAL</span>
-                    </div>
-
-                    <!-- Latency Chip -->
-                    <div class="telemetry-chip d-none d-lg-flex">
-                        <i class="fas fa-bolt text-warning"></i>
-                        <span>~16ms</span>
-                    </div>
-
                     <!-- Sync Action -->
-                    <button class="btn-soc-secondary btn-sm" onclick="loadDashboardStats()" title="Sync Telemetry" aria-label="Sync Telemetry">
-                        <i class="fas fa-arrows-rotate me-1"></i> Sync
+                    <button class="btn-soc-secondary btn-sm font-mono" id="btnHeaderSyncTelemetry" onclick="triggerHeaderSyncTelemetry(this)" title="Sync Telemetry" aria-label="Sync Telemetry">
+                        <i class="fas fa-arrows-rotate me-1"></i> Sync Now
                     </button>
 
                     <!-- Single-Click Theme Toggle Button -->
-                    <button type="button" class="soc-theme-toggle-btn" aria-label="Switch to light mode" title="Switch to light mode">
-                        <i class="fas fa-sun"></i>
+                    <button type="button" class="soc-theme-toggle-btn" aria-label="Switch Theme" title="Switch Theme">
+                        <i class="fas fa-moon"></i>
                     </button>
+
+                    <!-- Header Live Sync Clock -->
+                    <div class="header-timestamp-box font-mono d-none d-md-flex text-end">
+                        <div class="text-muted text-uppercase" style="font-size: 0.62rem; letter-spacing: 0.05em;">Last Sync</div>
+                        <div class="text-success fw-bold" id="headerLastSyncTime" style="font-size: 0.78rem; line-height: 1.1;">Live</div>
+                        <div class="text-muted" id="headerLastSyncDate" style="font-size: 0.62rem; line-height: 1.1;">Synchronized</div>
+                    </div>
                 </div>
             </header>
 
             <!-- ==============================================================
-                 SECTION 1: Executive Dashboard Tab (Mission Control Layout)
+                 SECTION 1: Executive Dashboard Tab (Mission Control Architecture)
                  ============================================================== -->
             <section id="tab-dashboard" class="tab-content-pane">
-                <!-- A. Security Posture Hero Banner -->
-                <div class="security-posture-banner">
-                    <div>
-                        <div class="posture-header-tag">
-                            <i class="fas fa-shield-halved text-accent me-1"></i> Aggregate Security Posture
+                <!-- 1. Executive Security Summary Strip (5 Futuristic KPI Cards) -->
+                <div class="soc-kpi-grid mb-4" id="socExecutiveSummaryStrip">
+                    <!-- Card 1: Total Scanned -->
+                    <div class="soc-kpi-card">
+                        <div class="soc-kpi-icon kpi-icon-blue">
+                            <i class="fas fa-envelope"></i>
                         </div>
-                        <div class="posture-headline" id="postureThreatLevel">
-                            <span class="text-success">LOW RISK POSTURE</span> 
-                            <small class="text-muted font-mono" style="font-size: 0.85rem;">(95% Confidence)</small>
-                        </div>
-                        <p class="posture-subtext" id="postureSubtext">
-                            Environment currently shows low threat activity across all inspected vectors.
-                        </p>
-                    </div>
-
-                    <div>
-                        <div class="posture-header-tag">Multi-Vector Quick State</div>
-                        <div class="posture-vectors-row">
-                            <div class="posture-vector-pip"><i class="fas fa-comment-slash text-danger"></i> Bully</div>
-                            <div class="posture-vector-pip"><i class="fas fa-fish text-warning"></i> Phish</div>
-                            <div class="posture-vector-pip"><i class="fas fa-link text-cyan"></i> Links</div>
-                            <div class="posture-vector-pip"><i class="fas fa-file-shield text-success"></i> Files</div>
+                        <div class="soc-kpi-body">
+                            <div class="soc-kpi-label">TOTAL SCANNED</div>
+                            <div class="soc-kpi-val font-mono" id="statTotalAnalyses">0</div>
+                            <div class="soc-kpi-sub">Processed Messages</div>
+                            <div class="soc-kpi-trend text-success font-mono"><i class="fas fa-arrow-up me-1"></i>12.5% vs yesterday</div>
                         </div>
                     </div>
 
-                    <div class="posture-throughput-box">
-                        <div class="posture-header-tag text-end">Total Throughput</div>
-                        <div class="posture-throughput-val" id="postureTotalScanned">0</div>
-                        <div class="text-muted small font-mono">Communications Analyzed</div>
-                    </div>
-                </div>
-
-                <!-- B. Asymmetrical Threat Metrics Grid -->
-                <div class="asym-metrics-grid">
-                    <!-- Total Analyzed -->
-                    <div class="metric-module">
-                        <div class="metric-module-header">
-                            <span>TOTAL SCANNED</span>
-                            <i class="fas fa-envelope-open-text text-accent"></i>
+                    <!-- Card 2: Threats Detected -->
+                    <div class="soc-kpi-card">
+                        <div class="soc-kpi-icon kpi-icon-red">
+                            <i class="fas fa-shield-halved"></i>
                         </div>
-                        <div class="metric-module-val" id="statTotalAnalyses">0</div>
-                        <div class="metric-module-sub">Processed messages</div>
+                        <div class="soc-kpi-body">
+                            <div class="soc-kpi-label">THREATS DETECTED</div>
+                            <div class="soc-kpi-val font-mono text-danger" id="execThreatsDetected">0</div>
+                            <div class="soc-kpi-sub">Active Incident Flags</div>
+                            <div class="soc-kpi-trend text-success font-mono"><i class="fas fa-arrow-up me-1"></i>18.2% vs yesterday</div>
+                        </div>
                     </div>
 
-                    <!-- Cyberbullying Detected -->
-                    <div class="metric-module">
-                        <div class="metric-module-header">
-                            <span>CYBERBULLYING</span>
-                            <i class="fas fa-comment-slash text-danger"></i>
+                    <!-- Card 3: Critical Threats -->
+                    <div class="soc-kpi-card">
+                        <div class="soc-kpi-icon kpi-icon-orange">
+                            <i class="fas fa-triangle-exclamation"></i>
                         </div>
-                        <div class="metric-module-val text-danger" id="statBullying">0</div>
-                        <div class="metric-module-sub">Hostile/insult flags</div>
+                        <div class="soc-kpi-body">
+                            <div class="soc-kpi-label">CRITICAL THREATS</div>
+                            <div class="soc-kpi-val font-mono text-warning" id="execCriticalThreats">0</div>
+                            <div class="soc-kpi-sub">Immediate Action Required</div>
+                            <div class="soc-kpi-trend text-success font-mono"><i class="fas fa-arrow-up me-1"></i>40.0% vs yesterday</div>
+                        </div>
                     </div>
 
-                    <!-- Phishing Incidents -->
-                    <div class="metric-module">
-                        <div class="metric-module-header">
-                            <span>PHISHING</span>
-                            <i class="fas fa-fish text-warning"></i>
+                    <!-- Card 4: Active Vectors -->
+                    <div class="soc-kpi-card">
+                        <div class="soc-kpi-icon kpi-icon-purple">
+                            <i class="fas fa-crosshairs"></i>
                         </div>
-                        <div class="metric-module-val text-warning" id="statPhishing">0</div>
-                        <div class="metric-module-sub">Credential lures</div>
-                    </div>
-
-                    <!-- Risky URLs -->
-                    <div class="metric-module">
-                        <div class="metric-module-header">
-                            <span>RISKY URLS</span>
-                            <i class="fas fa-link text-cyan"></i>
+                        <div class="soc-kpi-body">
+                            <div class="soc-kpi-label">ACTIVE VECTORS</div>
+                            <div class="soc-kpi-val font-mono text-accent" id="execActiveVectors">0 / 5</div>
+                            <div class="soc-kpi-sub">Monitored Attack Surfaces</div>
+                            <div class="soc-kpi-trend text-muted font-mono" style="font-size: 0.65rem;">Coverage Active</div>
                         </div>
-                        <div class="metric-module-val text-cyan" id="statUrls">0</div>
-                        <div class="metric-module-sub">Look-alike links</div>
-                    </div>
-
-                    <!-- Malware / File Risks -->
-                    <div class="metric-module">
-                        <div class="metric-module-header">
-                            <span>MALWARE RISK</span>
-                            <i class="fas fa-file-code text-danger"></i>
-                        </div>
-                        <div class="metric-module-val text-danger" id="statMalware">0</div>
-                        <div class="metric-module-sub">Static file flags</div>
-                    </div>
-
-                    <!-- Social Engineering -->
-                    <div class="metric-module">
-                        <div class="metric-module-header">
-                            <span>SOCIAL ENG.</span>
-                            <i class="fas fa-user-secret text-purple"></i>
-                        </div>
-                        <div class="metric-module-val text-purple" id="statSocialEng">0</div>
-                        <div class="metric-module-sub">Coercion pretexts</div>
                     </div>
                 </div>
 
-                <!-- C. Mission Control Visualizations (Radar + Severity Matrix) -->
-                <div class="mission-control-grid">
-                    <!-- Threat Vector Radar Profile -->
-                    <div class="soc-panel p-3">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h6 class="mb-0 text-primary-soc font-mono text-uppercase" style="font-size: 0.78rem; letter-spacing: 0.08em;">
-                                <i class="fas fa-radar text-accent me-2"></i>Threat Vector Radar Profile
-                            </h6>
-                            <span class="badge-risk SAFE" style="font-size: 0.65rem;">TELEMETRY ACTIVE</span>
+                <!-- 2. Threat Posture & Trend Analytics (Hero Visual Focus) -->
+                <div class="soc-posture-trend-grid mb-4">
+                    <!-- Col 1: Threat Posture Centerpiece -->
+                    <div class="soc-posture-card">
+                        <div class="soc-card-header d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <span class="soc-card-tag"><i class="fas fa-shield-halved text-accent me-1"></i>THREAT POSTURE</span>
+                                <h5 class="fw-bold mb-0 text-primary-soc" style="font-size: 0.95rem;">System Security Assessment</h5>
+                            </div>
+                            <div id="postureStatusBadgeContainer">
+                                <span class="soc-pill-dominant" id="postureLevelPill">CRITICAL</span>
+                            </div>
                         </div>
-                        <div style="position: relative; height: 250px;">
-                            <canvas id="chartThreatRadar"></canvas>
+
+                        <!-- Score & Confidence Hero (Radial Circular Gauge) -->
+                        <div class="soc-posture-hero-layout mb-3">
+                            <div class="soc-radial-gauge-container">
+                                <svg class="soc-radial-gauge" viewBox="0 0 100 100">
+                                    <circle class="gauge-bg" cx="50" cy="50" r="40"></circle>
+                                    <circle class="gauge-fill" id="postureGaugeCircle" cx="50" cy="50" r="40" stroke-dasharray="251.2" stroke-dashoffset="188.4"></circle>
+                                </svg>
+                                <div class="gauge-center-text font-mono" id="postureScoreNum">25%</div>
+                            </div>
+                            <div class="soc-posture-narrative">
+                                <div class="fw-bold font-mono text-danger mb-1" id="postureThreatLevel" style="font-size: 1.1rem; letter-spacing: 0.04em;">CRITICAL THREAT</div>
+                                <p class="text-muted small mb-0" id="postureSubtext" style="font-size: 0.78rem; line-height: 1.45;">28 critical incident(s) require immediate analyst intervention across monitored communications.</p>
+                            </div>
+                        </div>
+
+                        <!-- Monitored Channels Vector Grid -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="soc-micro-label">ACTIVE MONITORED VECTORS</span>
+                                <span class="soc-micro-label font-mono" id="postureMonitoredRatio">4 ACTIVE / 1 CLEAR</span>
+                            </div>
+                            <div class="soc-posture-vector-pills" id="postureVectorsQuickState">
+                                <!-- Populated dynamically by loadDashboardStats() -->
+                            </div>
+                        </div>
+
+                        <!-- Severity Distribution Breakdown Mini-Bar -->
+                        <div>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="soc-micro-label">SEVERITY DISTRIBUTION</span>
+                                <span class="soc-micro-label font-mono" id="postureSeverityTotal">0 ANALYZED</span>
+                            </div>
+                            <div class="soc-severity-stacked-bar">
+                                <div class="sev-seg-crit" id="sevSegCrit" style="width: 0%;" title="Critical"></div>
+                                <div class="sev-seg-high" id="sevSegHigh" style="width: 0%;" title="High"></div>
+                                <div class="sev-seg-med" id="sevSegMed" style="width: 0%;" title="Medium"></div>
+                                <div class="sev-seg-low" id="sevSegLow" style="width: 100%;" title="Clean/Low"></div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mt-2 small font-mono">
+                                <span class="sev-legend-crit" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>Critical: <strong id="sevNumCrit">0</strong></span>
+                                <span class="sev-legend-high" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>High: <strong id="sevNumHigh">0</strong></span>
+                                <span class="sev-legend-med" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>Medium: <strong id="sevNumMed">0</strong></span>
+                                <span class="sev-legend-low" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>Low: <strong id="sevNumLow">0</strong></span>
+                            </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Threat Severity Distribution Matrix -->
-                    <div class="severity-matrix-panel">
+                <!-- 3. Threat Analytics & Threat Trend Velocity (Row 2) -->
+                <div class="soc-analytics-intelligence-grid mb-4">
+                    <!-- Threat Vector Analytics -->
+                    <div class="soc-panel p-4" id="threatVectorAnalyticsPanel">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="mb-0 text-primary-soc font-mono text-uppercase" style="font-size: 0.78rem; letter-spacing: 0.08em;">
-                                <i class="fas fa-layer-group text-accent me-2"></i>Severity Density Distribution
-                            </h6>
-                            <span class="badge-risk SAFE" style="font-size: 0.65rem;">REAL-TIME</span>
-                        </div>
-
-                        <!-- Critical Row -->
-                        <div class="severity-row-item">
-                            <div class="severity-label-col text-danger">CRITICAL</div>
-                            <div class="severity-bar-track">
-                                <div class="severity-bar-fill CRITICAL" id="distBar_CRITICAL" style="width: 4%;"></div>
+                            <div>
+                                <span class="soc-card-tag"><i class="fas fa-layer-group text-accent me-1"></i>THREAT ANALYTICS</span>
+                                <h5 class="fw-bold mb-0 text-primary-soc" style="font-size: 0.95rem;">Multi-Vector Distribution & Incident Share</h5>
                             </div>
-                            <div class="severity-count-col text-danger" id="distCount_CRITICAL">0 (0%)</div>
+                            <span class="text-muted small font-mono">Ranked by Incident Volume</span>
                         </div>
-
-                        <!-- High Row -->
-                        <div class="severity-row-item">
-                            <div class="severity-label-col text-warning">HIGH RISK</div>
-                            <div class="severity-bar-track">
-                                <div class="severity-bar-fill HIGH" id="distBar_HIGH" style="width: 4%;"></div>
-                            </div>
-                            <div class="severity-count-col text-warning" id="distCount_HIGH">0 (0%)</div>
+                        <div id="threatCenterLandscapeMain">
+                            <!-- Populated dynamically by renderThreatIntelligenceCommandCenter -->
                         </div>
+                    </div>
 
-                        <!-- Medium Row -->
-                        <div class="severity-row-item">
-                            <div class="severity-label-col" style="color: var(--threat-medium);">MEDIUM</div>
-                            <div class="severity-bar-track">
-                                <div class="severity-bar-fill MEDIUM" id="distBar_MEDIUM" style="width: 4%;"></div>
+                    <!-- Col 2: Real Threat Trend Over Time -->
+                    <div class="soc-trend-card">
+                        <div class="soc-card-header d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <span class="soc-card-tag"><i class="fas fa-chart-line text-accent me-1"></i>THREAT TREND</span>
+                                <h5 class="fw-bold mb-0 text-primary-soc" style="font-size: 0.95rem;">Ingestion & Threat Velocity Over Time</h5>
                             </div>
-                            <div class="severity-count-col" style="color: var(--threat-medium);" id="distCount_MEDIUM">0 (0%)</div>
+                            <div class="d-flex align-items-center gap-2">
+                                <select class="form-select soc-select-sm font-mono" id="trendTimeRangeSelect" onchange="handleTrendRangeChange(this.value)" aria-label="Trend Time Window">
+                                    <option value="7d" selected>Last 7 Days</option>
+                                    <option value="24h">Last 24 Hours</option>
+                                    <option value="30d">Last 30 Days</option>
+                                </select>
+                            </div>
                         </div>
-
-                        <!-- Low / Clean Row -->
-                        <div class="severity-row-item">
-                            <div class="severity-label-col text-success">LOW / CLEAN</div>
-                            <div class="severity-bar-track">
-                                <div class="severity-bar-fill LOW" id="distBar_LOW" style="width: 4%;"></div>
-                            </div>
-                            <div class="severity-count-col text-success" id="distCount_LOW">0 (0%)</div>
+                        <div class="d-flex align-items-center justify-content-end gap-3 mb-2 font-mono" style="font-size: 0.72rem;">
+                            <span style="color: var(--text-secondary);"><i class="fas fa-circle me-1" style="color: #818cf8; font-size: 0.5rem;"></i>Total Ingested</span>
+                            <span style="color: var(--text-secondary);"><i class="fas fa-circle me-1" style="color: #ef4444; font-size: 0.5rem;"></i>High/Critical Threats</span>
+                        </div>
+                        <div class="soc-trend-chart-container" style="height: 220px; position: relative;">
+                            <canvas id="threatTrendCanvas"></canvas>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top border-subtle small text-muted font-mono" style="font-size: 0.72rem;">
+                            <span><span class="soc-ping-dot bg-success me-1"></span>Real-time Ingestion Stream</span>
+                            <span><i class="fas fa-arrows-rotate me-1 text-success"></i> Synchronized Telemetry</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- D. Live Threat Activity Stream (SOC Timeline) -->
-                <div class="live-stream-panel">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h6 class="mb-0 text-primary-soc font-mono text-uppercase" style="font-size: 0.78rem; letter-spacing: 0.08em;">
-                            <i class="fas fa-wave-square text-accent me-2"></i>Live Threat Activity Stream
-                        </h6>
-                        <span class="text-muted small font-mono">Click event to inspect in drawer &rarr;</span>
+                <!-- 4. Live Threat Activity Stream (Level 4 - Forensic Incident Stream) -->
+                <div class="soc-panel p-4 mb-4" id="liveThreatActivityPanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div>
+                            <span class="soc-card-tag"><i class="fas fa-wave-square text-accent me-1"></i>LIVE THREAT ACTIVITY</span>
+                            <h5 class="fw-bold mb-0 text-primary-soc" style="font-size: 0.95rem;">Real-Time Forensic Incident Stream</h5>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge-risk SAFE" style="font-size: 0.65rem;"><i class="fas fa-circle me-1 text-success" style="font-size: 0.5rem;"></i> LIVE STREAM</span>
+                            <span class="text-muted small font-mono" id="liveStreamCountText">Click event to inspect in drawer</span>
+                        </div>
                     </div>
-                    <div class="stream-timeline" id="liveThreatStreamContainer">
-                        <div class="p-3 text-center text-muted small">Loading threat activity stream...</div>
+                    <div class="soc-stream-ledger" id="liveThreatStreamContainer">
+                        <div class="p-4 text-center text-muted small">Loading live threat activity stream...</div>
                     </div>
                 </div>
             </section>
@@ -369,14 +380,19 @@
                  ============================================================== -->
             <section id="tab-analyze" class="tab-content-pane" style="display: none;">
                 <div class="forensic-workstation">
-                    <!-- Case Banner Bar -->
+                    <!-- Case Banner Bar with Engine Mode Segmented Control -->
                     <div class="case-banner-bar">
                         <div>
-                            <span class="case-id-tag"><i class="fas fa-terminal me-1"></i> WORKSTATION INTAKE // CASE-STREAM</span>
-                            <h4 class="text-primary-soc mb-0 mt-1" style="font-size: 1.3rem;">Digital Forensic Investigation Console</h4>
+                            <h4 class="text-primary-soc mb-0" style="font-size: 1.3rem;">Digital Forensic Investigation Console</h4>
+                            <p class="text-muted small mb-0 font-mono">Select analysis engine: Standard ML or AI / LLM Threat Reasoning</p>
                         </div>
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="badge-risk SAFE">ENGINE: HYBRID TF-IDF/RULES</span>
+                        <div class="soc-engine-toggle-group" id="threatAnalyzerEngineToggle" role="group" aria-label="Analysis Engine Mode">
+                            <button type="button" class="btn-engine-toggle active" id="btnEngineNormal" onclick="setThreatAnalyzerEngine('normal')" title="Standard ML and Multi-Vector Rule Engine">
+                                <i class="fas fa-shield-alt me-1"></i> NORMAL
+                            </button>
+                            <button type="button" class="btn-engine-toggle" id="btnEngineLLM" onclick="setThreatAnalyzerEngine('llm')" title="NVIDIA Nemotron 3.5 Lightning AI Threat Engine">
+                                <i class="fas fa-brain me-1 text-accent"></i> AI
+                            </button>
                         </div>
                     </div>
 
@@ -387,7 +403,7 @@
                             <span class="preset-card-sub">Academic Notice</span>
                         </button>
                         <button type="button" class="preset-card-btn" onclick="loadSampleEmail('single_insult')">
-                            <span class="preset-card-tag" style="color: var(--threat-medium);"><i class="fas fa-bolt"></i> Single</span>
+                            <span class="preset-card-tag text-warning"><i class="fas fa-bolt"></i> Single</span>
                             <span class="preset-card-sub">Insult ("idiot")</span>
                         </button>
                         <button type="button" class="preset-card-btn" onclick="loadSampleEmail('bullying')">
@@ -413,54 +429,59 @@
                     </div>
 
                     <form id="formAnalyzeEmail" enctype="multipart/form-data">
+                        <input type="hidden" id="inputAnalysisEngine" name="engine" value="normal">
                         <!-- Analyst Intake Metadata Grid -->
                         <div class="analyst-intake-grid">
                             <div>
                                 <label class="intake-field-label">
-                                    <span><i class="fas fa-heading me-1"></i> SUBJECT HEADER</span>
+                                    <span><i class="fas fa-heading me-1"></i> Subject Header</span>
                                 </label>
-                                <input type="text" class="form-control soc-input font-mono" id="inputEmailSubject" name="email_subject" placeholder="e.g. Disciplinary Notice / Academic Inquiry">
+                                <input type="text" class="form-control soc-input" id="inputEmailSubject" name="email_subject" placeholder="e.g. Disciplinary Notice / Academic Inquiry">
                             </div>
                             <div>
                                 <label class="intake-field-label">
-                                    <span><i class="fas fa-at me-1"></i> SENDER IDENTITY</span>
+                                    <span><i class="fas fa-at me-1"></i> Sender Identity</span>
                                 </label>
-                                <input type="text" class="form-control soc-input font-mono" id="inputEmailFrom" name="email_from" placeholder="e.g. advisor@university.edu">
+                                <input type="text" class="form-control soc-input" id="inputEmailFrom" name="email_from" placeholder="e.g. advisor@university.edu">
                             </div>
                             <div>
                                 <label class="intake-field-label">
-                                    <span><i class="fas fa-user-tag me-1"></i> TARGET RECIPIENT</span>
+                                    <span><i class="fas fa-user-tag me-1"></i> Target Recipient</span>
                                 </label>
-                                <input type="text" class="form-control soc-input font-mono" id="inputEmailTo" name="email_to" placeholder="e.g. student@university.edu">
+                                <input type="text" class="form-control soc-input" id="inputEmailTo" name="email_to" placeholder="e.g. student@university.edu">
                             </div>
                         </div>
 
                         <!-- Message Content Editor -->
                         <div class="mb-3">
                             <div class="intake-field-label">
-                                <span><i class="fas fa-align-left me-1"></i> MESSAGE BODY PAYLOAD</span>
+                                <span><i class="fas fa-align-left me-1"></i> Message Body Payload</span>
                                 <span class="text-muted font-mono" id="charCountDisplay">0 chars • 0 words</span>
                             </div>
                             <textarea class="form-control soc-input soc-textarea" id="inputEmailText" name="email_text" rows="5" placeholder="Paste or type raw email content for multi-vector threat inspection..."></textarea>
-                        </div>
 
-                        <!-- Forensic File Intake Dropzones -->
-                        <div class="forensic-dropzone-grid">
-                            <!-- Attachments -->
-                            <div class="forensic-intake-box" id="attachmentDropzone">
-                                <input type="file" id="inputAttachments" name="attachments" multiple style="display: none;">
-                                <div class="forensic-icon"><i class="fas fa-paperclip"></i></div>
-                                <div class="forensic-title">ATTACHMENT FORENSICS</div>
-                                <div class="forensic-sub">Drop suspicious files or browse • Safe static in-memory inspection</div>
+                            <!-- Compact WhatsApp-style Attachment Controls -->
+                            <div class="soc-compact-attachment-bar">
+                                <div class="soc-attachment-btn-group">
+                                    <!-- Hidden native file inputs (preserved for backend & DOM) -->
+                                    <input type="file" id="inputAttachments" name="attachments" multiple style="display: none;">
+                                    <input type="file" id="inputImages" name="images" accept="image/*" multiple style="display: none;">
+
+                                    <!-- Compact Attach File Button -->
+                                    <button type="button" class="btn-soc-attachment-compact" id="btnTriggerAttachFile" onclick="document.getElementById('inputAttachments').click()" title="Attach files for static security inspection">
+                                        <i class="fas fa-paperclip"></i>
+                                        <span>Attach File</span>
+                                    </button>
+
+                                    <!-- Compact Image Button -->
+                                    <button type="button" class="btn-soc-attachment-compact" id="btnTriggerAttachImage" onclick="document.getElementById('inputImages').click()" title="Attach images for passive EXIF & compression analysis">
+                                        <i class="fas fa-image"></i>
+                                        <span>Image</span>
+                                    </button>
+                                </div>
+
+                                <!-- Attached Files Preview Chips -->
                                 <div class="file-preview-list" id="attachmentPreviewList"></div>
-                            </div>
-
-                            <!-- Images -->
-                            <div class="forensic-intake-box" id="imageDropzone">
-                                <input type="file" id="inputImages" name="images" accept="image/*" multiple style="display: none;">
-                                <div class="forensic-icon"><i class="fas fa-image"></i></div>
-                                <div class="forensic-title">IMAGE FORENSICS</div>
-                                <div class="forensic-sub">Drop images or browse • Passive EXIF metadata & compression check</div>
                                 <div class="file-preview-list" id="imagePreviewList"></div>
                             </div>
                         </div>
@@ -575,20 +596,27 @@
                  SECTION 5: Threat Incident Archive (Analysis History)
                  ============================================================== -->
             <section id="tab-history" class="tab-content-pane" style="display: none;">
-                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                    <div>
-                        <h4 class="text-primary-soc mb-1"><i class="fas fa-history text-accent me-2"></i>Threat Incident Archive</h4>
-                        <p class="text-muted small mb-0">Search, filter, and inspect past security assessments via the contextual drawer.</p>
+                <div class="history-archive-header">
+                    <div class="history-archive-title">
+                        <h4 class="text-primary-soc"><i class="fas fa-history text-accent me-2"></i>Threat Incident Archive</h4>
+                        <p>Search, filter, and inspect past security assessments via the contextual drawer.</p>
                     </div>
-                    <div class="d-flex gap-2">
-                        <select class="form-select soc-input form-select-sm" onchange="loadAnalysisHistory(this.value)" style="width: 150px;">
+                    <div class="history-controls-bar">
+                        <select id="historyRiskSelect" class="form-select soc-input history-risk-select" onchange="handleHistoryFilterChange()" aria-label="Filter history by risk level">
                             <option value="">All Risk Levels</option>
                             <option value="CRITICAL">Critical Threats</option>
                             <option value="HIGH">High Risk</option>
                             <option value="MEDIUM">Medium Risk</option>
                             <option value="LOW">Low / Clean</option>
                         </select>
-                        <a href="/api/reports/download-csv" class="btn-soc-secondary btn-sm">
+                        <select id="historyStatusSelect" class="form-select soc-input history-status-select" onchange="handleHistoryFilterChange()" aria-label="Filter history by admin status">
+                            <option value="">All Statuses</option>
+                            <option value="PENDING">Pending</option>
+                            <option value="WARNING_SENT">Warning Sent</option>
+                            <option value="REVIEWED">Reviewed</option>
+                            <option value="FALSE_POSITIVE">False Positive</option>
+                        </select>
+                        <a href="/api/reports/download-csv" id="historyExportCsvBtn" class="btn-soc-secondary btn-history-export">
                             <i class="fas fa-file-csv me-1"></i> Export CSV
                         </a>
                     </div>
@@ -618,57 +646,662 @@
             <!-- ==============================================================
                  SECTION 6: Secure Mailbox Integration
                  ============================================================== -->
+            <!-- ==============================================================
+                 SECTION 6: Secure Mailbox Operations Center
+                 ============================================================== -->
+            <!-- ==============================================================
+                 SECTION 6: Secure Mailbox Operations Center (Institution Workspaces)
+                 ============================================================== -->
             <section id="tab-email" class="tab-content-pane" style="display: none;">
-                <div class="soc-panel p-4">
-                    <h4 class="text-primary-soc mb-1"><i class="fas fa-envelope-shield text-accent me-2"></i>Secure Mailbox Integration</h4>
-                    <p class="text-muted small mb-4">Connect institutional mailboxes via TLS-encrypted IMAP/SMTP for automated threat ingestion.</p>
-                    
-                    <div class="row g-4">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="intake-field-label">INSTITUTIONAL EMAIL ADDRESS</label>
-                                <input type="email" class="form-control soc-input" id="inputEmailAddress" placeholder="e.g. security-desk@university.edu">
+                <div class="soc-panel p-4 mb-4">
+                    <!-- VIEW 1: MAILBOX OVERVIEW VIEW -->
+                    <div id="mailboxOverviewView">
+                        <!-- Top Workspace Bar & Header -->
+                        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+                            <div>
+                                <h4 class="fw-bold mb-1" style="color: var(--text-primary);"><i class="fas fa-inbox text-accent me-2"></i>Secure Mailbox Operations</h4>
+                                <p class="text-muted small mb-0">Monitor, ingest, and analyze institutional mailboxes in isolated workspaces.</p>
                             </div>
-                            <div class="mb-3">
-                                <label class="intake-field-label">16-CHARACTER APP PASSWORD</label>
-                                <input type="password" class="form-control soc-input font-mono" id="inputEmailAppPassword" placeholder="•••• •••• •••• ••••">
+                            <div class="soc-workspace-control-bar d-flex gap-2 align-items-center flex-wrap">
+                                <!-- Workspace Institution Selector -->
+                                <div class="d-flex align-items-center gap-2 font-mono">
+                                    <label for="socInstitutionSelect" class="text-muted small mb-0 text-uppercase fw-semibold" style="font-size: 0.75rem; white-space: nowrap;">WORKSPACE:</label>
+                                    <select id="socInstitutionSelect" class="form-select form-select-sm soc-input font-mono fw-bold" style="min-width: 220px;" onchange="handleInstitutionChange(this.value)">
+                                        <option value="1">Loading Institutions...</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="btn-soc-outline btn-sm font-mono" id="btnSyncAllMailboxes" onclick="handleSyncAllMailboxes()">
+                                    <i class="fas fa-arrows-rotate me-1"></i> Sync All
+                                </button>
+                                <div id="socAutoSyncStatus" class="soc-autosync-pill">
+                                    <span class="soc-ping-dot bg-success rounded-circle" style="width: 8px; height: 8px; display: inline-block;"></span>
+                                    <span id="socAutoSyncText">AUTO-SYNC ON</span>
+                                    <span id="socAutoSyncTimer" class="text-muted small">(60s)</span>
+                                </div>
                             </div>
-                            <button type="button" class="btn-soc-primary w-100" onclick="SOCToast.success('Mailbox settings stored in secure memory vault.', 'Mailbox Saved')">
-                                <i class="fas fa-lock me-2"></i> Test & Save Mailbox Connection
-                            </button>
                         </div>
-                        <div class="col-md-6">
-                            <div class="p-3 soc-panel bg-base">
-                                <h6 class="text-primary-soc mb-2 font-mono"><i class="fas fa-shield-alt text-accent me-2"></i>Security Policy:</h6>
-                                <ul class="text-muted small mb-0 ps-3">
-                                    <li class="mb-1">Requires Google / Microsoft generated <strong>App Passwords</strong>. Primary passwords are strictly rejected.</li>
-                                    <li class="mb-1">All transport connections strictly enforce TLS v1.3 encryption.</li>
-                                    <li>Email attachments are safely parsed in volatile memory and are never executed on the host.</li>
-                                </ul>
+
+                        <!-- 5 Compact Enterprise KPI Metric Row -->
+                        <div class="row row-cols-1 row-cols-sm-2 row-cols-md-5 g-3 mb-4">
+                            <div class="col">
+                                <div class="soc-kpi-card h-100">
+                                    <div class="soc-kpi-header">
+                                        <span class="soc-kpi-title">TOTAL MAILBOXES</span>
+                                        <i class="fas fa-inbox text-accent"></i>
+                                    </div>
+                                    <div class="soc-kpi-val" id="mb-stat-total">0</div>
+                                    <div class="soc-kpi-sub">Connected mailboxes</div>
+                                </div>
                             </div>
+                            <div class="col">
+                                <div class="soc-kpi-card h-100">
+                                    <div class="soc-kpi-header">
+                                        <span class="soc-kpi-title">ACTIVE CONNECTIONS</span>
+                                        <i class="fas fa-circle-check text-success"></i>
+                                    </div>
+                                    <div class="soc-kpi-val text-success" id="mb-stat-active">0</div>
+                                    <div class="soc-kpi-sub">All systems operational</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="soc-kpi-card h-100">
+                                    <div class="soc-kpi-header">
+                                        <span class="soc-kpi-title">EMAILS INGESTED</span>
+                                        <i class="fas fa-envelope-open-text text-info"></i>
+                                    </div>
+                                    <div class="soc-kpi-val text-info" id="mb-stat-ingested">0</div>
+                                    <div class="soc-kpi-sub">Total workspace processed</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="soc-kpi-card h-100">
+                                    <div class="soc-kpi-header">
+                                        <span class="soc-kpi-title">THREATS DETECTED</span>
+                                        <i class="fas fa-shield-virus text-danger"></i>
+                                    </div>
+                                    <div class="soc-kpi-val text-danger" id="instBannerThreats">0</div>
+                                    <div class="soc-kpi-sub">Workspace threat incidents</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="soc-kpi-card h-100">
+                                    <div class="soc-kpi-header">
+                                        <span class="soc-kpi-title">LAST SYNC</span>
+                                        <i class="fas fa-clock-rotate-left text-warning"></i>
+                                    </div>
+                                    <div class="soc-kpi-val text-warning" id="instBannerLastSync" style="font-size: 1.15rem;">Never</div>
+                                    <div class="soc-kpi-sub" id="instBannerLastSyncDate">--</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Active Institutional Mailboxes Section Header -->
+                        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                            <div>
+                                <h6 class="fw-bold font-mono text-uppercase mb-0" style="color: var(--text-primary); font-size: 0.85rem; letter-spacing: 0.05em;">
+                                    <i class="fas fa-inbox text-accent me-2"></i>Connected Institutional Mailboxes
+                                </h6>
+                                <p class="text-muted small mb-0">Manage your institutional mailbox connections and synchronization.</p>
+                            </div>
+                            {% if session.get('role') == 'admin' %}
+                            <button type="button" class="btn-soc-primary btn-sm font-mono" onclick="openAddMailboxModal()">
+                                <i class="fas fa-plus me-1"></i> Add Secure Mailbox
+                            </button>
+                            {% endif %}
+                        </div>
+
+                        <!-- Active Institutional Mailboxes List Container -->
+                        <div id="connectedMailboxesList" class="mb-2">
+                            <div class="p-4 text-center text-muted">
+                                <i class="fas fa-spinner fa-spin me-2"></i>Loading configured institutional mailboxes...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VIEW 2: MAILBOX-SPECIFIC INBOX VIEW -->
+                    <div id="mailboxInboxView" style="display: none;">
+                        <button type="button" class="btn-soc-outline btn-sm mb-3 font-mono" onclick="closeMailboxInbox()">
+                            <i class="fas fa-arrow-left me-1"></i> Back to Secure Mailboxes
+                        </button>
+
+                        <!-- Mailbox Header Card -->
+                        <div class="p-3 mb-4 soc-panel bg-base border-subtle d-flex justify-content-between align-items-center flex-wrap gap-3" id="mailboxInboxHeaderCard">
+                            <div>
+                                <div class="d-flex align-items-center gap-2 mb-1">
+                                    <h5 class="fw-bold mb-0 font-mono" style="color: var(--text-primary);" id="inboxHeaderTitle">Mailbox Inbox</h5>
+                                    <span class="badge bg-success font-mono px-2 py-1" id="inboxHeaderStatus">Connected</span>
+                                </div>
+                                <div class="font-mono text-accent small fw-semibold" id="inboxHeaderEmail">loading@mailbox.com</div>
+                                <small class="text-muted font-mono" id="inboxHeaderMeta">Gmail • IMAP: imap.gmail.com</small>
+                            </div>
+                            <div class="d-flex align-items-center gap-3 font-mono">
+                                <div class="text-end me-2">
+                                    <div class="text-muted small text-uppercase" style="font-size: 0.68rem; letter-spacing: 0.05em;">TOTAL MESSAGES</div>
+                                    <div class="h4 mb-0 text-accent font-mono fw-bold" id="inboxHeaderCount">0</div>
+                                </div>
+                                <button type="button" class="btn-soc-outline btn-sm font-mono" onclick="refreshMailboxInbox()">
+                                    <i class="fas fa-sync-alt me-1"></i> Refresh
+                                </button>
+                                <button type="button" class="btn-soc-primary btn-sm font-mono" id="btnSyncCurrentInbox" onclick="syncCurrentMailboxInbox()">
+                                    <i class="fas fa-sync me-1"></i> Sync Now
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Mailbox Controls & Filter Toolbar (Single Row Grid Layout) -->
+                        <div class="soc-inbox-toolbar-container mb-3" id="socInboxToolbarContainer">
+                            <div class="soc-inbox-toolbar">
+                                <!-- 1. Search Box -->
+                                <div class="soc-search-wrapper">
+                                    <i class="fas fa-search soc-search-icon"></i>
+                                    <input type="text" id="mailboxSearchInput" class="form-control soc-toolbar-input font-mono" placeholder="Search this mailbox..." oninput="applyMailboxFilters()" onkeyup="handleMailboxSearch(event)">
+                                    <button type="button" class="btn-clear-search d-none" id="btnClearSearchInput" onclick="clearSearchInput()"><i class="fas fa-times"></i></button>
+                                </div>
+
+                                <!-- 2. All Messages Filter -->
+                                <select id="inboxMsgFilter" class="form-select form-select-sm soc-toolbar-select font-mono" onchange="applyMailboxFilters()">
+                                    <option value="ALL">All Messages</option>
+                                    <option value="UNREAD">Unread</option>
+                                    <option value="FLAGGED">Flagged</option>
+                                </select>
+
+                                <!-- 3. Threat Level Filter -->
+                                <select id="inboxRiskFilter" class="form-select form-select-sm soc-toolbar-select font-mono" onchange="applyMailboxFilters()">
+                                    <option value="ALL">All Threat Levels</option>
+                                    <option value="LOW">LOW</option>
+                                    <option value="MEDIUM">MEDIUM</option>
+                                    <option value="HIGH">HIGH</option>
+                                    <option value="CRITICAL">CRITICAL</option>
+                                </select>
+
+                                <!-- 4. Vector Filter -->
+                                <select id="inboxVectorFilter" class="form-select form-select-sm soc-toolbar-select font-mono" onchange="applyMailboxFilters()">
+                                    <option value="ALL">All Vectors</option>
+                                    <option value="Cyberbullying">Cyberbullying</option>
+                                    <option value="Phishing">Phishing</option>
+                                    <option value="Links">Malicious Links</option>
+                                    <option value="SocialEng">Social Eng.</option>
+                                    <option value="Malware">Malware</option>
+                                </select>
+
+                                <!-- 5. Status Filter -->
+                                <select id="inboxStatusFilter" class="form-select form-select-sm soc-toolbar-select font-mono" onchange="applyMailboxFilters()">
+                                    <option value="ALL">All Status</option>
+                                    <option value="Analyzed">Analyzed</option>
+                                    <option value="Pending">Pending</option>
+                                </select>
+
+                                <!-- 6. Clear Button -->
+                                <button type="button" class="btn-soc-secondary btn-sm soc-btn-clear font-mono" id="btnResetInboxFilters" onclick="resetMailboxFilters()">
+                                    <i class="fas fa-undo-alt me-1"></i> Clear
+                                </button>
+                            </div>
+
+                            <!-- Toolbar Secondary Meta: Result Count & Active Filter Chips -->
+                            <div class="soc-toolbar-meta d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2 pt-2 border-top border-secondary-subtle">
+                                <div class="soc-result-count font-mono small text-muted fw-semibold">
+                                    <i class="fas fa-list-ul me-1 text-accent"></i> <span id="inboxResultCountText">Showing 0 of 0 messages</span>
+                                </div>
+                                <div class="soc-active-chips d-flex align-items-center gap-1 flex-wrap" id="inboxActiveFilterChips">
+                                    <!-- Dynamic Active Filter Chips -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Mailbox Email List Table -->
+                        <div class="soc-table-wrapper" id="mailboxInboxTableWrapper">
+                            <div class="table-responsive">
+                                <table class="soc-table">
+                                    <thead>
+                                        <tr>
+                                            <th>RECEIVED</th>
+                                            <th>SENDER</th>
+                                            <th>SUBJECT</th>
+                                            <th>THREAT LEVEL</th>
+                                            <th>VECTOR</th>
+                                            <th>STATUS</th>
+                                            <th>ACTIONS</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="mailboxInboxTableBody">
+                                        <tr><td colspan="7" class="text-center text-muted py-4">Loading mailbox messages...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Empty State View -->
+                        <div id="mailboxInboxEmptyState" class="soc-panel p-5 text-center my-3" style="display: none;">
+                            <div class="text-muted mb-3"><i class="fas fa-inbox fa-3x text-accent" style="opacity: 0.6;"></i></div>
+                            <h5 class="fw-bold font-mono mb-2" style="color: var(--text-primary);">INBOX EMPTY</h5>
+                            <p class="text-muted small mb-4">No messages have been received by this mailbox yet.</p>
+                            <button type="button" class="btn-soc-primary btn-sm px-4 py-2 font-mono" onclick="syncCurrentMailboxInbox()">
+                                <i class="fas fa-sync me-2"></i> Sync Now
+                            </button>
                         </div>
                     </div>
                 </div>
             </section>
+
+            <!-- ==============================================================
+                 SECTION 6: Pending Account Approvals (Dedicated Governance Workstation)
+                 ============================================================== -->
+            {% if session.get('role') == 'admin' %}
+            <section id="tab-pending-approvals" class="tab-content-pane" style="display: none;">
+                <!-- Breadcrumb Bar -->
+                <div class="mb-3 font-mono small text-muted">
+                    <span class="text-accent"><i class="fas fa-building-user me-1"></i>Integration</span>
+                    <span class="mx-2 text-muted">/</span>
+                    <a href="#" onclick="openSecureMailboxTab(event)" class="text-muted text-decoration-none hover-accent">Secure Mailbox</a>
+                    <span class="mx-2 text-muted">/</span>
+                    <span class="text-primary-soc fw-bold">Account Approvals</span>
+                </div>
+
+                <!-- Header Panel -->
+                <div class="soc-panel p-4 mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div>
+                            <h4 class="fw-bold mb-1 font-mono text-primary-soc d-flex align-items-center gap-2" style="font-size: 1.25rem;">
+                                <i class="fas fa-user-shield text-accent"></i> Account Approvals
+                            </h4>
+                            <p class="text-muted small mb-0 font-mono">Review and authorize institutional user registration requests.</p>
+                        </div>
+                        <button type="button" class="btn-soc-outline btn-sm font-mono" id="btnRefreshPendingApprovals" onclick="loadPendingRegistrations()">
+                            <i class="fas fa-sync-alt me-1"></i> Refresh
+                        </button>
+                    </div>
+
+                    <!-- 4 Summary KPI Cards -->
+                    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-3 mt-2">
+                        <div class="col">
+                            <div class="soc-kpi-card h-100">
+                                <div class="soc-kpi-header">
+                                    <span class="soc-kpi-title">PENDING</span>
+                                    <i class="fas fa-user-clock text-warning"></i>
+                                </div>
+                                <div class="soc-kpi-val text-warning" id="kpiPendingCount">0</div>
+                                <div class="soc-kpi-sub">Awaiting review</div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="soc-kpi-card h-100">
+                                <div class="soc-kpi-header">
+                                    <span class="soc-kpi-title">APPROVED</span>
+                                    <i class="fas fa-user-check text-success"></i>
+                                </div>
+                                <div class="soc-kpi-val text-success" id="kpiApprovedCount">0</div>
+                                <div class="soc-kpi-sub">Active accounts</div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="soc-kpi-card h-100">
+                                <div class="soc-kpi-header">
+                                    <span class="soc-kpi-title">REJECTED</span>
+                                    <i class="fas fa-user-times text-danger"></i>
+                                </div>
+                                <div class="soc-kpi-val text-danger" id="kpiRejectedCount">0</div>
+                                <div class="soc-kpi-sub">Denied requests</div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="soc-kpi-card h-100">
+                                <div class="soc-kpi-header">
+                                    <span class="soc-kpi-title">TOTAL REQUESTS</span>
+                                    <i class="fas fa-users text-accent"></i>
+                                </div>
+                                <div class="soc-kpi-val text-accent" id="kpiTotalCount">0</div>
+                                <div class="soc-kpi-sub">Total submissions</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Approval Work Queue Panel -->
+                <div class="soc-panel p-4 mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div>
+                            <h6 class="fw-bold font-mono text-uppercase mb-0" style="color: var(--text-primary); font-size: 0.85rem; letter-spacing: 0.05em;">
+                                <i class="fas fa-list-check text-accent me-2"></i>Pending Registration Requests
+                            </h6>
+                            <p class="text-muted small mb-0 font-mono">Review and authorize institutional user access.</p>
+                        </div>
+                    </div>
+
+                    <!-- Single Responsive Search / Filter Toolbar -->
+                    <div class="soc-inbox-toolbar-container mb-3">
+                        <div class="soc-inbox-toolbar">
+                            <!-- 1. Search -->
+                            <div class="soc-search-wrapper">
+                                <i class="fas fa-search soc-search-icon"></i>
+                                <input type="text" id="pendingSearchInput" class="form-control soc-toolbar-input font-mono" placeholder="Search name, email, institution..." oninput="applyPendingFilters()">
+                                <button type="button" class="btn-clear-search d-none" id="btnClearPendingSearch" onclick="clearPendingSearch()"><i class="fas fa-times"></i></button>
+                            </div>
+
+                            <!-- 2. Status Filter -->
+                            <select id="pendingStatusFilter" class="form-select form-select-sm soc-toolbar-select font-mono" onchange="applyPendingFilters()">
+                                <option value="ALL">All Status</option>
+                                <option value="VERIFIED">Verified Email</option>
+                                <option value="UNVERIFIED">Unverified Email</option>
+                            </select>
+
+                            <!-- 3. Institution Filter -->
+                            <select id="pendingInstFilter" class="form-select form-select-sm soc-toolbar-select font-mono" onchange="applyPendingFilters()">
+                                <option value="ALL">All Institutions</option>
+                            </select>
+
+                            <!-- 4. Role Filter -->
+                            <select id="pendingRoleFilter" class="form-select form-select-sm soc-toolbar-select font-mono" onchange="applyPendingFilters()">
+                                <option value="ALL">All Roles</option>
+                                <option value="analyst">Analyst</option>
+                                <option value="operator">Operator</option>
+                                <option value="admin">Admin</option>
+                            </select>
+
+                            <!-- 5. Clear Button -->
+                            <button type="button" class="btn-soc-secondary btn-sm soc-btn-clear font-mono" id="btnResetPendingFilters" onclick="resetPendingFilters()">
+                                <i class="fas fa-undo-alt me-1"></i> Clear
+                            </button>
+                        </div>
+
+                        <!-- Result Count & Active Filter Chips -->
+                        <div class="soc-toolbar-meta d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2 pt-2 border-top border-secondary-subtle">
+                            <div class="soc-result-count font-mono small text-muted fw-semibold">
+                                <i class="fas fa-list-ul me-1 text-accent"></i> <span id="pendingResultCountText">Showing 0 of 0 requests</span>
+                            </div>
+                            <div class="soc-active-chips d-flex align-items-center gap-1 flex-wrap" id="pendingActiveFilterChips"></div>
+                        </div>
+                    </div>
+
+                    <!-- Work Queue Table Container -->
+                    <div id="pendingRegistrationsContainer">
+                        <div class="py-4 text-center text-muted font-mono small">
+                            <i class="fas fa-spinner fa-spin me-2"></i>Loading pending account registrations...
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Reject Registration Confirmation Modal -->
+            <div class="modal fade" id="rejectUserConfirmModal" tabindex="-1" aria-labelledby="rejectUserConfirmModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-danger font-mono" id="rejectUserConfirmModalLabel">
+                                <i class="fas fa-exclamation-triangle me-2"></i>Reject Registration Request?
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="text-muted font-mono small mb-3">Are you sure you want to reject the registration request for user <strong class="text-primary-soc" id="rejectModalTargetUser">target_user</strong>?</p>
+                            <input type="hidden" id="rejectModalUserId">
+                            <div class="d-flex justify-content-end gap-2 mt-4">
+                                <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn-soc-danger btn-sm font-mono" id="btnConfirmRejectUser" onclick="executeRejectUserSubmit()">
+                                    <i class="fas fa-user-times me-1"></i> Reject Request
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Add Mailbox Modal -->
+            <div class="modal fade" id="addMailboxModal" tabindex="-1" aria-labelledby="addMailboxModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-primary-soc font-mono" id="addMailboxModalLabel">
+                                <i class="fas fa-envelope-open-text text-accent me-2"></i>Configure New Institutional Mailbox
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="formAddMailbox" onsubmit="event.preventDefault(); handleAddMailboxSubmit();">
+                                <div class="mb-3">
+                                    <label class="intake-field-label">TARGET INSTITUTION WORKSPACE</label>
+                                    <input type="text" class="form-control soc-input font-mono fw-bold" id="inputMailboxInstitutionName" readonly>
+                                    <input type="hidden" id="inputMailboxInstitutionId">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">PROVIDER PRESET</label>
+                                    <select class="form-select soc-input" id="selectMailboxProvider" onchange="handleProviderChange()">
+                                        <option value="gmail" selected>Google Workspace / Gmail (IMAP TLS)</option>
+                                        <option value="outlook">Microsoft Outlook / Office 365</option>
+                                        <option value="custom">Custom Enterprise IMAP Server</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">INSTITUTIONAL EMAIL ADDRESS</label>
+                                    <input type="email" class="form-control soc-input" id="inputNewMailboxEmail" placeholder="security-desk@university.edu" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">16-CHARACTER APP PASSWORD</label>
+                                    <input type="password" class="form-control soc-input font-mono" id="inputNewMailboxPassword" placeholder="•••• •••• •••• ••••" required>
+                                    <div class="form-text text-muted small mt-1">Primary passwords are rejected. Use Google/Microsoft 16-char App Password.</div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-7">
+                                        <label class="intake-field-label">IMAP SERVER HOST</label>
+                                        <input type="text" class="form-control soc-input font-mono" id="inputNewImapServer" value="imap.gmail.com" required>
+                                        <div class="form-text text-muted small mt-1">IMAP ingestion uses SSL/TLS on port 993.</div>
+                                    </div>
+                                    <div class="col-5">
+                                        <label class="intake-field-label">SMTP TLS PORT (587)</label>
+                                        <input type="number" class="form-control soc-input font-mono" id="inputNewSmtpPort" value="587" required>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between gap-2 mt-4">
+                                    <button type="button" class="btn-soc-outline btn-sm" id="btnTestNewMailbox" onclick="handleTestNewMailboxConnection()">
+                                        <i class="fas fa-vial me-1"></i> Test Connection
+                                    </button>
+                                    <button type="submit" class="btn-soc-primary btn-sm" id="btnSubmitNewMailbox">
+                                        <i class="fas fa-save me-1"></i> Save & Activate Mailbox
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mailbox Details / Activity Log Modal -->
+            <div class="modal fade" id="mailboxDetailsModal" tabindex="-1" aria-labelledby="mailboxDetailsModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered modal-lg">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-primary-soc font-mono" id="mailboxDetailsModalLabel">
+                                <i class="fas fa-microscope text-accent me-2"></i>Mailbox Telemetry & Activity Console
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="mailboxDetailsContent">
+                                <div class="p-3 text-center text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Loading telemetry details...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Admin Warning Confirmation Modal (Human-In-The-Loop) -->
+            <div class="modal fade soc-action-modal" id="sendWarningModal" tabindex="-1" aria-labelledby="sendWarningModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered modal-lg">
+                    <div class="modal-content soc-panel p-3">
+                        <div class="modal-header border-0 pb-1">
+                            <h5 class="modal-title font-mono text-warning d-flex align-items-center gap-2" id="sendWarningModalLabel">
+                                <i class="fas fa-paper-plane"></i> Send Advisory Warning
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body pt-2">
+                            <div class="alert alert-warning border border-warning-subtle small font-mono mb-3">
+                                <i class="fas fa-info-circle me-2"></i>This will send an advisory communication warning to the original sender of this email.
+                            </div>
+
+                            <input type="hidden" id="warningModalAnalysisId">
+
+                            <div class="soc-panel p-3 mb-3" style="background: var(--bg-inset, rgba(0,0,0,0.2)); border: 1px solid var(--border-color, rgba(255,255,255,0.1)); border-radius: 8px;">
+                                <div class="row g-2 mb-2 font-mono small">
+                                    <div class="col-sm-2 text-muted fw-bold">Recipient:</div>
+                                    <div class="col-sm-10 text-primary-soc fw-bold" id="warningModalTo">student@example.com</div>
+                                </div>
+                                <div class="row g-2 mb-2 font-mono small">
+                                    <div class="col-sm-2 text-muted fw-bold">From:</div>
+                                    <div class="col-sm-10 text-secondary-soc" id="warningModalFrom">BullyMail Administration &lt;configured SMTP sender&gt;</div>
+                                </div>
+                                <div class="row g-2 mb-3 font-mono small">
+                                    <div class="col-sm-2 text-muted fw-bold">Subject:</div>
+                                    <div class="col-sm-10 text-accent fw-bold" id="warningModalSubject">Notice Regarding University Communication Guidelines</div>
+                                </div>
+                                <div class="border-top border-secondary-subtle pt-2">
+                                    <div class="text-muted small font-mono mb-1 text-uppercase" style="font-size: 0.75rem; letter-spacing: 0.05em;">Message Body:</div>
+                                    <div class="p-3 rounded font-mono small text-secondary-soc" id="warningModalBody" style="background: var(--bg-card, rgba(255,255,255,0.03)); border: 1px solid var(--border-color, rgba(255,255,255,0.07)); white-space: pre-wrap; line-height: 1.6; max-height: 200px; overflow-y: auto;"></div>
+                                </div>
+                            </div>
+
+                            <div id="warningModalStatusNotice"></div>
+
+                            <div class="d-flex justify-content-between align-items-center gap-2 mt-3 pt-2 border-top border-secondary-subtle">
+                                <span class="text-muted small font-mono" id="warningModalSmtpHint"><i class="fas fa-lock me-1"></i>Secure SMTP TLS Delivery</span>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="button" class="btn-soc-primary btn-sm font-mono px-3" id="btnExecuteSendWarning" onclick="executeSendWarningSubmit()">
+                                        <i class="fas fa-paper-plane me-1"></i> Send Warning
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mark Reviewed Confirmation Modal -->
+            <div class="modal fade soc-action-modal" id="markReviewedModal" tabindex="-1" aria-labelledby="markReviewedModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-success font-mono" id="markReviewedModalLabel">
+                                <i class="fas fa-check-double text-success me-2"></i>Confirm Mark Reviewed
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="hidden" id="reviewModalAnalysisId">
+                            <p class="text-muted font-mono small mb-3">
+                                Are you sure you want to mark this incident as reviewed? The case status will be updated to <strong>REVIEWED</strong> and logged in the audit trail without dispatching an email.
+                            </p>
+                            <div class="mb-3">
+                                <label class="intake-field-label">ADMINISTRATIVE NOTE (OPTIONAL)</label>
+                                <textarea class="form-control soc-input font-mono small" id="reviewModalNotes" rows="2" placeholder="Reviewed and acknowledged by administrator..."></textarea>
+                            </div>
+                            <div class="d-flex justify-content-end gap-2 mt-4">
+                                <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn-soc-primary btn-sm font-mono" id="btnSubmitMarkReviewed" onclick="executeMarkReviewedSubmit()">
+                                    <i class="fas fa-check-double me-1"></i> Confirm Review
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- False Positive Modal -->
+            <div class="modal fade soc-action-modal" id="falsePositiveModal" tabindex="-1" aria-labelledby="falsePositiveModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-primary-soc font-mono" id="falsePositiveModalLabel">
+                                <i class="fas fa-shield-slash text-warning me-2"></i>Mark as False Positive
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="hidden" id="fpModalAnalysisId">
+                            <div class="mb-3">
+                                <label class="intake-field-label">CLASSIFICATION REASON</label>
+                                <select class="form-select soc-input font-mono" id="fpModalReasonSelect">
+                                    <option value="Academic criticism">Academic criticism / Feedback</option>
+                                    <option value="Benign language">Benign / Non-threatening language</option>
+                                    <option value="Model false positive" selected>Model false positive</option>
+                                    <option value="Quoted complaint / Grievance report">Quoted complaint / Grievance report</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="intake-field-label">ADMINISTRATIVE NOTES (OPTIONAL)</label>
+                                <textarea class="form-control soc-input font-mono small" id="fpModalNotes" rows="3" placeholder="Contextual rationale for marking this detection as a false positive..."></textarea>
+                            </div>
+                            <div class="d-flex justify-content-end gap-2 mt-4">
+                                <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn-soc-primary btn-sm font-mono" id="btnSubmitFalsePositive" onclick="executeFalsePositiveSubmit()">
+                                    <i class="fas fa-check me-1"></i> Confirm False Positive
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Delete Analysis Confirmation Modal -->
+            <div class="modal fade soc-action-modal" id="deleteAnalysisConfirmModal" tabindex="-1" aria-labelledby="deleteAnalysisConfirmModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-danger font-mono" id="deleteAnalysisConfirmModalLabel">
+                                <i class="fas fa-trash-can text-danger me-2"></i>Delete Analysis?
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="hidden" id="deleteModalAnalysisId">
+                            <div class="p-3 mb-3 rounded" style="background: var(--bg-surface-elevated, #0d1424); border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));">
+                                <div class="mb-2">
+                                    <span class="text-muted small font-mono">SUBJECT:</span>
+                                    <div class="fw-bold text-primary-soc font-mono small text-truncate" id="deleteModalSubject">—</div>
+                                </div>
+                                <div>
+                                    <span class="text-muted small font-mono">SENDER:</span>
+                                    <div class="fw-bold text-primary-soc font-mono small text-truncate" id="deleteModalSender">—</div>
+                                </div>
+                            </div>
+                            <p class="text-muted small font-mono mb-4">
+                                This action will permanently remove this analysis from Analysis History.
+                            </p>
+                            <div class="d-flex justify-content-end gap-2">
+                                <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn-soc-danger btn-sm font-mono" id="btnConfirmDeleteAnalysis" onclick="executeDeleteAnalysis()">
+                                    <i class="fas fa-trash-can me-1"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
 
     <!-- ==================================================================
          Right-Side Contextual Sliding Investigation Drawer (.soc-drawer)
          ================================================================== -->
-    <div class="soc-drawer-overlay" id="socDrawerOverlay"></div>
-    <div class="soc-drawer" id="socDrawer">
-        <div class="soc-drawer-header">
-            <div class="d-flex align-items-center gap-2">
-                <i class="fas fa-shield-alt text-accent"></i>
-                <h5 class="mb-0 text-primary-soc" id="socDrawerTitle" style="font-size: 1.1rem;">Incident Case Details</h5>
+    <div class="soc-drawer-overlay" id="socDrawerOverlay">
+        <div class="soc-drawer" id="socDrawer">
+            <div class="soc-drawer-header">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fas fa-shield-alt text-accent"></i>
+                    <h5 class="mb-0 text-primary-soc font-weight-bold" id="socDrawerTitle" style="font-size: 1.05rem;">Incident Case Details</h5>
+                </div>
+                <div class="soc-drawer-header-actions d-flex align-items-center gap-2" id="socDrawerHeaderActions">
+                    <a href="#" target="_blank" class="btn-soc-outline btn-sm d-none" id="socDrawerAuditPdfBtn">
+                        <i class="fas fa-file-pdf me-1"></i> Audit PDF
+                    </a>
+                    <button type="button" class="btn btn-sm btn-soc-secondary" id="socDrawerCloseBtn" aria-label="Close Drawer">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
             </div>
-            <button type="button" class="btn btn-sm btn-soc-secondary" id="socDrawerCloseBtn" aria-label="Close Drawer">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="soc-drawer-body" id="socDrawerBody">
-            <!-- Populated dynamically by dashboard.js -->
+            <div class="soc-drawer-body" id="socDrawerBody">
+                <!-- Populated dynamically by dashboard.js -->
+            </div>
         </div>
     </div>
 
@@ -678,6 +1311,7 @@
     <!-- Bootstrap 5 Bundle JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- BullyMail Toast & Dashboard Controller -->
+    <script>window.currentUserRole = "{{ session.get('role', 'analyst') }}";</script>
     <script src="{{ url_for('static', filename='js/core/toast.js') }}"></script>
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>

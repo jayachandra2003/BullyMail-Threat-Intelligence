@@ -48,7 +48,7 @@ class UnifiedRiskEngine:
         )
         
         # 4. Run Cyberbullying Detector with Severity Tiers
-        bullying_result = self.bullying_detector.predict(email_text)
+        bullying_result = self.bullying_detector.predict(email_text, email_subject=email_subject)
         
         # 5. Run Social Engineering Detector
         social_result = self.social_detector.analyze(email_text, email_subject)

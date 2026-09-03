@@ -18,29 +18,42 @@ def _get_config_val(key, default=None):
     return getattr(Config, key, default)
 
 def get_connection():
-    """Returns a database connection based on configuration with fallback to SQLite."""
+    """Returns a database connection based on configuration with fallback to SQLite in development."""
     global _active_engine
     
-    db_type = _get_config_val('DB_TYPE', 'sqlite')
+    db_type = str(_get_config_val('DB_TYPE', 'sqlite')).strip().lower()
+    is_testing = bool(_get_config_val('TESTING', False))
+
     if db_type == 'mysql':
         try:
             import mysql.connector
+            from mysql.connector import ClientFlag
+            db_pass = _get_config_val('DB_PASSWORD', '')
             conn = mysql.connector.connect(
                 host=_get_config_val('DB_HOST', 'localhost'),
-                port=_get_config_val('DB_PORT', 3306),
+                port=int(_get_config_val('DB_PORT', 3306)),
                 user=_get_config_val('DB_USER', 'root'),
-                password=_get_config_val('DB_PASSWORD', ''),
+                password=db_pass,
                 database=_get_config_val('DB_NAME', 'bullymail_db'),
                 charset='utf8mb4',
                 collation='utf8mb4_unicode_ci',
-                autocommit=True
+                autocommit=False,
+                client_flags=[ClientFlag.FOUND_ROWS]
             )
             _active_engine = 'mysql'
             return conn
         except Exception as e:
-            # Graceful fallback to SQLite
+            if is_testing or db_type == 'mysql':
+                # In testing or explicit MySQL mode, do not silently fallback to SQLite
+                # Mask password from exception string if present
+                safe_err = str(e)
+                db_pass = _get_config_val('DB_PASSWORD', '')
+                if db_pass and db_pass in safe_err:
+                    safe_err = safe_err.replace(db_pass, '********')
+                _active_engine = None
+                raise RuntimeError(f"MySQL connection failed: {safe_err}") from None
             _active_engine = 'sqlite'
-    
+
     # SQLite connection
     _active_engine = 'sqlite'
     db_path = _get_config_val('SQLITE_DB_PATH', 'bullymail.db')
@@ -94,17 +107,23 @@ def _adapt_query_for_sqlite(query):
     return query
 
 def execute_query(query, params=None):
-    """Executes a query (INSERT, UPDATE, DELETE) and returns the last row ID."""
+    """Executes a query (INSERT, UPDATE, DELETE) and returns lastrowid for INSERT, or rowcount for UPDATE/DELETE."""
     with get_db() as conn:
         engine = get_engine_type()
         if engine == 'sqlite':
             query = _adapt_query_for_sqlite(query)
             cursor = conn.cursor()
             cursor.execute(query, params or ())
+            if query.strip().upper().startswith(('UPDATE', 'DELETE')):
+                return cursor.rowcount
             return cursor.lastrowid
         else:
             cursor = conn.cursor()
             cursor.execute(query, params or ())
+            if query.strip().upper().startswith(('UPDATE', 'DELETE')):
+                count = cursor.rowcount
+                cursor.close()
+                return count
             last_id = cursor.lastrowid
             cursor.close()
             return last_id

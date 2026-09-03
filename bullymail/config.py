@@ -38,7 +38,7 @@ class Config:
     ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@bullymail.local')
     
     # Database Settings
-    DB_TYPE = os.environ.get('DB_TYPE', 'mysql').lower()
+    DB_TYPE = os.environ.get('DB_TYPE', 'sqlite').lower()
     DB_HOST = os.environ.get('DB_HOST', 'localhost')
     DB_PORT = int(os.environ.get('DB_PORT', 3306))
     DB_USER = os.environ.get('DB_USER', 'root')
@@ -60,12 +60,25 @@ class Config:
         'pdf,doc,docx,xls,xlsx,txt,zip,rar,7z,png,jpg,jpeg,gif,eml,msg'
     ).split(','))
     
-    # Email Integration Defaults
+    # Email Integration Defaults & SMTP Configuration
     EMAIL_IMAP_SERVER = os.environ.get('EMAIL_IMAP_SERVER', 'imap.gmail.com')
-    EMAIL_SMTP_SERVER = os.environ.get('EMAIL_SMTP_SERVER', 'smtp.gmail.com')
-    EMAIL_SMTP_PORT = int(os.environ.get('EMAIL_SMTP_PORT', 587))
-    EMAIL_ADDRESS = os.environ.get('EMAIL_ADDRESS', '')
-    EMAIL_APP_PASSWORD = os.environ.get('EMAIL_APP_PASSWORD', '')
+    EMAIL_SMTP_SERVER = os.environ.get('EMAIL_SMTP_SERVER', os.environ.get('SMTP_HOST', 'smtp.gmail.com'))
+    EMAIL_SMTP_PORT = int(os.environ.get('EMAIL_SMTP_PORT', os.environ.get('SMTP_PORT', 587)))
+    EMAIL_ADDRESS = os.environ.get('EMAIL_ADDRESS', os.environ.get('SMTP_USERNAME', ''))
+    EMAIL_APP_PASSWORD = os.environ.get('EMAIL_APP_PASSWORD', os.environ.get('SMTP_PASSWORD', ''))
+    WORKER_POLL_INTERVAL = int(os.environ.get('WORKER_POLL_INTERVAL', 15))
+
+    # Dedicated SMTP Warning Configuration (Environment-Driven)
+    SMTP_HOST = os.environ.get('SMTP_HOST', EMAIL_SMTP_SERVER)
+    SMTP_PORT = int(os.environ.get('SMTP_PORT', EMAIL_SMTP_PORT))
+    SMTP_USERNAME = os.environ.get('SMTP_USERNAME', EMAIL_ADDRESS)
+    SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', EMAIL_APP_PASSWORD)
+    SMTP_USE_TLS = os.environ.get('SMTP_USE_TLS', 'True').lower() in ('true', '1', 't')
+    SMTP_FROM_EMAIL = os.environ.get('SMTP_FROM_EMAIL', SMTP_USERNAME or EMAIL_ADDRESS or 'admin@bullymail.local')
+    SMTP_FROM_NAME = os.environ.get('SMTP_FROM_NAME', 'BullyMail Administration')
+
+    # Master Key for Fernet Credential Encryption (AES-128-CBC + HMAC-SHA256)
+    BULLYMAIL_MASTER_KEY = os.environ.get('BULLYMAIL_MASTER_KEY', None)
 
     # Trusted Public Base URL (Prevents Host Header Poisoning in Auth Emails)
     APP_BASE_URL = os.environ.get('APP_BASE_URL', 'http://localhost:5000').rstrip('/')
@@ -103,5 +116,6 @@ class TestConfig(Config):
     ADMIN_USERNAME = 'admin'
     ADMIN_PASSWORD = 'TEST_ONLY_PASSWORD_DO_NOT_USE_IN_PRODUCTION_123!'
     ADMIN_EMAIL = 'admin@bullymail.local'
+    BULLYMAIL_MASTER_KEY = 'ghNXQBv5dpR4x5h5UCkhrnfBLXR3nKrZY2mHHTPGRGE='
     SESSION_COOKIE_SECURE = False
     CAPTCHA_ENABLED = False

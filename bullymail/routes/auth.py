@@ -35,12 +35,16 @@ def signup():
             password = data.get('password') or ''
             confirm_password = data.get('confirm_password') or ''
             captcha_token = data.get('captcha_token') or ''
+            requested_inst_name = (data.get('institution_name') or data.get('requested_institution_name') or '').strip()
+            requested_inst_domain = (data.get('institution_domain') or data.get('requested_institution_domain') or '').strip()
         else:
             username = (request.form.get('username') or '').strip()
             email = (request.form.get('email') or '').strip()
             password = request.form.get('password') or ''
             confirm_password = request.form.get('confirm_password') or ''
             captcha_token = request.form.get('captcha_token') or ''
+            requested_inst_name = (request.form.get('institution_name') or request.form.get('requested_institution_name') or '').strip()
+            requested_inst_domain = (request.form.get('institution_domain') or request.form.get('requested_institution_domain') or '').strip()
 
         # Rate Limit Check
         is_locked, retry_after = auth_rate_limiter.is_locked(client_ip, email, action='signup')
@@ -108,12 +112,33 @@ def signup():
                 password=password,
                 email=clean_email,
                 role='analyst',
-                status='PENDING_EMAIL_VERIFICATION'
+                status='PENDING_EMAIL_VERIFICATION',
+                institution_id=None,
+                requested_institution_name=requested_inst_name or None,
+                requested_institution_domain=requested_inst_domain or None
             )
 
             # Generate single-use verification token
             raw_token = AuthTokenService.generate_email_verification_token(user_id)
-            auth_email_service.send_verification_email(clean_email, raw_token, username)
+            email_result = auth_email_service.send_verification_email(clean_email, raw_token, username)
+            if isinstance(email_result, tuple):
+                email_sent, email_message = email_result
+            else:
+                email_sent, email_message = bool(email_result), ""
+
+            if not email_sent:
+                # Log email failure server-side (safe error without leaking credentials to client)
+                import logging
+                masked_email = clean_email[:3] + "***@" + clean_email.split('@')[-1] if '@' in clean_email else "***"
+                logging.getLogger("bullymail.auth").error(
+                    f"Verification email delivery failed for {masked_email}: {email_message}"
+                )
+                auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
+                fail_msg = "Your account was created, but we could not send the verification email. Please try again."
+                if request.is_json:
+                    return jsonify({'success': False, 'error': fail_msg, 'status': 'PENDING_EMAIL_VERIFICATION'}), 500
+                return render_template('signup.html', error=fail_msg), 500
+
             auth_rate_limiter.record_success(client_ip, clean_email, action='signup')
 
             if request.is_json:
@@ -127,6 +152,54 @@ def signup():
             return render_template('signup.html', error=err_msg), 500
 
     return render_template('signup.html')
+
+# =========================================================================
+from functools import wraps
+
+def get_current_user():
+    """
+    Retrieves fresh user data from DB using session['user_id'].
+    Prevents stale role vulnerabilities and immediately blocks disabled/unapproved users.
+    Returns user dict or None.
+    """
+    user_id = session.get('user_id')
+    if not user_id:
+        return None
+    user = UserModel.get_by_id(user_id)
+    if not user or user.get('status') != 'ACTIVE':
+        return None
+    return user
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = get_current_user()
+        if not user:
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Unauthorized or account pending approval'}), 401
+            session.clear()
+            return redirect(url_for('auth.login'))
+        return f(user, *args, **kwargs)
+    return decorated
+
+def require_role(*roles):
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            user = get_current_user()
+            if not user:
+                if request.is_json or request.path.startswith('/api/'):
+                    return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+                session.clear()
+                return redirect(url_for('auth.login'))
+            user_role = user.get('role', 'analyst')
+            if user_role not in roles:
+                if request.is_json or request.path.startswith('/api/'):
+                    return jsonify({'success': False, 'error': 'Forbidden: Insufficient privileges'}), 403
+                return render_template('signup.html', error="Forbidden: Insufficient privileges for this action."), 403
+            return f(user, *args, **kwargs)
+        return decorated
+    return decorator
 
 # =========================================================================
 # 2. EMAIL VERIFICATION
@@ -159,13 +232,13 @@ def verify_email():
             return jsonify({'success': False, 'error': err_msg}), 400
         return render_template('login.html', error=err_msg), 400
 
-    # Activate account
+    # Transition account status from PENDING_EMAIL_VERIFICATION to PENDING_ADMIN_APPROVAL
     UserModel.activate_user_email(user_id)
     auth_rate_limiter.record_success(client_ip, token[:16], action='verify_email')
 
-    success_msg = "Your email has been verified successfully! You may now authenticate."
+    success_msg = "Your email has been verified successfully! Your account is now pending administrator approval. You will be notified once activated."
     if request.is_json:
-        return jsonify({'success': True, 'message': success_msg})
+        return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_ADMIN_APPROVAL'})
     return render_template('login.html', success=success_msg)
 
 # =========================================================================
@@ -175,7 +248,11 @@ def verify_email():
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'GET' and 'user_id' in session:
-        return redirect(url_for('main.dashboard'))
+        user = get_current_user()
+        if user:
+            return redirect(url_for('main.dashboard'))
+        else:
+            session.clear()
 
     if request.method == 'POST':
         client_ip = _get_client_ip()
@@ -225,6 +302,7 @@ def login():
             session['user_id'] = user['id']
             session['username'] = user['username']
             session['role'] = user.get('role', 'analyst')
+            session['institution_id'] = user.get('institution_id', 1)
             session['auth_time'] = time.time()
             session.permanent = True
 
@@ -239,11 +317,25 @@ def login():
                 return jsonify({'success': False, 'error': err_msg, 'status': 'PENDING_VERIFICATION'}), 403
             return render_template('login.html', error=err_msg), 403
 
+        elif auth_status == 'PENDING_ADMIN_APPROVAL':
+            auth_rate_limiter.record_failure(client_ip, identifier, action='login')
+            err_msg = "Your email has been verified, but your account is pending administrator approval."
+            if request.is_json:
+                return jsonify({'success': False, 'error': err_msg, 'status': 'PENDING_ADMIN_APPROVAL'}), 403
+            return render_template('login.html', error=err_msg), 403
+
         elif auth_status == 'ACCOUNT_LOCKED':
             auth_rate_limiter.record_failure(client_ip, identifier, action='login')
             err_msg = "This account is temporarily locked for security. Please contact your administrator."
             if request.is_json:
                 return jsonify({'success': False, 'error': err_msg, 'status': 'LOCKED'}), 403
+            return render_template('login.html', error=err_msg), 403
+
+        elif auth_status in ('ACCOUNT_DISABLED', 'DISABLED'):
+            auth_rate_limiter.record_failure(client_ip, identifier, action='login')
+            err_msg = "This account has been disabled. Please contact your administrator."
+            if request.is_json:
+                return jsonify({'success': False, 'error': err_msg, 'status': 'DISABLED'}), 403
             return render_template('login.html', error=err_msg), 403
 
         else:
@@ -408,11 +500,38 @@ def logout():
 
 @auth_bp.route('/api/auth/status')
 def auth_status():
-    if 'user_id' in session:
+    user = get_current_user()
+    if user:
         return jsonify({
             'authenticated': True,
-            'user_id': session.get('user_id'),
-            'username': session.get('username'),
-            'role': session.get('role')
+            'user_id': user.get('id'),
+            'username': user.get('username'),
+            'role': user.get('role'),
+            'institution_id': user.get('institution_id', 1)
         })
     return jsonify({'authenticated': False})
+
+# =========================================================================
+# 7. ADMINISTRATOR USER APPROVAL & MANAGEMENT
+# =========================================================================
+
+@auth_bp.route('/api/admin/pending-users', methods=['GET'])
+@require_role('admin')
+def get_pending_users(current_user):
+    """Lists accounts awaiting administrator approval (Admin Only)."""
+    pending = UserModel.get_pending_approval_users(current_user.get('institution_id', 1))
+    return jsonify({'success': True, 'pending_users': pending})
+
+@auth_bp.route('/api/admin/approve-user/<int:target_user_id>', methods=['POST'])
+@require_role('admin')
+def approve_user(current_user, target_user_id):
+    """Approves a user account, setting status to ACTIVE (Admin Only)."""
+    data = request.get_json() or {}
+    role = data.get('role', 'analyst')
+    institution_id = data.get('institution_id', current_user.get('institution_id', 1))
+
+    success = UserModel.approve_user_by_admin(target_user_id, role=role, institution_id=institution_id)
+    if not success:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    return jsonify({'success': True, 'message': 'User account approved successfully'})

@@ -5,15 +5,15 @@ from ..services.bullying_detector import BullyingDetector
 from ..config import Config
 from ..database.connection import fetch_all, execute_query
 
+from .auth import get_current_user, require_role, require_auth
+
 models_bp = Blueprint('models', __name__)
 detector = BullyingDetector()
 
 @models_bp.route('/api/model-status', methods=['GET'])
-def get_model_status():
+@require_auth
+def get_model_status(current_user):
     """Retrieves current model status, list of serialized artifacts, and training history."""
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-        
     try:
         model_files = []
         if os.path.exists(Config.MODEL_PATH):
@@ -41,11 +41,9 @@ def get_model_status():
         return jsonify({'success': False, 'error': 'Failed to retrieve model registry status.'}), 500
 
 @models_bp.route('/api/train-model', methods=['POST'])
-def train_model():
-    """Trains a new cyberbullying model on generated or uploaded data with proper evaluation metrics."""
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-        
+@require_role('admin')
+def train_model(current_user):
+    """Trains a new cyberbullying model on generated or uploaded data with proper evaluation metrics (Admin Only)."""
     data = request.get_json() or {}
     model_type = data.get('model_type', 'logistic')
     try:

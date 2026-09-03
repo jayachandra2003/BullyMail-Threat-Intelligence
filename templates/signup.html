@@ -3,9 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Operator Enrollment — BullyMail V2 Threat Intelligence</title>
+    <title>Create Operator Account — BullyMail V2 SOC</title>
     
+    <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+
+    <!-- Early 2-State Theme Execution -->
     <script>
         (function() {
             const saved = localStorage.getItem('bullymail_theme');
@@ -14,10 +17,21 @@
             document.documentElement.style.colorScheme = theme;
         })();
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- FontAwesome 6 -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+    <!-- BullyMail V2 Core CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <!-- Theme Core -->
     <script src="{{ url_for('static', filename='js/core/theme.js') }}"></script>
     
     <style>
@@ -28,106 +42,208 @@
             align-items: center;
             justify-content: center;
             padding: 24px;
+            position: relative;
+            font-family: 'Inter', sans-serif;
         }
+
+        [data-theme="light"] body {
+            background-color: #f8fafc;
+        }
+
         .auth-card-v2 {
-            max-width: 480px;
+            max-width: 410px;
             width: 100%;
             background: var(--bg-surface);
             border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-xl);
-            box-shadow: var(--shadow-card), var(--shadow-lg);
-            overflow: hidden;
+            border-radius: 10px;
+            box-shadow: var(--shadow-sm);
+            padding: 32px;
             position: relative;
         }
-        .auth-card-v2::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0; height: 3px;
-            background: linear-gradient(90deg, var(--cyan), var(--accent-primary), var(--purple));
+
+        [data-theme="light"] .auth-card-v2 {
+            background: #ffffff;
+            border-color: #e2e8f0;
         }
-        .auth-header-v2 { padding: 32px 32px 16px; text-align: center; }
+
+        .auth-header-v2 {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
         .auth-brand-logo {
-            width: 52px; height: 52px;
-            background: linear-gradient(135deg, var(--accent-primary) 0%, #4338ca 100%);
-            border-radius: var(--radius-md);
-            display: inline-flex; align-items: center; justify-content: center;
-            font-size: 1.6rem; color: #ffffff; margin-bottom: 12px;
+            width: 40px;
+            height: 40px;
+            background: var(--accent-primary);
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.15rem;
+            color: #ffffff;
+            margin-bottom: 12px;
         }
-        .auth-body-v2 { padding: 10px 32px 32px; }
+
+        .auth-title {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+            margin-bottom: 4px;
+        }
+
+        .auth-subtitle {
+            font-size: 0.84rem;
+            color: var(--text-secondary);
+            margin-bottom: 0;
+        }
+
         .back-nav-link {
-            position: absolute; top: 24px; left: 24px;
-            color: var(--text-muted); text-decoration: none; font-size: 0.85rem;
-            display: inline-flex; align-items: center; gap: 6px;
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.84rem;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: var(--transition-fast);
+            z-index: 10;
+        }
+
+        .back-nav-link:hover {
+            color: var(--text-primary);
+        }
+
+        .top-right-theme-toggle {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            z-index: 10;
+        }
+
+        .form-control-auth {
+            height: 44px;
+            font-size: 0.88rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            padding: 0 14px;
+        }
+
+        [data-theme="light"] .form-control-auth {
+            background: #ffffff;
+            border-color: #cbd5e1;
+            color: #0f172a;
+        }
+
+        .form-control-auth:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+            background: var(--bg-surface);
+            color: var(--text-primary);
+        }
+
+        .auth-label {
+            font-size: 0.82rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        [data-theme="light"] .auth-label {
+            color: #334155;
+        }
+
+        .btn-auth-primary {
+            height: 44px;
+            font-size: 0.92rem;
+            font-weight: 600;
+            border-radius: 6px;
+            background: #4f46e5;
+            border: 1px solid #4f46e5;
+            color: #ffffff;
+            transition: var(--transition-fast);
+        }
+
+        .btn-auth-primary:hover {
+            background: #3730a3;
+            border-color: #3730a3;
+            color: #ffffff;
         }
     </style>
 </head>
 <body>
-    <a href="/" class="back-nav-link"><i class="fas fa-arrow-left"></i> Return to Overview</a>
+    <a href="/" class="back-nav-link">
+        <i class="fas fa-arrow-left"></i> Back to overview
+    </a>
 
-    <div class="auth-card-v2 animate-fade-in">
-        <div class="auth-header-v2">
-            <div class="auth-brand-logo"><i class="fas fa-user-plus"></i></div>
-            <h2 class="h4 font-weight-bold text-white mb-1">Create Operator Account</h2>
-            <div class="text-muted small">BullyMail V2 Threat Intelligence Platform</div>
-        </div>
-
-        <div class="auth-body-v2">
-            {% if error %}
-            <div class="alert alert-danger d-flex align-items-center mb-3" style="background: var(--threat-critical-bg); border-color: var(--threat-critical-border); color: var(--threat-critical); font-size: 0.85rem;" role="alert">
-                <i class="fas fa-shield-virus me-2 font-lg"></i>
-                <div>{{ error }}</div>
-            </div>
-            {% endif %}
-
-            {% if success %}
-            <div class="alert alert-success d-flex align-items-center mb-3" style="background: var(--threat-safe-bg); border-color: var(--threat-safe-border); color: var(--threat-safe); font-size: 0.85rem;" role="alert">
-                <i class="fas fa-check-circle me-2 font-lg"></i>
-                <div>{{ success }}</div>
-            </div>
-            {% endif %}
-
-            <form method="POST" action="/signup">
-                <div class="mb-3">
-                    <label class="console-field-label" for="username">OPERATOR USERNAME</label>
-                    <div class="input-group">
-                        <span class="input-group-text soc-input border-end-0 text-muted"><i class="fas fa-user"></i></span>
-                        <input type="text" class="form-control soc-input border-start-0" id="username" name="username" placeholder="e.g. jsmith" required autofocus>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="console-field-label" for="email">INSTITUTIONAL EMAIL</label>
-                    <div class="input-group">
-                        <span class="input-group-text soc-input border-end-0 text-muted"><i class="fas fa-envelope"></i></span>
-                        <input type="email" class="form-control soc-input border-start-0" id="email" name="email" placeholder="name@organization.com" required>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="console-field-label" for="password">SECURE PASSPHRASE (MIN 12 CHARS)</label>
-                    <div class="input-group">
-                        <span class="input-group-text soc-input border-end-0 text-muted"><i class="fas fa-lock"></i></span>
-                        <input type="password" class="form-control soc-input border-start-0 font-mono" id="password" name="password" placeholder="••••••••••••" required>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="console-field-label" for="confirm_password">CONFIRM PASSPHRASE</label>
-                    <div class="input-group">
-                        <span class="input-group-text soc-input border-end-0 text-muted"><i class="fas fa-check-double"></i></span>
-                        <input type="password" class="form-control soc-input border-start-0 font-mono" id="confirm_password" name="confirm_password" placeholder="••••••••••••" required>
-                    </div>
-                </div>
-
-                <button type="submit" class="btn-soc-primary w-100 py-3 mt-2">
-                    <i class="fas fa-user-shield me-2"></i> Register Account
-                </button>
-
-                <div class="text-center mt-3 small text-muted">
-                    Already have an account? <a href="/login" class="text-cyan">Authenticate here</a>
-                </div>
-            </form>
-        </div>
+    <!-- Single-Click Theme Toggle -->
+    <div class="top-right-theme-toggle">
+        <button type="button" class="soc-theme-toggle-btn" aria-label="Switch to light mode" title="Switch to light mode">
+            <i class="fas fa-sun"></i>
+        </button>
     </div>
+
+    <div class="auth-card-v2">
+        <div class="auth-header-v2">
+            <div class="auth-brand-logo">
+                <i class="fas fa-user-plus"></i>
+            </div>
+            <div class="text-muted small fw-semibold mb-1" style="font-size: 0.76rem; letter-spacing: 0.04em;">BULLYMAIL V2 SOC</div>
+            <h1 class="auth-title">Create Operator Account</h1>
+            <p class="auth-subtitle">Register for access to the BullyMail security operations console.</p>
+        </div>
+
+        {% if error %}
+        <div class="alert alert-danger d-flex align-items-center mb-3 py-2 px-3" style="font-size: 0.84rem; border-radius: 6px;" role="alert">
+            <i class="fas fa-exclamation-circle me-2"></i>
+            <div>{{ error }}</div>
+        </div>
+        {% endif %}
+
+        {% if success %}
+        <div class="alert alert-success d-flex align-items-center mb-3 py-2 px-3" style="font-size: 0.84rem; border-radius: 6px;" role="alert">
+            <i class="fas fa-check-circle me-2"></i>
+            <div>{{ success }}</div>
+        </div>
+        {% endif %}
+
+        <form method="POST" action="/signup">
+            <div class="mb-3">
+                <label class="auth-label" for="username">Username</label>
+                <input type="text" class="form-control form-control-auth" id="username" name="username" placeholder="e.g. jsmith" required autofocus>
+            </div>
+
+            <div class="mb-3">
+                <label class="auth-label" for="email">Institutional Email</label>
+                <input type="email" class="form-control form-control-auth" id="email" name="email" placeholder="name@organization.com" required>
+            </div>
+
+            <div class="mb-3">
+                <label class="auth-label" for="password">Password</label>
+                <input type="password" class="form-control form-control-auth" id="password" name="password" placeholder="••••••••••••" required>
+            </div>
+
+            <div class="mb-3">
+                <label class="auth-label" for="confirm_password">Confirm Password</label>
+                <input type="password" class="form-control form-control-auth" id="confirm_password" name="confirm_password" placeholder="••••••••••••" required>
+            </div>
+
+            <button type="submit" class="btn btn-auth-primary w-100 mt-2">
+                Create Account
+            </button>
+
+            <div class="text-center mt-3 small text-muted" style="font-size: 0.82rem;">
+                Already have an account? <a href="/login" class="text-decoration-none text-primary fw-medium">Sign in</a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Bootstrap 5 Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

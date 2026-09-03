@@ -1,157 +1,279 @@
-# BullyMail V2 — Intelligent Email Bullying, Phishing & Security Threat Detection System
+# BullyMail — Threat Intelligence & Cyberbullying Detection Platform
 
-[![Python 3.8+](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Framework: Flask](https://img.shields.io/badge/Framework-Flask_2.x-green.svg)](https://flask.palletsprojects.com/)
-[![WSGI: Waitress](https://img.shields.io/badge/WSGI-Waitress_Production-purple.svg)]()
-[![Architecture: Modular V2](https://img.shields.io/badge/Architecture-Modular_V2-purple.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
+[![Framework: Flask](https://img.shields.io/badge/Framework-Flask_3.x-green.svg)](https://flask.palletsprojects.com/)
+[![Database: MySQL / SQLite](https://img.shields.io/badge/Database-MySQL_%7C_SQLite_Fallback-orange.svg)]()
+[![Security: Fernet_AES--128_%26_RBAC](https://img.shields.io/badge/Security-Fernet_AES--128_%26_RBAC-red.svg)]()
+[![Automated Tests: Pytest](https://img.shields.io/badge/Tests-256%20Passed-brightgreen.svg)]()
 
-BullyMail V2 is a multi-vector email threat intelligence and forensics platform designed to protect academic and enterprise communication ecosystems from **cyberbullying, phishing, malicious URLs, look-alike domain spoofing, social engineering manipulation, dangerous attachments, and image tampering**.
-
----
-
-## 🌟 Key Features in BullyMail V2
-
-1. **Cyberbullying & Harassment Detection:**
-   - TF-IDF feature extraction (`ngram_range=(1,2)`, `max_features=4000`) paired with Logistic Regression and Linear Support Vector Machines (SVM).
-   - Calibrated exponential rule matching with multi-tier severity differentiation (`MEDIUM`, `HIGH`, `CRITICAL`).
-   - Adversarial token de-obfuscation normalizer defeating character-spaced, dotted, and leetspeak evasions.
-
-2. **Dedicated Phishing & Credential Theft Detection:**
-   - Scans for credential reset lures, account suspension threats, financial extortion, and display-name vs. public webmail mismatches.
-   - Mitigates informational security notices to prevent false positives on legitimate automated alerts.
-
-3. **URL & Link Security Analyzer:**
-   - Safe static inspection without dangerous network navigation.
-   - Detects raw IP addresses, URL shorteners, punycode homoglyphs, excessive subdomain nesting, and sensitive credential target paths.
-
-4. **Fake / Look-Alike Domain Detector:**
-   - Typosquatting and brand spoofing detection using Levenshtein distance and homoglyph substitution mapping against trusted baselines.
-
-5. **Social Engineering Detector:**
-   - Identifies psychological coercion: authority impersonation (Deans, IT Administrators), urgency/time pressure, fear/intimidation, financial extortion, and reward traps.
-
-6. **Safe Static Attachment & Malware Analysis:**
-   - Never executes uploaded files.
-   - Scans for double extensions (`invoice.pdf.exe`), PE headers (`MZ`), macro APIs (`Shell`, `AutoExec`), and calculates MD5/SHA-256 hashes.
-
-7. **Passive Image Forensics:**
-   - EXIF metadata extraction, editing software signatures (Photoshop, GIMP), and compression variance analysis.
-
-8. **Unified Risk Engine & Explainable AI (XAI):**
-   - Transparent scoring strategy aggregating all 6 specialized detectors.
-   - Generates granular, plain-English evidence summaries with printable PDF and CSV export capabilities.
-
-9. **Robust Security & Dual Database Support:**
-   - Werkzeug PBKDF2/SHA256 password hashing, brute-force rate limiting with IP/User lockout, `.env` secret management, and dual database support (MySQL `utf8mb4` with automatic SQLite local fallback).
+BullyMail is an enterprise digital forensic email threat intelligence and cyberbullying detection platform engineered for multi-tenant educational institutions and collaborative organizations. It continuously ingests communications, decomposes multi-vector attack surfaces, performs hybrid linguistic machine learning and forensic signal analysis, and provides explainable threat assessments through an interactive Security Operations Center (SOC) dashboard.
 
 ---
 
-## 🚀 Quick Start Guide
+## 1. Project Overview
+
+Academic institutions and corporate enterprises face a compounding convergence of email-borne threats ranging from hostile cyberbullying and targeted harassment to deceptive phishing lures, typosquatted brand domains, psychological social engineering coercion, and malicious file attachments.
+
+BullyMail addresses these challenges through a modular, service-oriented multi-vector architecture:
+- **Continuous Ingestion:** Synchronizes institutional mailboxes over IMAP SSL with delta UID tracking and memory-safe streaming MIME parsing.
+- **Parallel Forensic Decomposition:** Evaluates incoming communications across specialized threat vectors (NLP Cyberbullying, Phishing, Social Engineering, Static Attachment Forensics, Passive Image Forensics).
+- **Explainable Threat Fusion:** Fuses sub-vector signals using a transparent risk aggregation engine, generating calibrated threat scores $[0.0, 1.0]$ and severity ratings (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
+- **Encrypted Multi-Tenancy:** Persists telemetry, message state, and incident records in a relational schema (MySQL with SQLite fallback) with Fernet AES-128 credential encryption.
+- **SOC Mission Control:** Delivers real-time posture assessments, segmented severity distributions, ingestion velocity trend charts, and live incident stream ledgers.
+
+---
+
+## 2. Core Features & Threat Vectors
+
+### A. Linguistic Cyberbullying & Harassment NLP Engine
+- **Supervised ML Classification:** Combines TF-IDF feature extraction (`ngram_range=(1, 3)`, sublinear term frequency) with calibrated **Logistic Regression** and **Linear Support Vector Classifiers (Linear SVC)** with balanced class weighting.
+- **Hierarchical Rule Taxonomy:** Deterministic pattern matching across physical violence, targeted harassment, severe profanity, and hate speech.
+- **Morphological Word-Family Matching:** Expands violent root terms (*kill, kills, killed, killing, killer; murder, murdered; stab, stabbed, stabbing*) to enforce high recall on explicit physical threats.
+- **Hybrid Confidence Arbitration:** Decision fusion that arbitrates between statistical ML probabilities and deterministic safety overrides.
+
+### B. Phishing & Brand Spoofing Detector
+- **Domain Typosquatting Analysis:** Evaluates domain similarity using normalized Levenshtein edit distance against trusted brand baselines without external API lookups.
+- **Lexical URL Forensics:** Detects raw IP-in-URL hostnames, deep subdomain nesting, credential-stealing query strings, and suspicious top-level domains (`.xyz`, `.top`, `.tk`).
+- **URL Shannon Entropy:** Calculates entropy distributions on hostnames to flag algorithmic domain generation (DGA) and obfuscated redirectors.
+
+### C. Social Engineering & Coercion Detector
+- **Artificial Urgency & Time Pressure:** Detects psychological traps (*"within 24 hours"*, *"immediate action required"*).
+- **Authority Impersonation:** Flags unauthorized claims of institutional leadership (*Dean, Chancellor, IT Support, Security Desk*).
+- **Financial & Credential Baiting:** Identifies wire transfer requests, password verification traps, and extortion language.
+
+### D. Static Attachment Malware Forensics
+- **Zero-Execution Guarantee:** Analyzes binaries strictly in memory buffers without executing untrusted files on the host OS.
+- **Magic Byte Verification:** Validates file signatures (`MZ` for PE executables, `ELF` headers) against declared MIME types.
+- **Double Extension Cloaking:** Detects obfuscated filenames (e.g., `document.pdf.exe`, `invoice.xlsx.vbs`).
+- **Binary Entropy & Script Scanning:** Measures file byte entropy and scans for embedded script execution tags (`powershell`, `cmd`, `eval()`).
+
+### E. Passive Image Forensics
+- **EXIF Metadata Extraction:** In-memory decoding of EXIF tags (Camera Make, Software, GPS Coordinates, Timestamp).
+- **Anomaly Detection:** Flags compression quality variance and embedded script blocks within image binary streams.
+
+---
+
+## 3. System Architecture & Processing Flow
+
+```
+[ Email Ingestion: Manual Input / File Intake / Background IMAP SSL ]
+                              │
+                              ▼
+           [ SafeMIMEParser (RFC 822 Decomposition) ]
+                              │
+                              ▼
+           [ IngestedMessage State (CLAIMED -> PROCESSING) ]
+                              │
+                              ▼
+            ┌─────────────────┴─────────────────┐
+            │       UnifiedRiskEngine           │
+            ├───────────────────────────────────┤
+            │ • BullyingDetector (TF-IDF + ML)  │
+            │ • PhishingDetector (Typosquatting)│
+            │ • SocialEngineeringDetector       │
+            │ • AttachmentAnalyzer (Magic Bytes)│
+            │ • ImageForensicsAnalyzer (EXIF)   │
+            └─────────────────┬─────────────────┘
+                              │
+                              ▼
+        [ Multi-Vector Risk Aggregation & Explainable Scoring ]
+                              │
+                              ▼
+         [ AnalysisModel (Encrypted Relational Persistence) ]
+                              │
+                              ▼
+       [ SOC Dashboard • Incident Workflow • Warning Dispatch ]
+```
+
+---
+
+## 4. Threat Analyzer & Investigation Console
+
+The Digital Forensic Investigation Console (`/dashboard#tab-analyze`) provides interactive threat investigation:
+- **Intake Form:** Subject, Sender Identity, Target Recipient, and Message Body Payload.
+- **Compact Attachment Controls:** Memory-safe file attachments and image uploads for static inspection.
+- **Engine Selection:**
+  - **`NORMAL` Mode (Default):** Runs the full multi-vector ML classifier and forensic rule engine, persisting results to the database and updating SOC telemetry.
+  - **`AI` Mode (Optional / Experimental):** Provides on-demand zero-shot semantic threat classification via OpenRouter, displaying an isolated evaluation card without writing persistent database records.
+- **Explainable Result Card:** Displays Threat Detection status, Severity badge, Confidence score, Threat Categories, and human-readable forensic justification indicators.
+
+---
+
+## 5. Autonomous Synchronization & Concurrency Leases
+
+BullyMail implements a robust, distributed background ingestion daemon (`bullymail/worker/daemon.py`):
+- **15-Second Polling Cycle:** Regularly checks active institutional mailboxes across registered tenants.
+- **IMAP Delta Optimization:** Connects over SSL on port 993, tracks `UIDVALIDITY`, queries `MAX(imap_uid)` from `ingested_messages`, and downloads only `UID > last_known_uid`, achieving sub-3-second sync times per mailbox.
+- **Atomic Concurrency Leases:** Uses atomic conditional SQL updates with a 2-minute time-to-live (`sync_lease_expires_at = NOW() + 2 minutes`) to prevent concurrent worker collisions without external distributed lock managers.
+- **Telemetry Heartbeat & Auto-Healing:** Active batch processing renews lease timestamps. If an unexpected process crash occurs, expired leases are automatically recovered on the subsequent polling cycle.
+- **Strict `try...finally` Guarantees:** Guarantees that `release_sync_lease()` is unconditionally executed upon completion or error, ensuring mailboxes never remain trapped in a `"Syncing..."` state.
+
+---
+
+## 6. Multi-Tenant Database & Security Architecture
+
+### Relational Schema Design
+- `institutions`: Multi-tenant organization boundaries and domain configurations.
+- `users`: User identities with cryptographic password hashes, verification state, and RBAC tiers (`admin`, `analyst`, `operator`).
+- `email_config`: Institutional mailbox settings, encrypted credentials, sync statuses, and lease locks.
+- `ingested_messages`: Raw message tracking, IMAP UIDs, folder `UIDVALIDITY`, and processing states.
+- `analyzed_emails`: Structured forensic reports, multi-vector scores, severity levels, and incident review statuses.
+- `audit_logs`: Immutable audit trails for administrative decisions and security events.
+
+### Cryptographic Security & Credential Protection
+- **Fernet Symmetric Encryption:** Mailbox app-passwords stored in `email_config` are encrypted at rest using AES-128-CBC with HMAC-SHA256 authenticated integrity.
+- **PBKDF2 Key Derivation:** Cryptographic keys are derived from `BULLYMAIL_MASTER_KEY` using PBKDF2 with SHA-256 and 100,000 salt iterations.
+- **Password Hashing:** User passwords are encrypted with salted PBKDF2-HMAC-SHA256 hashes.
+- **API Rate Limiting:** Sliding-window rate limiters defend authentication routes against brute-force attacks and credential stuffing.
+
+---
+
+## 7. Installation & Quick Start
 
 ### Prerequisites
-- Python 3.8+ installed on Windows / Linux / macOS.
-- (Optional) MySQL 5.7+ / 8.0+ server (SQLite fallback works automatically without setup).
+- Python 3.10 or higher
+- Git
+- MySQL 8.0+ (Optional: SQLite is used automatically in development mode)
 
-### 1. Installation
-Run the automated batch file or follow manual steps:
+### 1. Clone the Repository
 ```bash
-# Windows (Automated Virtual Environment & Dependency Setup)
-Install_Dependencies.bat
+git clone https://github.com/jayachandra2003/BullyMail-Threat-Intelligence.git
+cd BullyMail-Threat-Intelligence
+```
 
-# Or Manual Setup:
+### 2. Create and Activate Virtual Environment
+```bash
+# Windows
 python -m venv venv
-venv\Scripts\activate
+.\venv\Scripts\activate
+
+# Linux / macOS
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 3. Install Dependencies
+```bash
 pip install -r requirements.txt
-python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')"
 ```
 
-### 2. Configuration (`.env`)
-Copy `.env.example` to `.env` and adjust configuration values:
-```env
-FLASK_ENV=development
-SECRET_KEY=bullymail_v2_secure_secret_key_2026
-
-# Administrator Credentials
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=your_secure_password_here
-
-# Database Configuration (MySQL or local SQLite fallback)
-DB_TYPE=mysql
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=root
-DB_NAME=bullymail_db
-```
-*(If MySQL is not running or credentials differ, BullyMail automatically transitions to local SQLite without crashing).*
-
-### 3. Database Initialization (MySQL)
-If using MySQL, run:
+### 4. Configure Environment Variables
+Copy `.env.example` to `.env` and configure your settings:
 ```bash
-mysql -u root -p < database_setup.sql
+cp .env.example .env
 ```
 
-### 4. Running the Application
-
-#### Option A: Production WSGI Server (Waitress)
+Generate a secure master encryption key:
 ```bash
-# Windows Production Launcher:
-Run_BullyMail_Production.bat
-
-# Or Manual WSGI Startup:
-python wsgi.py
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
+Place the output in `.env` under `BULLYMAIL_MASTER_KEY`.
 
-#### Option B: Development / Local Demo Server
+### 5. Start the Application
 ```bash
-# Windows Development Launcher:
-Run_BullyMail.bat
-
-# Or Manual Python:
-python run.py
+# Start Flask Web Application
+python app.py
 ```
-Access the application at **`http://localhost:5000`**.
+Open your browser and navigate to: `http://localhost:5000`
 
-Administrator Authentication:
-* Initial administrator credentials are set via `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env`.
-* If `ADMIN_PASSWORD` is omitted during local development startup, a secure temporary password is automatically generated and displayed in the startup console banner.
+### 6. (Optional) Run the Autonomous Background Worker
+In a separate terminal:
+```bash
+python -m bullymail.worker.daemon
+```
 
 ---
 
-## 🧪 Automated Testing
-BullyMail V2 includes automated test coverage with Pytest:
-```bash
-pytest tests/ -v
-```
-Tests cover:
-- Authentication, password hashing, and brute-force rate limiting.
-- Atomic model and vectorizer loading integrity.
-- All 6 threat detectors individually.
-- Unified Risk Engine and API endpoints.
-- 64-case adversarial stress matrix and realistic scenario test cases.
+## 8. Environment Variables Reference
+
+| Variable Name | Description | Default / Example |
+|---|---|---|
+| `FLASK_ENV` | Application environment (`development` / `production`) | `development` |
+| `SECRET_KEY` | Flask session encryption secret | *Random secret string* |
+| `BULLYMAIL_MASTER_KEY` | Base64 Fernet key for encrypting mailbox credentials | *Base64 32-byte key* |
+| `DB_TYPE` | Relational database engine (`sqlite` or `mysql`) | `sqlite` |
+| `SQLITE_DB_PATH` | SQLite database file path | `bullymail.db` |
+| `DB_HOST` / `DB_PORT` | MySQL connection host and port | `localhost` / `3306` |
+| `DB_USER` / `DB_PASSWORD` | MySQL database user and password | `root` / `password` |
+| `DB_NAME` | MySQL database name | `bullymail_db` |
+| `WORKER_POLL_INTERVAL` | Autonomous worker polling frequency in seconds | `15` |
+| `OPENROUTER_API_KEY` | *(Optional)* API key for experimental AI evaluation mode | `sk-or-v1-...` |
 
 ---
 
-## 📁 Project Architecture
+## 9. Automated Testing & Verification
+
+BullyMail maintains a rigorous test suite of **256 automated unit and integration tests** verifying all forensic engines, cryptographic services, database migrations, IMAP sync protocols, and concurrency leases.
+
+Run the test suite:
+```bash
+# Run complete test suite in quiet mode
+pytest -q
+
+# Run specific forensic tests
+pytest tests/test_risk_engine.py tests/test_ml_models.py -v
+
+# Run concurrency and worker daemon tests
+pytest tests/test_worker_daemon.py tests/test_phase1d_mailbox_management.py -v
+```
+
+---
+
+## 10. Repository Directory Layout
 
 ```
 bullymail/
-├── config.py             # Centralized environment configuration
-├── database/             # Dual DB connection pool (MySQL + SQLite)
-├── models/               # Data access objects (User, Analysis)
-├── routes/               # Modular Flask Blueprints (auth, analysis, models, datasets, reports, email)
-├── services/             # 6 Threat detection engines + Unified Risk Engine + XAI
-├── static/               # Modern CSS & modular JS
-└── templates/            # Jinja2 templates (index, login, dashboard, printable reports)
-archive/
-└── v1/                   # Archived legacy V1 monolithic reference files
+├── config.py                 # Configuration loader & environment bindings
+├── database/
+│   ├── connection.py         # Dynamic SQLite/MySQL connection pool & dialect abstraction
+│   ├── schema.py             # DDL table definitions & foreign key constraints
+│   └── migrations.py         # Schema migration & upgrade routines
+├── models/
+│   ├── analysis.py           # Analyzed email persistence & queries
+│   ├── ingested_message.py   # Raw ingested message state model
+│   ├── institution.py        # Tenant workspace model
+│   ├── user.py               # User authentication & RBAC model
+│   └── model_registry.py     # ML model registry & persistence
+├── routes/
+│   ├── admin.py              # SOC administrative decision & warning APIs
+│   ├── analysis.py           # Threat analysis intake & dispatch APIs
+│   ├── auth.py               # Authentication, registration & session routes
+│   ├── email_integration.py  # Mailbox configuration & sync endpoints
+│   └── models.py             # Model Studio retraining & evaluation APIs
+├── services/
+│   ├── bullying_detector.py  # Hybrid TF-IDF NLP cyberbullying engine
+│   ├── phishing_detector.py  # Phishing, URL entropy & typosquatting engine
+│   ├── social_eng_detector.py# Social engineering intent detector
+│   ├── attachment_analyzer.py# Static binary attachment malware analyzer
+│   ├── image_forensics.py    # Passive EXIF metadata & image forensic analyzer
+│   ├── risk_engine.py        # Unified multi-vector risk aggregation engine
+│   ├── imap_client.py        # Secure IMAP SSL client with delta UID tracking
+│   ├── mime_parser.py        # Memory-safe streaming RFC 822 MIME parser
+│   ├── crypto_service.py     # Fernet AES-128 credential encryption service
+│   ├── auth_email_service.py # Transactional SMTP notification dispatcher
+│   ├── email_service.py      # Mailbox management & atomic sync lease coordinator
+│   ├── llm_threat_analyzer.py# Optional AI/LLM threat evaluation service
+│   └── rate_limiter.py       # Sliding-window token bucket rate limiter
+├── worker/
+│   ├── daemon.py             # Autonomous background polling daemon
+│   └── processor.py          # Mailbox processor with lease enforcement
+static/
+├── css/                      # Dark SOC & Light theme stylesheets
+└── js/                       # Dashboard telemetry, stream renderer & charts
+templates/                    # Jinja2 HTML dashboard & authentication views
+tests/                        # 256 automated pytest test suites
 ```
 
 ---
 
-## 📄 Documentation Reference
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** — Architectural design and threat pipeline data flow.
-- **[SECURITY.md](SECURITY.md)** — Threat model, security controls, and safe file handling.
-- **[ML_METHODOLOGY.md](ML_METHODOLOGY.md)** — NLP methodology, metric calculation, and XAI.
-- **[API_DOCUMENTATION.md](API_DOCUMENTATION.md)** — REST API endpoint reference.
+## 11. Future Enhancements
+
+- **Graph-Based Threat Correlation:** Temporal correlation of multi-stage attack campaigns across multiple senders and recipient clusters.
+- **Automated SOC Remediation Playbooks:** Configurable webhook triggers to automatically quarantine high-risk senders in upstream institutional mail gateways.
+- **Comparative AI Reasoning:** Extended benchmarking of zero-shot large language models alongside lightweight supervised linear models.
+
+---
+
+## 12. License & Academic Disclaimer
+
+BullyMail is developed for academic research and defensive cybersecurity operations. It enforces zero-execution static analysis and strict in-memory parsing to ensure safe forensic evaluation of untrusted data.
