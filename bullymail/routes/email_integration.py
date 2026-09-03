@@ -292,13 +292,11 @@ def sync_mailbox(current_user, mailbox_id):
     if not lease_id:
         return jsonify({'success': False, 'error': 'Synchronization lease currently held by another process. Please wait.'}), 409
 
+    summary = None
     try:
         summary = mailbox_processor.process_mailbox(mb, lease_id=lease_id, return_summary=True)
-        final_status = 'OK' if summary.get('success') else 'ERROR'
-        email_service.release_sync_lease(mailbox_id, lease_id, final_status=final_status)
         return jsonify(summary)
     except Exception as e:
-        email_service.release_sync_lease(mailbox_id, lease_id, final_status='ERROR')
         return jsonify({
             'success': False,
             'emails_found': 0,
@@ -309,6 +307,10 @@ def sync_mailbox(current_user, mailbox_id):
             'status': 'ERROR',
             'error': str(e)
         }), 500
+    finally:
+        final_status = 'OK' if (summary and summary.get('success')) else 'ERROR'
+        last_err = (summary.get('error') if summary else None)
+        email_service.release_sync_lease(mailbox_id, lease_id, final_status=final_status, last_error=last_err)
 
 @email_bp.route('/api/institutions/<int:inst_id>/sync-all', methods=['POST'])
 @require_role('admin')
@@ -333,11 +335,9 @@ def sync_all_institution_mailboxes(current_user, inst_id):
             results.append({'mailbox_id': mb_id, 'status': 'SKIPPED_LOCKED'})
             continue
 
+        summary = None
         try:
             summary = mailbox_processor.process_mailbox(mb, lease_id=lease_id, return_summary=True)
-            final_status = 'OK' if summary.get('success') else 'ERROR'
-            email_service.release_sync_lease(mb_id, lease_id, final_status=final_status)
-
             if summary.get('success'):
                 total_processed += summary.get('emails_processed', 0)
                 total_threats += summary.get('threats_detected', 0)
@@ -346,9 +346,12 @@ def sync_all_institution_mailboxes(current_user, inst_id):
                 failures += 1
             results.append(summary)
         except Exception as e:
-            email_service.release_sync_lease(mb_id, lease_id, final_status='ERROR')
             failures += 1
             results.append({'mailbox_id': mb_id, 'status': 'ERROR', 'error': str(e)})
+        finally:
+            final_status = 'OK' if (summary and summary.get('success')) else 'ERROR'
+            last_err = (summary.get('error') if summary else None)
+            email_service.release_sync_lease(mb_id, lease_id, final_status=final_status, last_error=last_err)
 
     return jsonify({
         'success': True,

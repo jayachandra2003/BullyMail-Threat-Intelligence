@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify
 from ..models.user import UserModel
 from ..models.institution import InstitutionModel
+from ..models.analysis import AnalysisModel
+from ..services.admin_warning_service import admin_warning_service
 from .auth import require_role
 
 admin_bp = Blueprint('admin', __name__)
@@ -256,3 +258,203 @@ def sync_admin_mailbox(current_user, mailbox_id):
             raise proc_err
     except Exception as e:
         return jsonify({'success': False, 'error': f"Synchronization error: {e}"}), 500
+
+# =========================================================================
+# Phase 2 Human-In-The-Loop Incident Review & Warning Endpoints (Admin Only)
+# =========================================================================
+
+def _get_scoped_analysis_record(current_user, analysis_id):
+    """Retrieves analysis record enforcing tenant isolation boundaries."""
+    inst_id = current_user.get('institution_id') or 1
+    # Check if analysis exists and matches admin's institution
+    record = AnalysisModel.get_by_id(analysis_id, institution_id=inst_id, role='admin')
+    return record, inst_id
+
+@admin_bp.route('/api/admin/analysis/<int:analysis_id>/warning-preview', methods=['GET'])
+@require_role('admin')
+def get_warning_preview(current_user, analysis_id):
+    """
+    Returns warning preview details, recipient, sender, advisory text,
+    and current incident status for confirmation modal (Admin Only).
+    """
+    record, inst_id = _get_scoped_analysis_record(current_user, analysis_id)
+    if not record:
+        return jsonify({'success': False, 'error': 'Incident record not found or cross-tenant access denied.'}), 404
+
+    preview = admin_warning_service.get_warning_preview(record)
+    last_warning = AnalysisModel.get_last_warning_audit(analysis_id, institution_id=inst_id)
+
+    b = record.get('bullying_analysis') or {}
+    indicators = b.get('rule_based_matches') or []
+    if not indicators and b.get('is_bullying'):
+        indicators = ['NLP linguistic threat pattern']
+
+    return jsonify({
+        'success': True,
+        'preview': preview,
+        'is_already_sent': record.get('incident_status') == 'WARNING_SENT',
+        'last_warning': last_warning,
+        'incident_status': record.get('incident_status', 'PENDING_REVIEW'),
+        'overall_risk_level': record.get('overall_risk_level', 'LOW'),
+        'overall_confidence': record.get('overall_confidence', 0.0),
+        'is_bullying': bool(b.get('is_bullying') or record.get('is_bullying')),
+        'detected_indicators': indicators,
+        'email_subject': record.get('email_subject', 'No Subject'),
+        'email_from': record.get('email_from', 'Unknown'),
+        'email_to': record.get('email_to', ''),
+        'target_recipient': preview['target_recipient'],
+        'warning_from': preview['from_display'],
+        'warning_subject': preview['warning_subject'],
+        'warning_body': preview['warning_body']
+    })
+
+@admin_bp.route('/api/admin/analysis/<int:analysis_id>/warning', methods=['POST'])
+@require_role('admin')
+def send_admin_warning(current_user, analysis_id):
+    """
+    Dispatches a professional advisory warning email to the original sender of a detected harmful email.
+    Enforces duplicate send prevention, tenant isolation, and audit trail recording (Admin Only).
+    """
+    record, inst_id = _get_scoped_analysis_record(current_user, analysis_id)
+    if not record:
+        return jsonify({'success': False, 'error': 'Incident record not found or cross-tenant access denied.'}), 404
+
+    # Duplicate warning prevention
+    if record.get('incident_status') == 'WARNING_SENT':
+        last_audit = AnalysisModel.get_last_warning_audit(analysis_id, institution_id=inst_id)
+        admin_name = last_audit.get('admin_username') if last_audit else 'an administrator'
+        sent_time = last_audit.get('created_at') if last_audit else 'previously'
+        return jsonify({
+            'success': False,
+            'error': f'Warning email has already been dispatched for this incident by {admin_name} ({sent_time}).',
+            'warning_already_sent': True,
+            'status': 'WARNING_SENT'
+        }), 400
+
+    raw_from = record.get('email_from', '')
+    target_recipient = admin_warning_service.extract_clean_email(raw_from)
+    if not target_recipient or '@' not in target_recipient:
+        return jsonify({
+            'success': False,
+            'error': f'Cannot dispatch warning: Original sender email "{raw_from}" is invalid or missing.'
+        }), 400
+
+    data = request.get_json() or {}
+    custom_subject = data.get('subject')
+    custom_body = data.get('body')
+
+    preview = admin_warning_service.get_warning_preview(record)
+    subject_to_send = (custom_subject or preview['warning_subject']).strip()
+    body_to_send = (custom_body or preview['warning_body']).strip()
+
+    # Dispatch outbound warning email via SMTP service
+    send_ok, send_msg = admin_warning_service.send_warning_email(
+        recipient_email=target_recipient,
+        subject=subject_to_send,
+        body=body_to_send
+    )
+
+    if not send_ok:
+        # Failed transmission: do NOT mark incident as WARNING_SENT
+        AnalysisModel.record_audit_action(
+            analysis_id=analysis_id,
+            institution_id=inst_id,
+            admin_id=current_user.get('id', 1),
+            admin_username=current_user.get('username', 'admin'),
+            action='WARNING_ATTEMPT_FAILED',
+            original_sender=raw_from,
+            original_recipient=record.get('email_to'),
+            warning_recipient=target_recipient,
+            warning_subject=subject_to_send,
+            delivery_status='FAILED',
+            reason=send_msg
+        )
+        return jsonify({'success': False, 'error': f"Failed to send warning email: {send_msg}"}), 500
+
+    # Successful transmission: Update incident status to WARNING_SENT
+    AnalysisModel.update_incident_status(analysis_id, 'WARNING_SENT', institution_id=inst_id)
+
+    # Record immutable audit log entry
+    AnalysisModel.record_audit_action(
+        analysis_id=analysis_id,
+        institution_id=inst_id,
+        admin_id=current_user.get('id', 1),
+        admin_username=current_user.get('username', 'admin'),
+        action='WARNING_SENT',
+        original_sender=raw_from,
+        original_recipient=record.get('email_to'),
+        warning_recipient=target_recipient,
+        warning_subject=subject_to_send,
+        delivery_status='SUCCESS',
+        reason='Advisory warning email dispatched to original sender following administrative review.'
+    )
+
+    return jsonify({
+        'success': True,
+        'message': f'Warning email sent successfully to original sender ({target_recipient}).',
+        'status': 'WARNING_SENT',
+        'warning_recipient': target_recipient
+    })
+
+@admin_bp.route('/api/admin/analysis/<int:analysis_id>/review', methods=['POST'])
+@require_role('admin')
+def mark_incident_reviewed(current_user, analysis_id):
+    """Marks an incident as reviewed without sending an email (Admin Only)."""
+    record, inst_id = _get_scoped_analysis_record(current_user, analysis_id)
+    if not record:
+        return jsonify({'success': False, 'error': 'Incident record not found or cross-tenant access denied.'}), 404
+
+    data = request.get_json() or {}
+    note = (data.get('note') or data.get('reason') or '').strip()
+
+    AnalysisModel.update_incident_status(analysis_id, 'REVIEWED', institution_id=inst_id)
+    AnalysisModel.record_audit_action(
+        analysis_id=analysis_id,
+        institution_id=inst_id,
+        admin_id=current_user.get('id', 1),
+        admin_username=current_user.get('username', 'admin'),
+        action='REVIEWED',
+        original_sender=record.get('email_from'),
+        original_recipient=record.get('email_to'),
+        delivery_status='SUCCESS',
+        reason=note or 'Incident reviewed and acknowledged by administrator.'
+    )
+
+    return jsonify({
+        'success': True,
+        'message': 'Incident status updated to REVIEWED.',
+        'status': 'REVIEWED'
+    })
+
+@admin_bp.route('/api/admin/analysis/<int:analysis_id>/false-positive', methods=['POST'])
+@require_role('admin')
+def mark_incident_false_positive(current_user, analysis_id):
+    """Marks an incident as a false positive with an optional reason classification (Admin Only)."""
+    record, inst_id = _get_scoped_analysis_record(current_user, analysis_id)
+    if not record:
+        return jsonify({'success': False, 'error': 'Incident record not found or cross-tenant access denied.'}), 404
+
+    data = request.get_json() or {}
+    reason = (data.get('reason') or data.get('category') or 'Model false positive').strip()
+    notes = (data.get('notes') or '').strip()
+    full_reason = f"{reason}: {notes}" if notes else reason
+
+    AnalysisModel.update_incident_status(analysis_id, 'FALSE_POSITIVE', institution_id=inst_id)
+    AnalysisModel.record_audit_action(
+        analysis_id=analysis_id,
+        institution_id=inst_id,
+        admin_id=current_user.get('id', 1),
+        admin_username=current_user.get('username', 'admin'),
+        action='FALSE_POSITIVE',
+        original_sender=record.get('email_from'),
+        original_recipient=record.get('email_to'),
+        delivery_status='SUCCESS',
+        reason=full_reason
+    )
+
+    return jsonify({
+        'success': True,
+        'message': 'Incident marked as FALSE POSITIVE.',
+        'status': 'FALSE_POSITIVE',
+        'reason': reason
+    })

@@ -17,11 +17,11 @@ class WorkerDaemon:
     """
 
     def __init__(self, poll_interval=None, processor=None):
-        env_interval = os.environ.get('WORKER_POLL_INTERVAL', '300')
+        env_interval = os.environ.get('WORKER_POLL_INTERVAL', '15')
         try:
             self.poll_interval = int(poll_interval) if poll_interval is not None else int(env_interval)
         except ValueError:
-            self.poll_interval = 300
+            self.poll_interval = 15
 
         self.processor = processor or MailboxProcessor()
         self.running = True

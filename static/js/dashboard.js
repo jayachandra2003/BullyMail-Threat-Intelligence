@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initDrawer();
     loadInstitutions();
     loadDashboardStats();
+    loadThreatTrendData('7d');
     loadAnalysisHistory();
     loadModelStatus();
     loadAvailableDatasets();
@@ -63,6 +64,7 @@ function initNavigation() {
             if (activePane) {
                 activePane.style.display = 'block';
                 if (targetTab === 'tab-dashboard') renderCharts();
+                if (targetTab === 'tab-history') loadAnalysisHistory();
                 if (targetTab === 'tab-email') loadSecureMailboxes();
                 if (targetTab === 'tab-pending-approvals') loadPendingRegistrations();
             }
@@ -259,7 +261,20 @@ async function loadDashboardStats() {
                 execSyncEl.textContent = now.toLocaleTimeString('en-US', { hour12: false });
             }
 
+            const headerTimeEl = document.getElementById('headerLastSyncTime');
+            const headerDateEl = document.getElementById('headerLastSyncDate');
+            if (headerTimeEl) {
+                const now = new Date();
+                headerTimeEl.textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                if (headerDateEl) {
+                    headerDateEl.textContent = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                }
+            }
+
             // 2. Threat Posture Hero Card
+            const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+            const isLight = currentTheme === 'light';
+
             const postureScoreEl = document.getElementById('postureScoreNum');
             const postureVal = document.getElementById('postureThreatLevel');
             const posturePill = document.getElementById('postureLevelPill');
@@ -269,31 +284,32 @@ async function loadDashboardStats() {
             let postureTitle = 'LOW RISK POSTURE';
             let posturePillClass = 'soc-pill-safe';
             let postureScore = 96;
-            let postureColor = 'var(--threat-safe, #10b981)';
+            let postureColor = isLight ? '#15803d' : '#10b981';
 
             if (criticals > 0 || totalThreats > 25) {
                 postureTitle = 'CRITICAL THREAT';
                 posturePillClass = 'soc-pill-dominant';
-                postureScore = Math.max(25, 60 - (criticals * 8));
-                postureColor = 'var(--threat-critical, #ef4444)';
+                postureScore = Math.max(25, Math.min(95, Math.round((criticals / Math.max(1, totalThreats)) * 100)));
+                if (postureScore < 25) postureScore = 25;
+                postureColor = isLight ? '#dc2626' : '#ef4444';
                 if (postureSub) postureSub.textContent = `${criticals} critical incident(s) require immediate analyst intervention across monitored communications.`;
             } else if (highs > 0 || totalThreats > 10) {
                 postureTitle = 'ELEVATED THREAT';
                 posturePillClass = 'soc-pill-highest-share';
                 postureScore = Math.max(55, 80 - (highs * 5));
-                postureColor = 'var(--threat-high, #f97316)';
+                postureColor = isLight ? '#ea580c' : '#f97316';
                 if (postureSub) postureSub.textContent = `${highs} high-severity incident(s) flagged across monitored channels.`;
             } else if (totalThreats > 0) {
                 postureTitle = 'MODERATE ACTIVITY';
                 posturePillClass = 'soc-pill-active';
                 postureScore = Math.max(75, 90 - (totalThreats * 2));
-                postureColor = 'var(--threat-medium, #f59e0b)';
+                postureColor = isLight ? '#b45309' : '#f59e0b';
                 if (postureSub) postureSub.textContent = `Low-level suspicious events detected; baseline communications remain stable.`;
             } else {
                 postureTitle = 'LOW RISK POSTURE';
                 posturePillClass = 'soc-pill-safe';
                 postureScore = 98;
-                postureColor = 'var(--threat-safe, #10b981)';
+                postureColor = isLight ? '#15803d' : '#10b981';
                 if (postureSub) postureSub.textContent = `Environment currently shows healthy posture with zero unmitigated threat incidents.`;
             }
 
@@ -304,10 +320,20 @@ async function loadDashboardStats() {
             }
             if (posturePill) {
                 posturePill.className = posturePillClass;
-                posturePill.textContent = postureTitle;
+                posturePill.textContent = (postureTitle === 'CRITICAL THREAT') ? 'CRITICAL' : postureTitle;
             }
             if (postureRatio) {
-                postureRatio.textContent = `${activeVectorCount} Active / ${5 - activeVectorCount} Clear`;
+                postureRatio.textContent = `${activeVectorCount} ACTIVE / ${5 - activeVectorCount} CLEAR`;
+            }
+
+            // Radial Gauge Circle Animation
+            const gaugeCircle = document.getElementById('postureGaugeCircle');
+            if (gaugeCircle) {
+                const circumference = 251.2;
+                const offset = circumference - (circumference * (postureScore / 100));
+                gaugeCircle.style.strokeDashoffset = offset;
+                gaugeCircle.style.stroke = postureColor;
+                gaugeCircle.style.filter = isLight ? 'none' : `drop-shadow(0 0 6px ${postureColor})`;
             }
 
             // Dynamic 5-Vector Coverage Chips in Posture Card
@@ -315,18 +341,23 @@ async function loadDashboardStats() {
                 { label: 'Cyberbullying', count: vBullying, icon: 'fa-user-slash text-danger' },
                 { label: 'Phishing', count: vPhishing, icon: 'fa-fish text-warning' },
                 { label: 'Risky Links', count: vUrls, icon: 'fa-link text-info' },
-                { label: 'Malware Risk', count: vMalware, icon: 'fa-bug text-danger' },
-                { label: 'Social Eng.', count: vSocialEng, icon: 'fa-user-shield text-warning' }
+                { label: 'Social Engineering', count: vSocialEng, icon: 'fa-user-shield text-purple' },
+                { label: 'Malware Risk', count: vMalware, icon: 'fa-bug text-danger' }
             ];
             const vecContainer = document.getElementById('postureVectorsQuickState');
             if (vecContainer) {
                 vecContainer.innerHTML = quickVectors.map(v => {
                     const isActive = v.count > 0;
-                    const badgeClass = isActive ? 'soc-pill-active' : 'soc-pill-clear';
+                    let badgeClass = 'soc-pill-clear';
+                    if (isActive) {
+                        if (v.label === 'Cyberbullying') badgeClass = 'soc-pill-dominant';
+                        else if (v.label === 'Phishing') badgeClass = 'soc-pill-highest-share';
+                        else badgeClass = 'soc-pill-active';
+                    }
                     const badgeText = isActive ? `${v.count} ACTIVE` : 'CLEAR';
                     return `<div class="soc-posture-vector-chip font-mono">
                         <span class="text-truncate me-1"><i class="fas ${v.icon} me-1"></i>${escapeHtml(v.label)}</span>
-                        <span class="${badgeClass} flex-shrink-0" style="font-size: 0.6rem; padding: 1px 5px; white-space: nowrap;">${badgeText}</span>
+                        <span class="${badgeClass} flex-shrink-0" style="font-size: 0.6rem; padding: 2px 6px; white-space: nowrap;">${badgeText}</span>
                     </div>`;
                 }).join('');
             }
@@ -339,7 +370,7 @@ async function loadDashboardStats() {
             setVal('sevNumLow', lows);
 
             const sevTotalEl = document.getElementById('postureSeverityTotal');
-            if (sevTotalEl) sevTotalEl.textContent = `${totalSeverityCount} Analyzed`;
+            if (sevTotalEl) sevTotalEl.textContent = `${totalSeverityCount} ANALYZED`;
 
             const calcPct = (cnt) => totalSeverityCount > 0 ? ((cnt / totalSeverityCount) * 100).toFixed(1) : 0;
             const critBar = document.getElementById('sevSegCrit');
@@ -347,10 +378,22 @@ async function loadDashboardStats() {
             const medBar = document.getElementById('sevSegMed');
             const lowBar = document.getElementById('sevSegLow');
 
-            if (critBar) critBar.style.width = `${calcPct(criticals)}%`;
-            if (highBar) highBar.style.width = `${calcPct(highs)}%`;
-            if (medBar) medBar.style.width = `${calcPct(meds)}%`;
-            if (lowBar) lowBar.style.width = totalSeverityCount === 0 ? '100%' : `${calcPct(lows)}%`;
+            const setSeg = (el, pct, isDefaultLow = false) => {
+                if (!el) return;
+                const numPct = parseFloat(pct) || 0;
+                if (numPct <= 0 && !isDefaultLow) {
+                    el.style.width = '0%';
+                    el.style.display = 'none';
+                } else {
+                    el.style.width = isDefaultLow ? '100%' : `${numPct}%`;
+                    el.style.display = 'block';
+                }
+            };
+
+            setSeg(critBar, calcPct(criticals));
+            setSeg(highBar, calcPct(highs));
+            setSeg(medBar, calcPct(meds));
+            setSeg(lowBar, totalSeverityCount === 0 ? 0 : calcPct(lows), totalSeverityCount === 0);
 
             window.dashboardStatsData = s;
             renderSeverityMatrix(s.risk_distribution || {});
@@ -372,8 +415,9 @@ async function loadDashboardStats() {
         if (window.SOCToast) SOCToast.error(`Error loading stats: ${e.message}`, 'Network Error');
     }
 
-    // Load live stream and pending registrations
+    // Load live stream, threat trend data, and pending registrations
     loadLiveThreatStream();
+    loadThreatTrendData();
     loadPendingRegistrations();
 }
 
@@ -821,7 +865,6 @@ async function loadLiveThreatStream() {
                 `;
             });
             container.innerHTML = html;
-            renderThreatTrendChart(data.history);
         } else {
             window.recentAnalysisHistory = [];
             container.innerHTML = `
@@ -830,78 +873,71 @@ async function loadLiveThreatStream() {
                     <div class="small font-mono">No threat incidents recorded in stream yet. System idle.</div>
                 </div>
             `;
-            renderThreatTrendChart([]);
         }
     } catch (e) {
         console.error('Error loading live threat stream:', e);
     }
 }
 
-function renderThreatTrendChart(historyData) {
+function handleTrendRangeChange(range) {
+    loadThreatTrendData(range);
+}
+
+async function loadThreatTrendData(range = '7d') {
+    if (!range) {
+        range = document.getElementById('trendTimeRangeSelect')?.value || '7d';
+    }
+    const selectEl = document.getElementById('trendTimeRangeSelect');
+    if (selectEl && selectEl.value !== range) {
+        selectEl.value = range;
+    }
+    try {
+        const res = await fetch(`/api/threat-trend?range=${encodeURIComponent(range)}`);
+        const data = await res.json();
+        if (data.success) {
+            window.currentThreatTrendData = data;
+            renderThreatTrendChart(data);
+        }
+    } catch (e) {
+        console.error('Error loading threat trend telemetry:', e);
+    }
+}
+
+function renderThreatTrendChart(trendData) {
     const canvas = document.getElementById('threatTrendCanvas');
     if (!canvas || typeof Chart === 'undefined') return;
 
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
     const isLight = currentTheme === 'light';
 
-    const items = (historyData || []).slice().reverse();
     let labels = [];
     let totalSeries = [];
     let highRiskSeries = [];
 
-    if (items.length === 0) {
-        labels = ['T-4', 'T-3', 'T-2', 'T-1', 'Now'];
-        totalSeries = [0, 0, 0, 0, 0];
-        highRiskSeries = [0, 0, 0, 0, 0];
+    if (trendData && Array.isArray(trendData.labels) && trendData.labels.length > 0) {
+        labels = trendData.labels;
+        totalSeries = trendData.total_series || [];
+        highRiskSeries = trendData.high_threat_series || [];
     } else {
-        const count = Math.min(items.length, 10);
-        const sliced = items.slice(-count);
-        sliced.forEach((item, idx) => {
-            let tLabel = item.created_at ? (item.created_at.split(' ')[1] || item.created_at) : `T-${count - idx}`;
-            if (tLabel.length > 8) tLabel = tLabel.substring(0, 5);
-            labels.push(tLabel);
-            const isHigh = item.overall_risk_level === 'HIGH' || item.overall_risk_level === 'CRITICAL' || item.is_bullying === 1;
-            totalSeries.push(1);
-            highRiskSeries.push(isHigh ? 1 : 0);
-        });
+        labels = ['T-6', 'T-5', 'T-4', 'T-3', 'T-2', 'T-1', 'Now'];
+        totalSeries = [0, 0, 0, 0, 0, 0, 0];
+        highRiskSeries = [0, 0, 0, 0, 0, 0, 0];
     }
 
-    let cumTotal = [];
-    let cumHigh = [];
-    let runningTotal = 0;
-    let runningHigh = 0;
-    totalSeries.forEach((v, i) => {
-        runningTotal += v;
-        runningHigh += highRiskSeries[i];
-        cumTotal.push(runningTotal);
-        cumHigh.push(runningHigh);
-    });
-
-    const trendBadge = document.getElementById('threatTrendStatusBadge');
-    if (trendBadge) {
-        if (items.length === 0) {
-            trendBadge.className = 'soc-pill-safe';
-            trendBadge.textContent = 'STABLE POSTURE';
-        } else {
-            const recentHighCount = items.slice(-5).filter(x => x.overall_risk_level === 'HIGH' || x.overall_risk_level === 'CRITICAL' || x.is_bullying === 1).length;
-            if (recentHighCount >= 3) {
-                trendBadge.className = 'soc-pill-dominant';
-                trendBadge.textContent = 'ELEVATED TREND';
-            } else if (recentHighCount > 0) {
-                trendBadge.className = 'soc-pill-highest-share';
-                trendBadge.textContent = 'MODERATE ACTIVITY';
-            } else {
-                trendBadge.className = 'soc-pill-safe';
-                trendBadge.textContent = 'STABLE POSTURE';
-            }
-        }
-    }
-
-    const gridColor = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.06)';
-    const textColor = isLight ? '#64748b' : '#94a3b8';
+    const gridColor = isLight ? 'rgba(15, 23, 42, 0.06)' : 'rgba(255, 255, 255, 0.04)';
+    const textColor = isLight ? '#536176' : '#94a3b8';
 
     if (threatTrendChart) {
         threatTrendChart.destroy();
+    }
+
+    const ctx = canvas.getContext('2d');
+    let purpleGradient = isLight ? 'rgba(59, 130, 246, 0.06)' : 'rgba(129, 140, 248, 0.15)';
+    if (ctx) {
+        const g = ctx.createLinearGradient(0, 0, 0, 220);
+        g.addColorStop(0, isLight ? 'rgba(59, 130, 246, 0.18)' : 'rgba(99, 102, 241, 0.35)');
+        g.addColorStop(1, isLight ? 'rgba(59, 130, 246, 0.0)' : 'rgba(99, 102, 241, 0.0)');
+        purpleGradient = g;
     }
 
     threatTrendChart = new Chart(canvas, {
@@ -911,27 +947,31 @@ function renderThreatTrendChart(historyData) {
             datasets: [
                 {
                     label: 'Total Ingested',
-                    data: cumTotal,
-                    borderColor: isLight ? '#4f46e5' : '#818cf8',
-                    backgroundColor: isLight ? 'rgba(79, 70, 229, 0.07)' : 'rgba(129, 140, 248, 0.12)',
-                    borderWidth: 2,
+                    data: totalSeries,
+                    borderColor: isLight ? '#3b82f6' : '#818cf8',
+                    backgroundColor: purpleGradient,
+                    borderWidth: 2.5,
                     fill: true,
-                    tension: 0.35,
-                    pointRadius: 3,
-                    pointHoverRadius: 5,
-                    pointBackgroundColor: isLight ? '#4f46e5' : '#818cf8'
+                    tension: 0.38,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: isLight ? '#3b82f6' : '#818cf8',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 1
                 },
                 {
                     label: 'High/Critical Threats',
-                    data: cumHigh,
+                    data: highRiskSeries,
                     borderColor: isLight ? '#dc2626' : '#ef4444',
-                    backgroundColor: isLight ? 'rgba(220, 38, 38, 0.07)' : 'rgba(239, 68, 68, 0.12)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.35,
-                    pointRadius: 3,
-                    pointHoverRadius: 5,
-                    pointBackgroundColor: isLight ? '#dc2626' : '#ef4444'
+                    backgroundColor: 'transparent',
+                    borderWidth: 2.5,
+                    fill: false,
+                    tension: 0.38,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: isLight ? '#dc2626' : '#ef4444',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 1
                 }
             ]
         },
@@ -944,36 +984,37 @@ function renderThreatTrendChart(historyData) {
             },
             plugins: {
                 legend: {
-                    display: true,
-                    position: 'top',
-                    align: 'end',
-                    labels: {
-                        color: textColor,
-                        font: { family: 'JetBrains Mono', size: 10 },
-                        boxWidth: 10,
-                        usePointStyle: true
-                    }
+                    display: false
                 },
                 tooltip: {
-                    backgroundColor: isLight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(12, 18, 32, 0.96)',
-                    titleColor: isLight ? '#0f172a' : '#f8fafc',
-                    bodyColor: isLight ? '#334155' : '#cbd5e1',
-                    borderColor: isLight ? '#cbd5e1' : 'rgba(255, 255, 255, 0.12)',
+                    backgroundColor: isLight ? '#ffffff' : '#0d1424',
+                    titleColor: isLight ? '#172033' : '#f8fafc',
+                    bodyColor: isLight ? '#536176' : '#cbd5e1',
+                    borderColor: isLight ? '#d9e1ea' : 'rgba(255, 255, 255, 0.1)',
                     borderWidth: 1,
-                    padding: 8,
-                    titleFont: { family: 'JetBrains Mono', size: 11 },
-                    bodyFont: { family: 'JetBrains Mono', size: 10 }
+                    padding: 10,
+                    boxPadding: 4,
+                    usePointStyle: true,
+                    bodyFont: { family: 'JetBrains Mono', size: 11 },
+                    titleFont: { family: 'Inter', size: 12, weight: '700' }
                 }
             },
             scales: {
                 x: {
-                    grid: { color: gridColor },
-                    ticks: { color: textColor, font: { family: 'JetBrains Mono', size: 9 } }
+                    grid: { color: gridColor, drawBorder: false },
+                    ticks: {
+                        color: textColor,
+                        font: { family: 'JetBrains Mono', size: 10 }
+                    }
                 },
                 y: {
-                    beginAtZero: true,
-                    grid: { color: gridColor },
-                    ticks: { color: textColor, font: { family: 'JetBrains Mono', size: 9 }, precision: 0 }
+                    grid: { color: gridColor, drawBorder: false },
+                    ticks: {
+                        color: textColor,
+                        font: { family: 'JetBrains Mono', size: 10 },
+                        stepSize: 2
+                    },
+                    beginAtZero: true
                 }
             }
         }
@@ -1007,14 +1048,14 @@ function handleCommandCenterRefresh() {
 function renderThreatIntelligenceCommandCenter(s) {
     const mainLandscape = document.getElementById('threatCenterLandscapeMain');
     const sideTelemetry = document.getElementById('threatCenterSideTelemetry');
-    if (!mainLandscape || !sideTelemetry) return;
+    if (!mainLandscape) return;
 
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
     const isLight = currentTheme === 'light';
 
-    const textMainColor = isLight ? '#090d16' : '#f8fafc';
-    const textSubColor = isLight ? '#1e293b' : '#cbd5e1';
-    const textMuteColor = isLight ? '#52637f' : '#94a3b8';
+    const textMainColor = isLight ? '#172033' : '#f8fafc';
+    const textSubColor = isLight ? '#536176' : '#cbd5e1';
+    const textMuteColor = isLight ? '#7a8799' : '#94a3b8';
 
     const vBullying = s.bullying_detected || 0;
     const vPhishing = s.phishing_detected || 0;
@@ -1053,10 +1094,13 @@ function renderThreatIntelligenceCommandCenter(s) {
 
     // Render Left Section: Clean Ranked Multi-Vector Distribution
     let rowsHtml = '';
+    const rankColors = isLight ? ['#dc2626', '#ea580c', '#d97706', '#7c3aed', '#15803d'] : ['#ef4444', '#f97316', '#f59e0b', '#a78bfa', '#10b981'];
+
     vectorList.forEach((v, idx) => {
         const isActive = v.count > 0;
         const isDominant = dominantVector && dominantVector.key === v.key;
         const rankStr = `0${idx + 1}`;
+        const rankColor = isActive ? (rankColors[idx] || textMuteColor) : textMuteColor;
         const pctShare = totalThreats > 0 ? Math.round((v.count / totalThreats) * 100) : 0;
         const trackPct = maxCount > 0 ? Math.max(isActive ? 6 : 0, Math.round((v.count / maxCount) * 100)) : 0;
 
@@ -1068,7 +1112,7 @@ function renderThreatIntelligenceCommandCenter(s) {
 
         rowsHtml += `
             <div class="landscape-vector-row ${isDominant ? 'dominant-row' : ''}">
-                <div class="vector-rank-col">${rankStr}</div>
+                <div class="vector-rank-col" style="color: ${rankColor}; font-weight: 800;">${rankStr}</div>
                 <div class="vector-name-col">
                     <i class="fas ${v.icon}" style="color: ${isActive ? v.color : textMuteColor}; font-size: 0.85rem;"></i>
                     <span>${escapeHtml(v.label)}</span>
@@ -1113,7 +1157,8 @@ function renderThreatIntelligenceCommandCenter(s) {
         summaryText = 'Critical-severity security incidents detected. Immediate review and remediation in forensic drawer recommended.';
     }
 
-    sideTelemetry.innerHTML = `
+    if (sideTelemetry) {
+        sideTelemetry.innerHTML = `
         <!-- Dominant Threat Hero Callout -->
         <div class="mb-3">
             <div class="d-flex justify-content-between align-items-center mb-1">
@@ -1176,13 +1221,14 @@ function renderThreatIntelligenceCommandCenter(s) {
             </div>
         </div>
     `;
+    }
 }
 
 // Observe theme mutations on html[data-theme] to dynamically update chart colors
 const themeObserver = new MutationObserver(() => {
     renderCharts();
-    if (window.recentAnalysisHistory) {
-        renderThreatTrendChart(window.recentAnalysisHistory);
+    if (window.currentThreatTrendData) {
+        renderThreatTrendChart(window.currentThreatTrendData);
     }
 });
 if (document.documentElement) {
@@ -1190,41 +1236,62 @@ if (document.documentElement) {
 }
 
 /* ==========================================================================
-   4. Drag-and-Drop Forensic File Intake Dropzones
+   4. Compact Forensic File Intake & Attachment Controls
    ========================================================================== */
 function initDropzones() {
-    setupDropzone('attachmentDropzone', 'inputAttachments', 'attachmentPreviewList');
-    setupDropzone('imageDropzone', 'inputImages', 'imagePreviewList', true);
+    setupDropzone('btnTriggerAttachFile', 'inputAttachments', 'attachmentPreviewList', false);
+    setupDropzone('btnTriggerAttachImage', 'inputImages', 'imagePreviewList', true);
+
+    // Also support drag-and-drop directly onto message textarea
+    const textarea = document.getElementById('inputEmailText');
+    if (textarea) {
+        ['dragenter', 'dragover'].forEach(name => {
+            textarea.addEventListener(name, (e) => {
+                e.preventDefault();
+                textarea.style.borderColor = 'var(--accent-primary, #3b82f6)';
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(name => {
+            textarea.addEventListener(name, (e) => {
+                e.preventDefault();
+                textarea.style.borderColor = '';
+            });
+        });
+
+        textarea.addEventListener('drop', (e) => {
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                const firstFile = e.dataTransfer.files[0];
+                if (firstFile.type && firstFile.type.startsWith('image/')) {
+                    const imgInput = document.getElementById('inputImages');
+                    if (imgInput) {
+                        imgInput.files = e.dataTransfer.files;
+                        renderFileList(imgInput.files, document.getElementById('imagePreviewList'), true);
+                    }
+                } else {
+                    const attInput = document.getElementById('inputAttachments');
+                    if (attInput) {
+                        attInput.files = e.dataTransfer.files;
+                        renderFileList(attInput.files, document.getElementById('attachmentPreviewList'), false);
+                    }
+                }
+            }
+        });
+    }
 }
 
-function setupDropzone(zoneId, inputId, listId, isImage = false) {
-    const zone = document.getElementById(zoneId);
+function setupDropzone(triggerId, inputId, listId, isImage = false) {
+    const trigger = document.getElementById(triggerId);
     const input = document.getElementById(inputId);
     const list = document.getElementById(listId);
-    if (!zone || !input) return;
+    if (!input) return;
 
-    zone.addEventListener('click', () => input.click());
-
-    ['dragenter', 'dragover'].forEach(name => {
-        zone.addEventListener(name, (e) => {
+    if (trigger) {
+        trigger.addEventListener('click', (e) => {
             e.preventDefault();
-            zone.classList.add('dragover');
+            input.click();
         });
-    });
-
-    ['dragleave', 'drop'].forEach(name => {
-        zone.addEventListener(name, (e) => {
-            e.preventDefault();
-            zone.classList.remove('dragover');
-        });
-    });
-
-    zone.addEventListener('drop', (e) => {
-        if (e.dataTransfer.files.length > 0) {
-            input.files = e.dataTransfer.files;
-            renderFileList(input.files, list, isImage);
-        }
-    });
+    }
 
     input.addEventListener('change', () => {
         renderFileList(input.files, list, isImage);
@@ -1242,16 +1309,139 @@ function renderFileList(files, container, isImage = false) {
         const sizeStr = (file.size / 1024).toFixed(1) + ' KB';
         const safeName = escapeHtml(file.name);
         item.innerHTML = `
-            <span><i class="fas ${isImage ? 'fa-image text-cyan' : 'fa-paperclip text-accent'} me-2"></i><strong class="text-primary-soc">${safeName}</strong> (${sizeStr})</span>
-            <span class="badge-risk SAFE" style="font-size: 0.65rem;">STAGE READY</span>
+            <i class="fas ${isImage ? 'fa-image text-info' : 'fa-paperclip text-accent'}"></i>
+            <strong class="text-primary-soc" style="font-size: 0.74rem;">${safeName}</strong>
+            <span class="text-muted small">(${sizeStr})</span>
+            <span class="badge-risk SAFE ms-1" style="font-size: 0.62rem; padding: 2px 6px;">READY</span>
         `;
         container.appendChild(item);
     });
 }
 
-/* ==========================================================================
-   5. Threat Analyzer Form & Inspection Pipeline
-   ========================================================================== */
+let currentAnalysisEngine = 'normal';
+
+function setThreatAnalyzerEngine(engine) {
+    currentAnalysisEngine = engine;
+    const input = document.getElementById('inputAnalysisEngine');
+    if (input) input.value = engine;
+
+    const btnNormal = document.getElementById('btnEngineNormal');
+    const btnLLM = document.getElementById('btnEngineLLM');
+    const submitBtn = document.getElementById('btnSubmitAnalysis');
+
+    if (engine === 'llm') {
+        btnLLM?.classList.add('active');
+        btnNormal?.classList.remove('active');
+        if (submitBtn) {
+            submitBtn.innerHTML = '<i class="fas fa-brain me-2"></i> INITIATE AI / LLM ANALYSIS';
+        }
+        if (window.SOCToast) SOCToast.info('AI / LLM Mode Activated (NVIDIA Nemotron 3.5 Lightning via OpenRouter).', 'Engine Switched');
+    } else {
+        btnNormal?.classList.add('active');
+        btnLLM?.classList.remove('active');
+        if (submitBtn) {
+            submitBtn.innerHTML = '<i class="fas fa-shield-virus me-2"></i> INITIATE THREAT ANALYSIS';
+        }
+        if (window.SOCToast) SOCToast.info('NORMAL Mode Activated (Standard Multi-Vector Classifier).', 'Engine Switched');
+    }
+}
+
+function renderLLMSecurityReport(rep, container) {
+    const isThreat = Boolean(rep.threat_detected);
+    const severity = (rep.severity || 'LOW').toUpperCase();
+    const conf = Math.round((rep.confidence || 0.85) * 100);
+    const categories = rep.threat_categories || [];
+    const explanation = rep.explanation || (isThreat ? 'Direct threat indicators identified in communication.' : 'No malicious threat vectors identified.');
+    const modelName = rep.model || 'nvidia/nemotron-3.5-lightning:free';
+
+    let sevBadge = '<span class="badge bg-success px-2 py-1 font-mono">LOW</span>';
+    let sevBorderClass = 'border-success';
+    if (severity === 'CRITICAL') {
+        sevBadge = '<span class="badge bg-danger px-2 py-1 font-mono">CRITICAL</span>';
+        sevBorderClass = 'border-danger';
+    } else if (severity === 'HIGH') {
+        sevBadge = '<span class="badge bg-warning text-dark px-2 py-1 font-mono">HIGH</span>';
+        sevBorderClass = 'border-warning';
+    } else if (severity === 'MEDIUM') {
+        sevBadge = '<span class="badge bg-info text-dark px-2 py-1 font-mono">MEDIUM</span>';
+        sevBorderClass = 'border-info';
+    }
+
+    let catBadgesHtml = '<span class="text-muted font-mono small">None (Clean Communication)</span>';
+    if (categories.length > 0) {
+        catBadgesHtml = categories.map(cat => `<span class="badge bg-dark border border-secondary text-accent font-mono me-1 mb-1 px-2 py-1"><i class="fas fa-tag me-1"></i>${escapeHtml(cat)}</span>`).join('');
+    }
+
+    container.innerHTML = `
+        <div class="llm-result-panel p-4 mt-4 animate-fade-in">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 pb-3 mb-3 border-bottom border-subtle">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="soc-card-tag"><i class="fas fa-brain text-accent me-1"></i>AI / LLM ANALYSIS</span>
+                    <h5 class="fw-bold mb-0 text-primary-soc" style="font-size: 1.05rem;">Neural Threat Reasoning Report</h5>
+                </div>
+                <div>
+                    <span class="badge bg-dark border border-secondary text-muted font-mono small">
+                        <i class="fas fa-microchip me-1 text-accent"></i>Model: NVIDIA Nemotron 3.5 Lightning
+                    </span>
+                </div>
+            </div>
+
+            <!-- Key Metrics 4-Column Grid -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-3 col-sm-6">
+                    <div class="soc-panel p-3 h-100 text-center">
+                        <div class="text-muted small font-mono text-uppercase mb-1" style="font-size: 0.68rem; letter-spacing: 0.05em;">Threat Detected</div>
+                        <div class="fs-4 fw-bold font-mono ${isThreat ? 'text-danger' : 'text-success'}">
+                            <i class="fas ${isThreat ? 'fa-triangle-exclamation' : 'fa-check-circle'} me-1"></i>${isThreat ? 'YES' : 'NO'}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="soc-panel p-3 h-100 text-center">
+                        <div class="text-muted small font-mono text-uppercase mb-1" style="font-size: 0.68rem; letter-spacing: 0.05em;">Severity</div>
+                        <div class="fs-5 mt-1">${sevBadge}</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="soc-panel p-3 h-100 text-center">
+                        <div class="text-muted small font-mono text-uppercase mb-1" style="font-size: 0.68rem; letter-spacing: 0.05em;">AI Confidence</div>
+                        <div class="fs-4 fw-bold font-mono text-accent">${conf}%</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="soc-panel p-3 h-100 text-center">
+                        <div class="text-muted small font-mono text-uppercase mb-1" style="font-size: 0.68rem; letter-spacing: 0.05em;">Engine Source</div>
+                        <div class="fs-6 font-mono text-primary-soc mt-1"><i class="fas fa-bolt text-warning me-1"></i>OpenRouter</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Threat Categories -->
+            <div class="soc-panel p-3 mb-3">
+                <div class="text-muted small font-mono text-uppercase mb-2" style="font-size: 0.68rem; letter-spacing: 0.05em;">
+                    <i class="fas fa-layer-group text-accent me-1"></i>Threat Categories
+                </div>
+                <div class="d-flex flex-wrap align-items-center">${catBadgesHtml}</div>
+            </div>
+
+            <!-- AI Forensic Justification -->
+            <div class="soc-panel p-3 mb-3">
+                <div class="text-muted small font-mono text-uppercase mb-2" style="font-size: 0.68rem; letter-spacing: 0.05em;">
+                    <i class="fas fa-quote-left text-accent me-1"></i>AI Forensic Justification & Reasoning
+                </div>
+                <p class="mb-0 text-primary-soc" style="font-size: 0.92rem; line-height: 1.6;">${escapeHtml(explanation)}</p>
+            </div>
+
+            <!-- Evaluation Notice -->
+            <div class="d-flex align-items-center gap-2 text-muted small font-mono pt-2 border-top border-subtle">
+                <i class="fas fa-info-circle text-accent"></i>
+                <span>Evaluated in real-time via OpenRouter API. No persistent database records are written in AI / LLM evaluation mode.</span>
+            </div>
+        </div>
+    `;
+}
+
 function initForms() {
     const analyzeForm = document.getElementById('formAnalyzeEmail');
     if (analyzeForm) {
@@ -1260,6 +1450,61 @@ function initForms() {
             const btn = document.getElementById('btnSubmitAnalysis');
             const resultBox = document.getElementById('analysisResultContainer');
             
+            // -------------------------------------------------------------
+            // AI / LLM Mode Submission Flow
+            // -------------------------------------------------------------
+            if (currentAnalysisEngine === 'llm') {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> ANALYZING WITH AI / LLM...';
+
+                resultBox.innerHTML = `
+                    <div class="soc-panel p-5 text-center mt-4">
+                        <div class="mb-3">
+                            <i class="fas fa-brain fa-3x text-accent" style="animation: criticalPulse 1.5s infinite;"></i>
+                        </div>
+                        <h5 class="text-primary-soc mb-2">Executing AI / LLM Threat Reasoning</h5>
+                        <p class="text-muted small mb-0">Querying NVIDIA Nemotron 3.5 Lightning via OpenRouter for high-recall threat intelligence...</p>
+                    </div>
+                `;
+                resultBox.style.display = 'block';
+                resultBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+                try {
+                    const formData = new FormData(analyzeForm);
+                    formData.set('engine', 'llm');
+                    const res = await fetch('/api/analyze-email', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await res.json();
+
+                    if (data.success && data.llm_report) {
+                        renderLLMSecurityReport(data.llm_report, resultBox);
+                        if (window.SOCToast) {
+                            const sev = data.llm_report.severity || 'LOW';
+                            if (data.llm_report.threat_detected) {
+                                SOCToast.error(`AI Analysis: ${sev} threat detected.`, 'AI Threat Alert');
+                            } else {
+                                SOCToast.success('AI Analysis: Clean / No threat detected.', 'AI Scan Complete');
+                            }
+                        }
+                    } else {
+                        resultBox.innerHTML = `<div class="alert alert-danger mt-4"><i class="fas fa-exclamation-triangle me-2"></i><strong>AI / LLM Analysis Error:</strong> ${escapeHtml(data.error || 'Failed to process AI threat analysis.')}</div>`;
+                        if (window.SOCToast) SOCToast.error(data.error || 'AI Analysis request failed.', 'AI Error');
+                    }
+                } catch (err) {
+                    resultBox.innerHTML = `<div class="alert alert-danger mt-4"><i class="fas fa-exclamation-circle me-2"></i><strong>AI / LLM Connection Error:</strong> ${escapeHtml(err.message)}</div>`;
+                    if (window.SOCToast) SOCToast.error(err.message, 'Connection Error');
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-brain me-2"></i> INITIATE AI / LLM ANALYSIS';
+                }
+                return;
+            }
+
+            // -------------------------------------------------------------
+            // Normal Mode Submission Flow (Standard Multi-Vector Model)
+            // -------------------------------------------------------------
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-radar fa-spin me-2"></i> EXECUTING MULTI-VECTOR SCAN...';
             
@@ -1277,6 +1522,7 @@ function initForms() {
             
             try {
                 const formData = new FormData(analyzeForm);
+                formData.set('engine', 'normal');
                 const res = await fetch('/api/analyze-email', {
                     method: 'POST',
                     body: formData
@@ -1458,14 +1704,27 @@ function renderSecurityReport(rep, container) {
         scoreColorClass = 'score-color-medium';
     }
 
+    const incidentStatus = (rep.incident_status || 'PENDING_REVIEW').toUpperCase();
+    let statusBadgeHtml = '<span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1" style="font-size: 0.7rem;"><i class="fas fa-clock me-1"></i>PENDING REVIEW</span>';
+    if (incidentStatus === 'WARNING_SENT') {
+        statusBadgeHtml = '<span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1" style="font-size: 0.7rem;"><i class="fas fa-paper-plane me-1"></i>WARNING SENT</span>';
+    } else if (incidentStatus === 'REVIEWED') {
+        statusBadgeHtml = '<span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.7rem;"><i class="fas fa-check-double me-1"></i>REVIEWED</span>';
+    } else if (incidentStatus === 'FALSE_POSITIVE') {
+        statusBadgeHtml = '<span class="badge bg-secondary-subtle text-muted border border-secondary-subtle px-2 py-1" style="font-size: 0.7rem;"><i class="fas fa-shield-slash me-1"></i>FALSE POSITIVE</span>';
+    }
+
+    const isAdmin = (typeof window.currentUserRole !== 'undefined' && window.currentUserRole === 'admin');
+
     let html = `
         <div class="soc-drawer-investigation animate-fade-in">
             <!-- INCIDENT IDENTITY VERDICT HEADER -->
             <div class="soc-drawer-verdict-card mb-4 p-3 rounded">
                 <div class="d-flex justify-content-between align-items-center">
                     <div style="flex: 1; min-width: 0; padding-right: 20px;">
-                        <div class="mb-2">
+                        <div class="mb-2 d-flex align-items-center gap-2 flex-wrap">
                             <span class="badge-risk ${badgeClass}">${risk} RISK VERDICT</span>
+                            ${statusBadgeHtml}
                         </div>
                         <h4 class="mb-1 text-primary-soc text-truncate" style="font-size: 1.15rem; font-weight: 600; line-height: 1.3;" title="${safeSubject}">${safeSubject}</h4>
                         <div class="text-muted small text-truncate" title="${safeFrom}">
@@ -1512,7 +1771,7 @@ function renderSecurityReport(rep, container) {
                     </div>
                     <div class="summary-item">
                         <span class="summary-label">Status</span>
-                        <span class="summary-value"><span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.7rem;">Analyzed</span></span>
+                        <span class="summary-value">${statusBadgeHtml}</span>
                     </div>
                     <div class="summary-item">
                         <span class="summary-label">Case ID</span>
@@ -1720,7 +1979,7 @@ function renderSecurityReport(rep, container) {
             </div>
 
             <!-- SECTION 5 — RECOMMENDED ACTION -->
-            <div class="recommended-action-box p-3 rounded">
+            <div class="recommended-action-box p-3 rounded mb-4">
                 <div class="d-flex align-items-center justify-content-between">
                     <div>
                         <div class="font-weight-bold text-primary-soc mb-1" style="font-size: 0.85rem;">
@@ -1741,6 +2000,77 @@ function renderSecurityReport(rep, container) {
                     </div>` : ''}
                 </div>
             </div>
+
+            <!-- SECTION 6 — ADMIN GOVERNANCE & INTERVENTION (HUMAN-IN-THE-LOOP) -->
+            ${isAdmin && rep.id ? `
+            <div class="soc-panel p-3 mb-4" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px;">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="font-mono text-uppercase mb-0 text-primary-soc" style="font-size: 0.85rem; letter-spacing: 0.05em;">
+                        <i class="fas fa-user-shield text-warning me-2"></i>ADMIN DECISION & ACTION
+                    </h6>
+                    <span class="badge ${incidentStatus === 'WARNING_SENT' ? 'bg-info-subtle text-info' : (incidentStatus === 'REVIEWED' ? 'bg-success-subtle text-success' : (incidentStatus === 'FALSE_POSITIVE' ? 'bg-secondary-subtle text-muted' : 'bg-warning-subtle text-warning'))}">
+                        ${escapeHtml(incidentStatus.replace('_', ' '))}
+                    </span>
+                </div>
+
+                ${incidentStatus === 'WARNING_SENT' ? `
+                    <div class="alert alert-info border border-info-subtle small font-mono mb-3 d-flex align-items-center gap-2">
+                        <i class="fas fa-check-circle text-info"></i>
+                        <div>
+                            <strong>Advisory Warning Dispatched:</strong> A warning notification was already transmitted to the original sender (<code>${safeFrom}</code>).
+                        </div>
+                    </div>
+                ` : ''}
+
+                <div class="d-flex flex-wrap gap-2">
+                    ${incidentStatus !== 'WARNING_SENT' ? `
+                        <button type="button" class="btn-soc-primary btn-sm font-mono d-flex align-items-center gap-2" onclick="openSendWarningModal(${rep.id})">
+                            <i class="fas fa-paper-plane"></i> Send Warning
+                        </button>
+                    ` : `
+                        <button type="button" class="btn-soc-outline btn-sm font-mono text-muted d-flex align-items-center gap-2" disabled title="Warning already dispatched">
+                            <i class="fas fa-check text-success"></i> Warning Already Sent
+                        </button>
+                    `}
+                    <button type="button" class="btn-soc-outline btn-sm font-mono d-flex align-items-center gap-2" onclick="openMarkReviewedModal(${rep.id})">
+                        <i class="fas fa-check-double text-success"></i> Mark Reviewed
+                    </button>
+                    <button type="button" class="btn-soc-outline btn-sm font-mono d-flex align-items-center gap-2" onclick="openFalsePositiveModal(${rep.id})">
+                        <i class="fas fa-shield-slash text-warning"></i> False Positive
+                    </button>
+                </div>
+            </div>
+            ` : ''}
+
+            <!-- SECTION 7 — INCIDENT AUDIT TRAIL -->
+            ${Array.isArray(rep.audit_logs) && rep.audit_logs.length > 0 ? `
+            <div class="mb-4">
+                <h6 class="drawer-section-heading mb-2">
+                    <i class="fas fa-clipboard-list me-1 text-accent"></i> Incident Audit Trail
+                </h6>
+                <div class="soc-panel p-3 font-mono small" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px;">
+                    <div class="d-flex flex-column gap-2">
+                        ${rep.audit_logs.map(log => `
+                            <div class="d-flex justify-content-between align-items-start border-bottom border-secondary-subtle pb-2">
+                                <div>
+                                    <div class="fw-bold text-primary-soc">
+                                        <span class="badge ${log.action === 'WARNING_SENT' ? 'bg-info-subtle text-info' : (log.action === 'REVIEWED' ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary')} me-1">
+                                            ${escapeHtml((log.action || '').replace('_', ' '))}
+                                        </span>
+                                        by <span class="text-accent">${escapeHtml(log.admin_username || 'Admin')}</span>
+                                    </div>
+                                    ${log.reason ? `<div class="text-muted small mt-1">${escapeHtml(log.reason)}</div>` : ''}
+                                    ${log.warning_recipient ? `<div class="text-muted small mt-1">Recipient: <span class="text-primary-soc">${escapeHtml(log.warning_recipient)}</span></div>` : ''}
+                                </div>
+                                <div class="text-muted small text-end" style="white-space: nowrap;">
+                                    ${log.created_at ? new Date(log.created_at).toLocaleString() : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+            ` : ''}
         </div>
     `;
     container.innerHTML = html;
@@ -1869,9 +2199,25 @@ async function loadAvailableDatasets() {
 /* ==========================================================================
    9. Threat Incident Archive (Analysis History Table)
    ========================================================================== */
-async function loadAnalysisHistory(filterRisk = '') {
+function handleHistoryFilterChange() {
+    const risk = document.getElementById('historyRiskSelect')?.value || '';
+    const status = document.getElementById('historyStatusSelect')?.value || '';
+    loadAnalysisHistory(risk, status);
+}
+
+async function loadAnalysisHistory(filterRisk = undefined, filterStatus = undefined) {
     try {
-        const url = filterRisk ? `/api/analysis-history?risk=${encodeURIComponent(filterRisk)}` : '/api/analysis-history';
+        const riskSelect = document.getElementById('historyRiskSelect');
+        const statusSelect = document.getElementById('historyStatusSelect');
+
+        const risk = (filterRisk !== undefined) ? filterRisk : (riskSelect ? riskSelect.value : '');
+        const status = (filterStatus !== undefined) ? filterStatus : (statusSelect ? statusSelect.value : '');
+
+        const params = new URLSearchParams();
+        if (risk) params.append('risk', risk);
+        if (status) params.append('status', status);
+
+        const url = params.toString() ? `/api/analysis-history?${params.toString()}` : '/api/analysis-history';
         const res = await fetch(url);
         const data = await res.json();
         const tbody = document.getElementById('historyTableBody');
@@ -1886,29 +2232,324 @@ async function loadAnalysisHistory(filterRisk = '') {
                 const safeFrom = escapeHtml(item.email_from || 'Unknown');
                 const safeTime = escapeHtml(item.created_at || 'Just now');
                 
+                const itemStatus = (item.incident_status || 'PENDING_REVIEW').toUpperCase();
+                let statusPill = '<span class="badge bg-warning-subtle text-warning border border-warning-subtle ms-1" style="font-size: 0.65rem;">PENDING</span>';
+                if (itemStatus === 'WARNING_SENT') {
+                    statusPill = '<span class="badge bg-info-subtle text-info border border-info-subtle ms-1" style="font-size: 0.65rem;"><i class="fas fa-paper-plane me-1"></i>WARNING SENT</span>';
+                } else if (itemStatus === 'REVIEWED') {
+                    statusPill = '<span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size: 0.65rem;"><i class="fas fa-check-double me-1"></i>REVIEWED</span>';
+                } else if (itemStatus === 'FALSE_POSITIVE') {
+                    statusPill = '<span class="badge bg-secondary-subtle text-muted border border-secondary-subtle ms-1" style="font-size: 0.65rem;"><i class="fas fa-shield-slash me-1"></i>FALSE POSITIVE</span>';
+                }
+
                 const confVal = Math.round((item.overall_confidence || item.confidence || item.ml_confidence || 0.85) * 100);
                 tr.innerHTML = `
-                    <td class="font-mono text-muted small">${safeTime}</td>
-                    <td><strong class="text-primary-soc">${safeSubject}</strong></td>
-                    <td class="text-muted small font-mono">${safeFrom}</td>
-                    <td><span class="badge-risk ${risk}">${risk}</span></td>
-                    <td class="font-mono text-primary-soc">${confVal}%</td>
-                    <td>
-                        <a href="/api/reports/view/${encodeURIComponent(item.id)}" target="_blank" class="btn-soc-secondary btn-sm me-1" title="Print/View PDF Report">
-                            <i class="fas fa-print"></i>
-                        </a>
-                        <button class="btn-soc-primary btn-sm" onclick="openIncidentDrawer(${item.id})" title="Inspect Incident in Drawer">
-                            <i class="fas fa-search-plus me-1"></i> Inspect
-                        </button>
+                    <td class="history-cell-time">${safeTime}</td>
+                    <td class="history-cell-subject"><span class="history-subject-text">${safeSubject}</span></td>
+                    <td class="history-cell-sender">${safeFrom}</td>
+                    <td class="history-cell-risk"><span class="badge-risk ${risk}">${risk}</span> ${statusPill}</td>
+                    <td class="history-cell-conf">${confVal}%</td>
+                    <td class="history-cell-actions">
+                        <div class="history-actions-wrap">
+                            <a href="/api/reports/view/${encodeURIComponent(item.id)}" target="_blank" class="btn-soc-outline-icon" title="Print/View PDF Report" aria-label="Print PDF Report">
+                                <i class="fas fa-print"></i>
+                            </a>
+                            <button type="button" class="btn-soc-primary btn-soc-inspect" onclick="openIncidentDrawer(${item.id})" title="Inspect Incident Case">
+                                <i class="fas fa-search-plus"></i> Inspect
+                            </button>
+                            <button type="button" class="btn-soc-danger-icon" onclick="confirmDeleteAnalysis(${item.id}, '${escapeHtml(safeSubject).replace(/'/g, "\\'")}', '${escapeHtml(safeFrom).replace(/'/g, "\\'")}')" title="Delete Analysis Case" aria-label="Delete Analysis Case">
+                                <i class="fas fa-trash-can"></i>
+                            </button>
+                        </div>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
         } else {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No email security analyses logged yet.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4 font-mono">No email security analyses logged yet.</td></tr>';
         }
     } catch (e) {}
 }
+
+function confirmDeleteAnalysis(analysisId, subject, sender) {
+    const idInput = document.getElementById('deleteModalAnalysisId');
+    const subEl = document.getElementById('deleteModalSubject');
+    const senderEl = document.getElementById('deleteModalSender');
+    if (idInput) idInput.value = analysisId;
+    if (subEl) subEl.textContent = subject || 'No Subject';
+    if (senderEl) senderEl.textContent = sender || 'Unknown Sender';
+
+    const modalEl = document.getElementById('deleteAnalysisConfirmModal');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
+}
+
+async function executeDeleteAnalysis() {
+    const idInput = document.getElementById('deleteModalAnalysisId');
+    const btnConfirm = document.getElementById('btnConfirmDeleteAnalysis');
+    const analysisId = idInput?.value;
+    if (!analysisId) return;
+
+    if (btnConfirm) {
+        btnConfirm.disabled = true;
+        btnConfirm.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Deleting...';
+    }
+
+    try {
+        const res = await fetch(`/api/analysis/${analysisId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        const data = await res.json();
+        if (data.success) {
+            window.showToast?.(data.message || 'Analysis record permanently deleted.', 'success');
+            const modalEl = document.getElementById('deleteAnalysisConfirmModal');
+            if (modalEl) {
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                modal?.hide();
+            }
+            if (typeof closeIncidentDrawer === 'function') {
+                const drawer = document.getElementById('socDrawer');
+                if (drawer && drawer.classList.contains('active')) {
+                    closeIncidentDrawer();
+                }
+            }
+            loadAnalysisHistory();
+            loadDashboardStats();
+            if (typeof loadThreatTrendData === 'function') {
+                const trendSelect = document.getElementById('trendTimeRangeSelect');
+                loadThreatTrendData(trendSelect ? trendSelect.value : '7d');
+            }
+        } else {
+            window.showToast?.(data.error || 'Failed to delete analysis record.', 'danger');
+        }
+    } catch (e) {
+        window.showToast?.(`Error deleting record: ${e.message}`, 'danger');
+    } finally {
+        if (btnConfirm) {
+            btnConfirm.disabled = false;
+            btnConfirm.innerHTML = '<i class="fas fa-trash-can me-1"></i> Delete';
+        }
+    }
+}
+
+/* ==========================================================================
+   9B. Admin Human-In-The-Loop Incident Interventions
+   ========================================================================== */
+async function openSendWarningModal(analysisId) {
+    try {
+        const res = await fetch(`/api/admin/analysis/${analysisId}/warning-preview`);
+        const data = await res.json();
+        if (!data.success) {
+            window.showToast?.(data.error || 'Failed to load warning preview', 'danger');
+            return;
+        }
+
+        const prev = data.preview || {};
+        const idInput = document.getElementById('warningModalAnalysisId');
+        const toEl = document.getElementById('warningModalTo');
+        const fromEl = document.getElementById('warningModalFrom');
+        const subEl = document.getElementById('warningModalSubject');
+        const bodyEl = document.getElementById('warningModalBody');
+        const noticeEl = document.getElementById('warningModalStatusNotice');
+        const btnSend = document.getElementById('btnExecuteSendWarning');
+
+        if (idInput) idInput.value = analysisId;
+        if (toEl) toEl.textContent = prev.target_recipient || data.target_recipient || 'Unknown';
+        if (fromEl) fromEl.textContent = prev.from_display || data.warning_from || 'BullyMail Administration';
+        if (subEl) subEl.textContent = prev.warning_subject || data.warning_subject || 'Notice Regarding University Communication Guidelines';
+        if (bodyEl) bodyEl.textContent = prev.warning_body || data.warning_body || '';
+
+        if (noticeEl) {
+            if (data.is_already_sent) {
+                const adminName = data.last_warning?.admin_username || 'an administrator';
+                const sentTime = data.last_warning?.created_at ? new Date(data.last_warning.created_at).toLocaleString() : 'previously';
+                noticeEl.innerHTML = `
+                    <div class="alert alert-warning small font-mono mb-0">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        <strong>Duplicate Warning Notice:</strong> A warning email has already been dispatched for this incident by ${escapeHtml(adminName)} (${escapeHtml(sentTime)}).
+                    </div>
+                `;
+                if (btnSend) {
+                    btnSend.disabled = true;
+                    btnSend.innerHTML = '<i class="fas fa-check me-1"></i> Warning Already Sent';
+                }
+            } else {
+                noticeEl.innerHTML = '';
+                if (btnSend) {
+                    btnSend.disabled = false;
+                    btnSend.innerHTML = '<i class="fas fa-paper-plane me-1"></i> Send Warning';
+                }
+            }
+        }
+
+        const modalEl = document.getElementById('sendWarningModal');
+        if (modalEl) {
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+        }
+    } catch (e) {
+        window.showToast?.(`Error preparing warning modal: ${e.message}`, 'danger');
+    }
+}
+
+async function executeSendWarningSubmit() {
+    const idInput = document.getElementById('warningModalAnalysisId');
+    const analysisId = idInput?.value;
+    const btnSend = document.getElementById('btnExecuteSendWarning');
+    if (!analysisId) return;
+
+    try {
+        if (btnSend) {
+            btnSend.disabled = true;
+            btnSend.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Transmitting...';
+        }
+
+        const res = await fetch(`/api/admin/analysis/${analysisId}/warning`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            window.showToast?.('✓ Warning email sent successfully to original sender.', 'success');
+            const modalEl = document.getElementById('sendWarningModal');
+            if (modalEl) {
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                modal?.hide();
+            }
+            // Refresh incident details inside drawer
+            openIncidentDrawer(analysisId);
+            // Refresh analysis history
+            loadAnalysisHistory();
+        } else {
+            window.showToast?.(data.error || 'Failed to dispatch warning email.', 'danger');
+            if (btnSend) {
+                btnSend.disabled = false;
+                btnSend.innerHTML = '<i class="fas fa-paper-plane me-1"></i> Send Warning';
+            }
+        }
+    } catch (e) {
+        window.showToast?.(`Network error: ${e.message}`, 'danger');
+        if (btnSend) {
+            btnSend.disabled = false;
+            btnSend.innerHTML = '<i class="fas fa-paper-plane me-1"></i> Send Warning';
+        }
+    }
+}
+
+function openMarkReviewedModal(analysisId) {
+    const idInput = document.getElementById('reviewModalAnalysisId');
+    const notesInput = document.getElementById('reviewModalNotes');
+    if (idInput) idInput.value = analysisId;
+    if (notesInput) notesInput.value = '';
+
+    const modalEl = document.getElementById('markReviewedModal');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
+}
+
+async function executeMarkReviewedSubmit() {
+    const idInput = document.getElementById('reviewModalAnalysisId');
+    const analysisId = idInput?.value;
+    const notesInput = document.getElementById('reviewModalNotes');
+    if (!analysisId) return;
+
+    try {
+        const res = await fetch(`/api/admin/analysis/${analysisId}/review`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: notesInput?.value.trim() || 'Reviewed by administrator' })
+        });
+        const data = await res.json();
+        if (data.success) {
+            window.showToast?.('✓ Incident marked as REVIEWED.', 'success');
+            const modalEl = document.getElementById('markReviewedModal');
+            if (modalEl) {
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                modal?.hide();
+            }
+            openIncidentDrawer(analysisId);
+            loadAnalysisHistory();
+        } else {
+            window.showToast?.(data.error || 'Failed to update review status.', 'danger');
+        }
+    } catch (e) {
+        window.showToast?.(`Error: ${e.message}`, 'danger');
+    }
+}
+
+function openFalsePositiveModal(analysisId) {
+    const idInput = document.getElementById('fpModalAnalysisId');
+    const notesInput = document.getElementById('fpModalNotes');
+    if (idInput) idInput.value = analysisId;
+    if (notesInput) notesInput.value = '';
+
+    const modalEl = document.getElementById('falsePositiveModal');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
+}
+
+async function executeFalsePositiveSubmit() {
+    const idInput = document.getElementById('fpModalAnalysisId');
+    const analysisId = idInput?.value;
+    const reasonSelect = document.getElementById('fpModalReasonSelect');
+    const notesInput = document.getElementById('fpModalNotes');
+    if (!analysisId) return;
+
+    try {
+        const res = await fetch(`/api/admin/analysis/${analysisId}/false-positive`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                reason: reasonSelect?.value || 'Model false positive',
+                notes: notesInput?.value || ''
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            window.showToast?.('✓ Incident marked as FALSE POSITIVE.', 'success');
+            const modalEl = document.getElementById('falsePositiveModal');
+            if (modalEl) {
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                modal?.hide();
+            }
+            openIncidentDrawer(analysisId);
+            loadAnalysisHistory();
+        } else {
+            window.showToast?.(data.error || 'Failed to mark false positive.', 'danger');
+        }
+    } catch (e) {
+        window.showToast?.(`Error: ${e.message}`, 'danger');
+    }
+}
+
+// Modal Layering Fix: Ensure confirmation modal backdrop is layered above the open drawer
+document.addEventListener('DOMContentLoaded', () => {
+    ['sendWarningModal', 'markReviewedModal', 'falsePositiveModal'].forEach(id => {
+        const modalEl = document.getElementById(id);
+        if (modalEl) {
+            modalEl.addEventListener('show.bs.modal', () => {
+                setTimeout(() => {
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    if (backdrops.length > 0) {
+                        backdrops[backdrops.length - 1].classList.add('soc-action-backdrop');
+                        backdrops[backdrops.length - 1].style.zIndex = '2190';
+                    }
+                }, 10);
+            });
+        }
+    });
+});
 
 /* ==========================================================================
    10. Quick Preset Sample Selector
@@ -1958,6 +2599,10 @@ function loadSampleEmail(type) {
         document.getElementById('inputEmailFrom').value = s.from;
         document.getElementById('inputEmailText').value = s.body;
         
+        document.querySelectorAll('.preset-card-btn').forEach(btn => btn.classList.remove('active'));
+        const activeBtn = document.querySelector(`.preset-card-btn[onclick*="'${type}'"]`);
+        if (activeBtn) activeBtn.classList.add('active');
+
         const counter = document.getElementById('charCountDisplay');
         if (counter) {
             const words = s.body.trim().split(/\s+/).length;
@@ -2027,9 +2672,9 @@ function renderInstitutionSelect(institutions) {
     updateInstitutionBanner(window.activeInstitutionId);
 }
 
-window.AUTO_SYNC_INTERVAL = 60; // 60 seconds polling interval
+window.AUTO_SYNC_INTERVAL = 15; // 15 seconds fast auto-sync polling interval
 window.mailboxAutoSyncTimer = null;
-window.mailboxCountdownSeconds = 60;
+window.mailboxCountdownSeconds = 15;
 window.isAutoSyncing = false; // Atomic lock guard against overlapping sync jobs
 
 function initMailboxAutoSync() {
@@ -2103,6 +2748,17 @@ async function performBackgroundAutoSync() {
         if (data.success) {
             const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
             updateAutoSyncUI('live', timeStr);
+
+            // If new emails were ingested, immediately refresh Analysis History, Dashboard stats, and Live Stream
+            if (data.total_emails_processed > 0 || data.total_threats_detected > 0) {
+                loadAnalysisHistory();
+                loadDashboardStats();
+                loadLiveThreatStream();
+                if (typeof loadThreatTrendData === 'function') {
+                    const trendSelect = document.getElementById('trendTimeRangeSelect');
+                    loadThreatTrendData(trendSelect ? trendSelect.value : '7d');
+                }
+            }
         } else {
             updateAutoSyncUI('error', data.error || 'Failed');
         }
@@ -2113,7 +2769,7 @@ async function performBackgroundAutoSync() {
         window.isAutoSyncing = false;
         window.mailboxCountdownSeconds = window.AUTO_SYNC_INTERVAL;
 
-        // Perform partial non-disruptive refresh of UI metrics
+        // Perform non-disruptive refresh of mailboxes UI
         await loadSecureMailboxes(true);
         if (window.currentMailboxId) {
             loadMailboxInbox(window.currentMailboxId);
@@ -2743,6 +3399,50 @@ function handleMailboxSearch(e, force = false) {
         return;
     }
     applyMailboxFilters();
+}
+
+async function triggerHeaderSyncTelemetry(btn) {
+    if (!btn) btn = document.getElementById('btnHeaderSyncTelemetry');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Syncing...';
+    }
+
+    try {
+        // 1. Sync all active institutional mailboxes
+        const instId = window.activeInstitutionId || 1;
+        try {
+            await fetchWithTimeout(`/api/institutions/${instId}/sync-all`, { method: 'POST' }, 35000);
+        } catch (e) {
+            console.warn("Header sync institution notice:", e);
+        }
+
+        // 2. Synchronize stats, live stream, threat trend, history, and mailboxes concurrently
+        await Promise.allSettled([
+            loadDashboardStats(),
+            loadLiveThreatStream(),
+            loadThreatTrendData(),
+            loadAnalysisHistory(),
+            loadSecureMailboxes(true)
+        ]);
+
+        // 3. Update Last Sync header display
+        const now = new Date();
+        const timeEl = document.getElementById('headerLastSyncTime');
+        const dateEl = document.getElementById('headerLastSyncDate');
+        if (timeEl) timeEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        if (dateEl) dateEl.textContent = now.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+
+        if (window.SOCToast) window.SOCToast.success('Security telemetry and threat feeds synchronized.', 'Sync Complete');
+    } catch (err) {
+        console.error('Telemetry synchronization error:', err);
+        if (window.SOCToast) window.SOCToast.error('Failed to complete telemetry sync.', 'Sync Error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-arrows-rotate me-1"></i> Sync Now';
+        }
+    }
 }
 
 async function syncCurrentMailboxInbox() {

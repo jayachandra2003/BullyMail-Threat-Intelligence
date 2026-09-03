@@ -137,6 +137,7 @@ def apply_migrations(cursor, engine):
             'overall_risk_level': "VARCHAR(20) DEFAULT 'LOW'",
             'overall_confidence': "FLOAT DEFAULT 0.0",
             'threat_score': "FLOAT DEFAULT 0.0",
+            'incident_status': "VARCHAR(30) DEFAULT 'PENDING_REVIEW'",
             'phishing_risk_level': "VARCHAR(20) DEFAULT 'LOW'",
             'phishing_confidence': "FLOAT DEFAULT 0.0",
             'phishing_indicators': 'TEXT NULL',
@@ -163,6 +164,11 @@ def apply_migrations(cursor, engine):
                     cursor.execute(f"ALTER TABLE analyzed_emails ADD COLUMN {col_name} {col_def}")
                 except Exception:
                     pass
+
+        try:
+            cursor.execute("UPDATE analyzed_emails SET incident_status = 'PENDING_REVIEW' WHERE incident_status IS NULL OR incident_status = ''")
+        except Exception:
+            pass
 
     # -------------------------------------------------------------------------
     # 3. Email Config Migrations
@@ -228,6 +234,55 @@ def apply_migrations(cursor, engine):
             cursor.execute("UPDATE email_config SET institution_id = 1 WHERE institution_id IS NULL OR institution_id = 0")
         except Exception:
             pass
+
+    # -------------------------------------------------------------------------
+    # 4. Incident Audit Log Table Migration
+    # -------------------------------------------------------------------------
+    if engine == 'sqlite':
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS incident_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                analysis_id INTEGER NOT NULL,
+                institution_id INTEGER NOT NULL,
+                admin_id INTEGER NOT NULL,
+                admin_username VARCHAR(50) NOT NULL,
+                action VARCHAR(30) NOT NULL,
+                original_sender VARCHAR(255) NULL,
+                original_recipient VARCHAR(255) NULL,
+                warning_recipient VARCHAR(255) NULL,
+                warning_subject VARCHAR(255) NULL,
+                delivery_status VARCHAR(30) DEFAULT 'SUCCESS',
+                reason TEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (analysis_id) REFERENCES analyzed_emails (id) ON DELETE CASCADE,
+                FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE,
+                FOREIGN KEY (admin_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+    else:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS incident_audit_log (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                analysis_id INT NOT NULL,
+                institution_id INT NOT NULL,
+                admin_id INT NOT NULL,
+                admin_username VARCHAR(50) NOT NULL,
+                action VARCHAR(30) NOT NULL,
+                original_sender VARCHAR(255) NULL,
+                original_recipient VARCHAR(255) NULL,
+                warning_recipient VARCHAR(255) NULL,
+                warning_subject VARCHAR(255) NULL,
+                delivery_status VARCHAR(30) DEFAULT 'SUCCESS',
+                reason MEDIUMTEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_audit_analysis (analysis_id),
+                INDEX idx_audit_institution (institution_id),
+                INDEX idx_audit_admin (admin_id),
+                FOREIGN KEY (analysis_id) REFERENCES analyzed_emails (id) ON DELETE CASCADE,
+                FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE,
+                FOREIGN KEY (admin_id) REFERENCES users (id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ''')
 
 def setup_database():
     """Sets up all required database tables with UTF-8 support and idempotent secure administrator initialization."""
@@ -301,6 +356,9 @@ def setup_database():
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS analyzed_emails (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    institution_id INTEGER DEFAULT 1,
+                    user_id INTEGER NULL,
+                    email_config_id INTEGER NULL,
                     email_subject TEXT,
                     email_from TEXT,
                     email_to TEXT,
@@ -310,6 +368,7 @@ def setup_database():
                     overall_risk_level VARCHAR(20) NOT NULL DEFAULT 'LOW',
                     overall_confidence FLOAT NOT NULL DEFAULT 0.0,
                     threat_score FLOAT NOT NULL DEFAULT 0.0,
+                    incident_status VARCHAR(30) NOT NULL DEFAULT 'PENDING_REVIEW',
                     
                     -- Cyberbullying Detection Vector
                     is_bullying INTEGER NOT NULL DEFAULT 0,
@@ -361,6 +420,27 @@ def setup_database():
                 )
             ''')
             
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS incident_audit_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    analysis_id INTEGER NOT NULL,
+                    institution_id INTEGER NOT NULL,
+                    admin_id INTEGER NOT NULL,
+                    admin_username VARCHAR(50) NOT NULL,
+                    action VARCHAR(30) NOT NULL,
+                    original_sender VARCHAR(255) NULL,
+                    original_recipient VARCHAR(255) NULL,
+                    warning_recipient VARCHAR(255) NULL,
+                    warning_subject VARCHAR(255) NULL,
+                    delivery_status VARCHAR(30) DEFAULT 'SUCCESS',
+                    reason TEXT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (analysis_id) REFERENCES analyzed_emails (id) ON DELETE CASCADE,
+                    FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE,
+                    FOREIGN KEY (admin_id) REFERENCES users (id) ON DELETE CASCADE
+                )
+            ''')
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS model_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -500,6 +580,7 @@ def setup_database():
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     institution_id INT DEFAULT 1,
                     user_id INT NULL,
+                    email_config_id INT NULL,
                     email_subject VARCHAR(255),
                     email_from VARCHAR(255),
                     email_to VARCHAR(255),
@@ -508,6 +589,7 @@ def setup_database():
                     overall_risk_level VARCHAR(20) NOT NULL DEFAULT 'LOW',
                     overall_confidence FLOAT NOT NULL DEFAULT 0.0,
                     threat_score FLOAT NOT NULL DEFAULT 0.0,
+                    incident_status VARCHAR(30) NOT NULL DEFAULT 'PENDING_REVIEW',
                     
                     is_bullying TINYINT(1) NOT NULL DEFAULT 0,
                     confidence FLOAT NOT NULL DEFAULT 0.0,
@@ -549,10 +631,35 @@ def setup_database():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     INDEX idx_risk (overall_risk_level),
                     INDEX idx_bullying (is_bullying),
+                    INDEX idx_incident_status (incident_status),
                     INDEX idx_created (created_at)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ''')
             
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS incident_audit_log (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    analysis_id INT NOT NULL,
+                    institution_id INT NOT NULL,
+                    admin_id INT NOT NULL,
+                    admin_username VARCHAR(50) NOT NULL,
+                    action VARCHAR(30) NOT NULL,
+                    original_sender VARCHAR(255) NULL,
+                    original_recipient VARCHAR(255) NULL,
+                    warning_recipient VARCHAR(255) NULL,
+                    warning_subject VARCHAR(255) NULL,
+                    delivery_status VARCHAR(30) DEFAULT 'SUCCESS',
+                    reason MEDIUMTEXT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_audit_analysis (analysis_id),
+                    INDEX idx_audit_institution (institution_id),
+                    INDEX idx_audit_admin (admin_id),
+                    FOREIGN KEY (analysis_id) REFERENCES analyzed_emails (id) ON DELETE CASCADE,
+                    FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE,
+                    FOREIGN KEY (admin_id) REFERENCES users (id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ''')
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS model_history (
                     id INT AUTO_INCREMENT PRIMARY KEY,

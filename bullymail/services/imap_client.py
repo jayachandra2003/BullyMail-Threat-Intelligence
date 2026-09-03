@@ -83,8 +83,15 @@ class IMAPClient:
 
             msg_count = int(data[0]) if data and data[0] else 0
 
-            res_val, data_val = self.mail_session.response('UIDVALIDITY')
-            uidvalidity = int(data_val[0]) if (res_val == 'OK' and data_val and data_val[0]) else None
+            uidvalidity = None
+            try:
+                res_val, data_val = self.mail_session.response('UIDVALIDITY')
+                if data_val and data_val[0]:
+                    raw_val = data_val[0].decode('utf-8') if isinstance(data_val[0], bytes) else str(data_val[0])
+                    if raw_val.isdigit():
+                        uidvalidity = int(raw_val)
+            except Exception:
+                uidvalidity = None
 
             return res, uidvalidity, msg_count
         except Exception as e:
@@ -109,8 +116,12 @@ class IMAPClient:
             if res != 'OK' or not data or not data[0]:
                 return []
 
-            uids = [int(u) for u in data[0].split() if u.isdigit()]
-            return uids
+            raw_uids = [int(u) for u in data[0].split() if u.isdigit()]
+            if last_known_uid and isinstance(last_known_uid, int) and last_known_uid > 0:
+                uids = [u for u in raw_uids if u > last_known_uid]
+            else:
+                uids = raw_uids
+            return sorted(uids)
         except Exception as e:
             raise IMAPFetchError(f"Error searching IMAP UIDs: {str(e)}")
 

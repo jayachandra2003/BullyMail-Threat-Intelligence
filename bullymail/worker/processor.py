@@ -55,7 +55,7 @@ class MailboxProcessor:
         if lease_id:
             from ..database.connection import get_engine_type
             engine = get_engine_type()
-            lease_expire_sql = "DATE_ADD(NOW(), INTERVAL 15 MINUTE)" if engine == 'mysql' else "datetime('now', '+15 minutes')"
+            lease_expire_sql = "DATE_ADD(NOW(), INTERVAL 2 MINUTE)" if engine == 'mysql' else "datetime('now', '+2 minutes')"
 
             if increment_count:
                 sql = f'''UPDATE email_config 
@@ -129,31 +129,34 @@ class MailboxProcessor:
             summary['error'] = "Authentication backoff active"
             return summary if return_summary else False
 
-        logger.info(f"Starting mailbox processing for Institution {inst_id} ({email_addr})")
+        logger.info(f"[SYNC] Start mailbox sync: config_id={cfg_id}, institution_id={inst_id} ({email_addr})")
         if not self.update_telemetry(cfg_id, sync_status='SYNCING', lease_id=lease_id):
-            logger.warning(f"Mailbox {cfg_id} processing halted: sync lease ownership was lost at start.")
+            logger.warning(f"[SYNC] Mailbox {cfg_id} processing halted: sync lease ownership was lost at start.")
             summary['error'] = "Lost sync lease at start"
             return summary if return_summary else False
 
-        imap_client = IMAPClient(institution_id=inst_id, mailbox_id=cfg_id)
+        try:
+            imap_client = IMAPClient(institution_id=inst_id, mailbox_id=cfg_id)
+        except TypeError:
+            imap_client = IMAPClient(institution_id=inst_id)
         try:
             imap_client.connect()
             self._clear_auth_failure(cfg_id)
         except IMAPAuthenticationError as e:
-            logger.warning(f"IMAP authentication failed for Institution {inst_id} ({email_addr}): {e}")
+            logger.warning(f"[SYNC] IMAP authentication failed for Institution {inst_id} ({email_addr}): {e}")
             self._record_auth_failure(cfg_id)
             self.update_telemetry(cfg_id, sync_status='ERROR', last_error="IMAP authentication failed", lease_id=lease_id)
             summary['error'] = "IMAP authentication failed"
             summary['sync_completion_time'] = datetime.datetime.utcnow().isoformat()
             return summary if return_summary else False
         except IMAPConnectionError as e:
-            logger.warning(f"IMAP connection failed for Institution {inst_id} ({email_addr}): {e}")
+            logger.warning(f"[SYNC] IMAP connection failed for Institution {inst_id} ({email_addr}): {e}")
             self.update_telemetry(cfg_id, sync_status='ERROR', last_error="IMAP connection failed", lease_id=lease_id)
             summary['error'] = "IMAP connection failed"
             summary['sync_completion_time'] = datetime.datetime.utcnow().isoformat()
             return summary if return_summary else False
         except Exception as e:
-            logger.error(f"Unexpected error connecting to IMAP for Institution {inst_id}: {e}")
+            logger.error(f"[SYNC] Unexpected error connecting to IMAP for Institution {inst_id}: {e}")
             self.update_telemetry(cfg_id, sync_status='ERROR', last_error=str(e), lease_id=lease_id)
             summary['error'] = str(e)
             summary['sync_completion_time'] = datetime.datetime.utcnow().isoformat()
@@ -164,17 +167,26 @@ class MailboxProcessor:
 
             last_known_uid = None
             try:
-                row = fetch_one(
-                    "SELECT MAX(imap_uid) as max_uid FROM ingested_messages WHERE institution_id = %s AND email_config_id = %s AND uidvalidity = %s",
-                    (inst_id, cfg_id, uidvalidity)
-                )
+                if uidvalidity is not None:
+                    row = fetch_one(
+                        "SELECT MAX(imap_uid) as max_uid FROM ingested_messages WHERE institution_id = %s AND email_config_id = %s AND (uidvalidity = %s OR uidvalidity IS NULL)",
+                        (inst_id, cfg_id, uidvalidity)
+                    )
+                else:
+                    row = fetch_one(
+                        "SELECT MAX(imap_uid) as max_uid FROM ingested_messages WHERE institution_id = %s AND email_config_id = %s",
+                        (inst_id, cfg_id)
+                    )
                 if row and row.get('max_uid'):
                     last_known_uid = int(row['max_uid'])
             except Exception:
                 last_known_uid = None
 
             uids = imap_client.fetch_unseen_uids(last_known_uid=last_known_uid)
-            logger.info(f"Discovered {len(uids)} candidate messages in INBOX for Institution {inst_id}")
+            if last_known_uid and isinstance(last_known_uid, int) and last_known_uid > 0:
+                uids = [u for u in uids if u > last_known_uid]
+
+            logger.info(f"[SYNC] IMAP check complete: {len(uids)} new candidate messages in INBOX (last_known_uid={last_known_uid})")
             summary['emails_found'] = len(uids)
 
             if not uids:
@@ -183,17 +195,21 @@ class MailboxProcessor:
                 summary['success'] = True
                 summary['status'] = 'OK'
                 summary['sync_completion_time'] = datetime.datetime.utcnow().isoformat()
+                logger.info(f"[SYNC] Complete: 0 new messages to ingest for config {cfg_id}")
                 return summary if return_summary else True
 
             for uid in uids:
                 if should_stop and should_stop():
-                    logger.info(f"Mid-batch shutdown requested for Institution {inst_id}. Halting message loop.")
+                    logger.info(f"[SYNC] Mid-batch shutdown requested for Institution {inst_id}. Halting message loop.")
                     break
 
                 record_id = None
                 try:
+                    logger.info(f"[SYNC] New message detected: UID={uid} for config {cfg_id}")
+
                     # 1. Fetch raw RFC822 bytes
                     raw_bytes = imap_client.fetch_rfc822_message(uid)
+                    logger.info(f"[SYNC] Fetched raw RFC822 for UID={uid} ({len(raw_bytes)} bytes)")
 
                     # 2. Parse MIME structure safely
                     parsed = SafeMIMEParser.parse_email_bytes(raw_bytes)
@@ -210,9 +226,11 @@ class MailboxProcessor:
                     )
 
                     if not claimed:
-                        logger.debug(f"Skipping duplicate/in-progress message (Hash: {msg_hash[:12]}...) for Institution {inst_id}")
+                        logger.debug(f"[SYNC] Skipping duplicate/in-progress message (Hash: {msg_hash[:12]}...) for Institution {inst_id}")
                         summary['duplicates_skipped'] += 1
                         continue
+
+                    logger.info(f"[SYNC] Ingested and claimed UID={uid} for processing")
 
                     # 4. Multi-Vector Threat Analysis via UnifiedRiskEngine
                     report = self.risk_engine.analyze_email(
@@ -223,9 +241,11 @@ class MailboxProcessor:
                         attachments=parsed['attachments'],
                         images=parsed['images']
                     )
+                    logger.info(f"[SYNC] Threat analysis completed for UID={uid}: Overall Risk={report.get('overall_risk_level')}")
 
                     # 5. Database Persistence (Transactional Consistency)
                     analysis_id = AnalysisModel.save_analysis(report, institution_id=inst_id, user_id=None, email_config_id=cfg_id)
+                    logger.info(f"[SYNC] Saved analysis to database (Analysis ID: {analysis_id}) for UID={uid}")
 
                     # 6. Ownership-Aware Status Update to PROCESSED
                     updated = IngestedMessageModel.update_processing_status(
@@ -237,16 +257,16 @@ class MailboxProcessor:
                             summary['threats_detected'] += 1
                         lease_ok = self.update_telemetry(cfg_id, sync_status='SYNCING', increment_count=True, lease_id=lease_id)
                         if not lease_ok:
-                            logger.warning(f"Halting email batch loop for Mailbox {cfg_id}: lost sync lease ownership during message ingestion.")
+                            logger.warning(f"[SYNC] Halting email batch loop for Mailbox {cfg_id}: lost sync lease ownership during message ingestion.")
                             break
-                        logger.info(f"Successfully processed email UID {uid} (Analysis ID: {analysis_id}) for Institution {inst_id} (Attempt {attempt_cnt})")
+                        logger.info(f"[SYNC] Successfully processed and finalized email UID {uid} (Analysis ID: {analysis_id})")
                     else:
-                        logger.warning(f"Lost processing ownership for UID {uid} due to stale recovery timeout reset.")
+                        logger.warning(f"[SYNC] Lost processing ownership for UID {uid} due to stale recovery timeout reset.")
                         summary['failures'] += 1
 
                 except Exception as e:
                     summary['failures'] += 1
-                    logger.error(f"Error processing message UID {uid} for Institution {inst_id}: {e}")
+                    logger.error(f"[SYNC] Error processing message UID {uid} for Institution {inst_id}: {e}")
                     if record_id:
                         try:
                             IngestedMessageModel.update_processing_status(
@@ -260,9 +280,10 @@ class MailboxProcessor:
             summary['success'] = True
             summary['status'] = 'OK'
             summary['sync_completion_time'] = datetime.datetime.utcnow().isoformat()
+            logger.info(f"[SYNC] Complete: {summary['emails_processed']} processed, {summary['duplicates_skipped']} skipped, {summary['threats_detected']} threats detected")
             return summary if return_summary else True
         except Exception as e:
-            logger.error(f"Error during mailbox loop for Institution {inst_id}: {e}")
+            logger.error(f"[SYNC] Error during mailbox loop for Institution {inst_id}: {e}")
             self.update_telemetry(cfg_id, sync_status='ERROR', last_error=str(e), lease_id=lease_id)
             summary['error'] = str(e)
             summary['sync_completion_time'] = datetime.datetime.utcnow().isoformat()

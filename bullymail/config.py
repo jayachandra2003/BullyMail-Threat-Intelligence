@@ -60,12 +60,22 @@ class Config:
         'pdf,doc,docx,xls,xlsx,txt,zip,rar,7z,png,jpg,jpeg,gif,eml,msg'
     ).split(','))
     
-    # Email Integration Defaults
+    # Email Integration Defaults & SMTP Configuration
     EMAIL_IMAP_SERVER = os.environ.get('EMAIL_IMAP_SERVER', 'imap.gmail.com')
-    EMAIL_SMTP_SERVER = os.environ.get('EMAIL_SMTP_SERVER', 'smtp.gmail.com')
-    EMAIL_SMTP_PORT = int(os.environ.get('EMAIL_SMTP_PORT', 587))
-    EMAIL_ADDRESS = os.environ.get('EMAIL_ADDRESS', '')
-    EMAIL_APP_PASSWORD = os.environ.get('EMAIL_APP_PASSWORD', '')
+    EMAIL_SMTP_SERVER = os.environ.get('EMAIL_SMTP_SERVER', os.environ.get('SMTP_HOST', 'smtp.gmail.com'))
+    EMAIL_SMTP_PORT = int(os.environ.get('EMAIL_SMTP_PORT', os.environ.get('SMTP_PORT', 587)))
+    EMAIL_ADDRESS = os.environ.get('EMAIL_ADDRESS', os.environ.get('SMTP_USERNAME', ''))
+    EMAIL_APP_PASSWORD = os.environ.get('EMAIL_APP_PASSWORD', os.environ.get('SMTP_PASSWORD', ''))
+    WORKER_POLL_INTERVAL = int(os.environ.get('WORKER_POLL_INTERVAL', 15))
+
+    # Dedicated SMTP Warning Configuration (Environment-Driven)
+    SMTP_HOST = os.environ.get('SMTP_HOST', EMAIL_SMTP_SERVER)
+    SMTP_PORT = int(os.environ.get('SMTP_PORT', EMAIL_SMTP_PORT))
+    SMTP_USERNAME = os.environ.get('SMTP_USERNAME', EMAIL_ADDRESS)
+    SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', EMAIL_APP_PASSWORD)
+    SMTP_USE_TLS = os.environ.get('SMTP_USE_TLS', 'True').lower() in ('true', '1', 't')
+    SMTP_FROM_EMAIL = os.environ.get('SMTP_FROM_EMAIL', SMTP_USERNAME or EMAIL_ADDRESS or 'admin@bullymail.local')
+    SMTP_FROM_NAME = os.environ.get('SMTP_FROM_NAME', 'BullyMail Administration')
 
     # Master Key for Fernet Credential Encryption (AES-128-CBC + HMAC-SHA256)
     BULLYMAIL_MASTER_KEY = os.environ.get('BULLYMAIL_MASTER_KEY', None)

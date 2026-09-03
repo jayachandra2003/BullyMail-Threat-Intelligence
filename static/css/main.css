@@ -100,45 +100,45 @@
 /* Light Theme Specification (Calibrated Enterprise Design System) */
 [data-theme="light"] {
     /* Backgrounds: Layered Professional Light Surfaces */
-    --bg-app: #f4f6f8;
-    --bg-void: #e9ecef;
+    --bg-app: #f5f7fa;
+    --bg-void: #eef2f6;
     --bg-sidebar: #ffffff;
     --bg-surface: #ffffff;
     --bg-surface-elevated: #f8fafc;
     --bg-surface-hover: #f1f5f9;
     --bg-input: #ffffff;
-    --bg-inset: #e2e8f0;
-    --bg-glass: rgba(255, 255, 255, 0.95);
+    --bg-inset: #f8fafc;
+    --bg-glass: #ffffff;
 
     /* Borders: Crisp Slate Definitions */
-    --border-subtle: #e2e8f0;
+    --border-subtle: #d9e1ea;
     --border-medium: #cbd5e1;
     --border-highlight: #94a3b8;
-    --border-focus: #4f46e5;
-    --border-glow: rgba(79, 70, 229, 0.15);
+    --border-focus: #3b82f6;
+    --border-glow: rgba(59, 130, 246, 0.12);
 
     /* High-Contrast Enterprise Typography */
-    --text-primary: #0f172a;
-    --text-secondary: #334155;
-    --text-tertiary: #475569;
-    --text-muted: #64748b;
-    --text-dim: #64748b;
+    --text-primary: #172033;
+    --text-secondary: #536176;
+    --text-tertiary: #64748b;
+    --text-muted: #7a8799;
+    --text-dim: #7a8799;
     --text-inverse: #ffffff;
-    --text-link: #4338ca;
+    --text-link: #2563eb;
 
     /* Brand Accents */
-    --accent-primary: #4f46e5;
-    --accent-hover: #3730a3;
-    --accent-light: #6366f1;
-    --accent-glow: rgba(79, 70, 229, 0.12);
+    --accent-primary: #3b82f6;
+    --accent-hover: #2563eb;
+    --accent-light: #60a5fa;
+    --accent-glow: rgba(59, 130, 246, 0.12);
     
     --cyan: #0284c7;
-    --cyan-glow: rgba(2, 132, 199, 0.15);
+    --cyan-glow: rgba(2, 132, 199, 0.12);
     --purple: #7c3aed;
-    --purple-glow: rgba(124, 58, 237, 0.15);
+    --purple-glow: rgba(124, 58, 237, 0.12);
 
     /* Threat Severity Spectrum (Light Mode Calibrated) */
-    --threat-safe: #15803d;
+    --threat-safe: #16a34a;
     --threat-safe-bg: #f0fdf4;
     --threat-safe-border: #bbf7d0;
 
@@ -146,36 +146,36 @@
     --threat-low-bg: #f0f9ff;
     --threat-low-border: #bae6fd;
 
-    --threat-medium: #b45309;
-    --threat-medium-bg: #fef3c7;
+    --threat-medium: #d97706;
+    --threat-medium-bg: #fffbeb;
     --threat-medium-border: #fde68a;
 
-    --threat-high: #c2410c;
-    --threat-high-bg: #ffedd5;
+    --threat-high: #ea580c;
+    --threat-high-bg: #fff7ed;
     --threat-high-border: #fed7aa;
 
-    --threat-critical: #b91c1c;
-    --threat-critical-bg: #fee2e2;
-    --threat-critical-border: #fca5a5;
+    --threat-critical: #dc2626;
+    --threat-critical-bg: #fef2f2;
+    --threat-critical-border: #fecaca;
 
     /* Shadows */
-    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-    --shadow-md: 0 4px 10px rgba(15, 23, 42, 0.06);
-    --shadow-lg: 0 8px 20px rgba(15, 23, 42, 0.08);
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow-md: 0 2px 8px rgba(15, 23, 42, 0.06);
+    --shadow-lg: 0 4px 14px rgba(15, 23, 42, 0.08);
     --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.05);
 
     /* Form Controls */
     --input-bg: #ffffff;
-    --input-border: #cbd5e1;
-    --input-color: #0f172a;
-    --input-placeholder: #64748b;
+    --input-border: #d9e1ea;
+    --input-color: #172033;
+    --input-placeholder: #7a8799;
 
     /* Toggle Button */
     --toggle-bg: #ffffff;
-    --toggle-border: #cbd5e1;
-    --toggle-icon-color: #4f46e5;
-    --toggle-hover-border: #4f46e5;
-    --toggle-hover-glow: rgba(79, 70, 229, 0.12);
+    --toggle-border: #d9e1ea;
+    --toggle-icon-color: #3b82f6;
+    --toggle-hover-border: #3b82f6;
+    --toggle-hover-glow: rgba(59, 130, 246, 0.1);
 }
 
 /* ==========================================================================
@@ -228,6 +228,10 @@ code, pre, .font-mono {
 .text-white { color: var(--text-primary) !important; }
 .text-light { color: var(--text-secondary) !important; }
 .text-secondary { color: var(--text-tertiary) !important; }
+.text-cyan { color: #0284c7 !important; }
+.text-purple { color: #7c3aed !important; }
+[data-theme="dark"] .text-cyan { color: #38bdf8 !important; }
+[data-theme="dark"] .text-purple { color: #a78bfa !important; }
 .text-dark { color: var(--text-primary) !important; }
 
 /* Custom Scrollbars */
@@ -574,6 +578,18 @@ code, pre, .font-mono {
     flex: 1;
     overflow-y: auto;
     padding: 20px;
+}
+
+/* ==========================================================================
+   9B. Admin Human-In-The-Loop Action Confirmation Modals (Layered Above Drawer)
+   ========================================================================== */
+.modal.soc-action-modal {
+    z-index: 2200 !important;
+}
+
+.modal-backdrop.soc-action-backdrop,
+body:has(.soc-action-modal.show) .modal-backdrop {
+    z-index: 2190 !important;
 }
 
 /* ==========================================================================

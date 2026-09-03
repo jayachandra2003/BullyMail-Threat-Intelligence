@@ -51,7 +51,7 @@
                 </div>
                 <div class="brand-info">
                     <div class="brand-name">
-                        BullyMail <span class="brand-badge">V2 SOC</span>
+                        BullyMail
                     </div>
                     <div class="brand-subtitle">Threat Intelligence</div>
                 </div>
@@ -136,15 +136,6 @@
 
             <!-- Sidebar Telemetry & User Controls -->
             <div class="sidebar-footer">
-                <!-- System Status Pulse -->
-                <div class="system-pulse-card">
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="pulse-dot"></div>
-                        <span class="text-primary-soc fw-bold">SOC ONLINE</span>
-                    </div>
-                    <span class="text-muted" style="font-size: 0.72rem; font-weight: 500;">BullyMail V2 SOC</span>
-                </div>
-
                 <!-- User Profile Widget -->
                 <div class="user-profile-widget">
                     <div class="user-avatar">
@@ -176,20 +167,27 @@
                             <span><i class="fas fa-shield-alt text-accent me-2"></i>Security Operations Center</span>
                             <span class="badge soc-title-badge ms-2">ENTERPRISE SOC PRO v2.4.1</span>
                         </h1>
-                        <p class="text-muted small mb-0">Multi-vector email threat detection, machine learning NLP, static file inspection, and link safety analytics.</p>
+                        <p class="text-muted small mb-0">Multi-vector email threat detection, ML powered analysis & link safety analytics.</p>
                     </div>
                 </div>
 
                 <div class="telemetry-chip-group">
                     <!-- Sync Action -->
-                    <button class="btn-soc-secondary btn-sm" onclick="loadDashboardStats()" title="Sync Telemetry" aria-label="Sync Telemetry">
-                        <i class="fas fa-arrows-rotate me-1"></i> Sync
+                    <button class="btn-soc-secondary btn-sm font-mono" id="btnHeaderSyncTelemetry" onclick="triggerHeaderSyncTelemetry(this)" title="Sync Telemetry" aria-label="Sync Telemetry">
+                        <i class="fas fa-arrows-rotate me-1"></i> Sync Now
                     </button>
 
                     <!-- Single-Click Theme Toggle Button -->
-                    <button type="button" class="soc-theme-toggle-btn" aria-label="Switch to light mode" title="Switch to light mode">
-                        <i class="fas fa-sun"></i>
+                    <button type="button" class="soc-theme-toggle-btn" aria-label="Switch Theme" title="Switch Theme">
+                        <i class="fas fa-moon"></i>
                     </button>
+
+                    <!-- Header Live Sync Clock -->
+                    <div class="header-timestamp-box font-mono d-none d-md-flex text-end">
+                        <div class="text-muted text-uppercase" style="font-size: 0.62rem; letter-spacing: 0.05em;">Last Sync</div>
+                        <div class="text-success fw-bold" id="headerLastSyncTime" style="font-size: 0.78rem; line-height: 1.1;">Live</div>
+                        <div class="text-muted" id="headerLastSyncDate" style="font-size: 0.62rem; line-height: 1.1;">Synchronized</div>
+                    </div>
                 </div>
             </header>
 
@@ -197,55 +195,57 @@
                  SECTION 1: Executive Dashboard Tab (Mission Control Architecture)
                  ============================================================== -->
             <section id="tab-dashboard" class="tab-content-pane">
-                <!-- 1. Executive Security Summary Strip (High-Density Metric Bar) -->
-                <div class="soc-summary-strip mb-4" id="socExecutiveSummaryStrip">
-                    <!-- 1. Total Scanned -->
-                    <div class="soc-summary-item">
-                        <div class="soc-summary-indicator bg-info"></div>
-                        <div class="soc-summary-data">
-                            <div class="soc-summary-label"><i class="fas fa-envelope-open-text me-1 text-accent"></i>TOTAL SCANNED</div>
-                            <div class="soc-summary-val font-mono" id="statTotalAnalyses">0</div>
-                            <div class="soc-summary-sub">Processed messages</div>
+                <!-- 1. Executive Security Summary Strip (5 Futuristic KPI Cards) -->
+                <div class="soc-kpi-grid mb-4" id="socExecutiveSummaryStrip">
+                    <!-- Card 1: Total Scanned -->
+                    <div class="soc-kpi-card">
+                        <div class="soc-kpi-icon kpi-icon-blue">
+                            <i class="fas fa-envelope"></i>
+                        </div>
+                        <div class="soc-kpi-body">
+                            <div class="soc-kpi-label">TOTAL SCANNED</div>
+                            <div class="soc-kpi-val font-mono" id="statTotalAnalyses">0</div>
+                            <div class="soc-kpi-sub">Processed Messages</div>
+                            <div class="soc-kpi-trend text-success font-mono"><i class="fas fa-arrow-up me-1"></i>12.5% vs yesterday</div>
                         </div>
                     </div>
 
-                    <!-- 2. Threats Detected -->
-                    <div class="soc-summary-item">
-                        <div class="soc-summary-indicator bg-danger"></div>
-                        <div class="soc-summary-data">
-                            <div class="soc-summary-label"><i class="fas fa-shield-virus me-1 text-danger"></i>THREATS DETECTED</div>
-                            <div class="soc-summary-val font-mono text-danger" id="execThreatsDetected">0</div>
-                            <div class="soc-summary-sub">Active incident flags</div>
+                    <!-- Card 2: Threats Detected -->
+                    <div class="soc-kpi-card">
+                        <div class="soc-kpi-icon kpi-icon-red">
+                            <i class="fas fa-shield-halved"></i>
+                        </div>
+                        <div class="soc-kpi-body">
+                            <div class="soc-kpi-label">THREATS DETECTED</div>
+                            <div class="soc-kpi-val font-mono text-danger" id="execThreatsDetected">0</div>
+                            <div class="soc-kpi-sub">Active Incident Flags</div>
+                            <div class="soc-kpi-trend text-success font-mono"><i class="fas fa-arrow-up me-1"></i>18.2% vs yesterday</div>
                         </div>
                     </div>
 
-                    <!-- 3. Critical Threats -->
-                    <div class="soc-summary-item">
-                        <div class="soc-summary-indicator bg-warning"></div>
-                        <div class="soc-summary-data">
-                            <div class="soc-summary-label"><i class="fas fa-triangle-exclamation me-1 text-warning"></i>CRITICAL THREATS</div>
-                            <div class="soc-summary-val font-mono text-warning" id="execCriticalThreats">0</div>
-                            <div class="soc-summary-sub">Immediate action required</div>
+                    <!-- Card 3: Critical Threats -->
+                    <div class="soc-kpi-card">
+                        <div class="soc-kpi-icon kpi-icon-orange">
+                            <i class="fas fa-triangle-exclamation"></i>
+                        </div>
+                        <div class="soc-kpi-body">
+                            <div class="soc-kpi-label">CRITICAL THREATS</div>
+                            <div class="soc-kpi-val font-mono text-warning" id="execCriticalThreats">0</div>
+                            <div class="soc-kpi-sub">Immediate Action Required</div>
+                            <div class="soc-kpi-trend text-success font-mono"><i class="fas fa-arrow-up me-1"></i>40.0% vs yesterday</div>
                         </div>
                     </div>
 
-                    <!-- 4. Active Vectors -->
-                    <div class="soc-summary-item">
-                        <div class="soc-summary-indicator bg-primary"></div>
-                        <div class="soc-summary-data">
-                            <div class="soc-summary-label"><i class="fas fa-network-wired me-1 text-accent"></i>ACTIVE VECTORS</div>
-                            <div class="soc-summary-val font-mono text-accent" id="execActiveVectors">0 / 5</div>
-                            <div class="soc-summary-sub">Monitored attack surfaces</div>
+                    <!-- Card 4: Active Vectors -->
+                    <div class="soc-kpi-card">
+                        <div class="soc-kpi-icon kpi-icon-purple">
+                            <i class="fas fa-crosshairs"></i>
                         </div>
-                    </div>
-
-                    <!-- 5. Last Sync -->
-                    <div class="soc-summary-item">
-                        <div class="soc-summary-indicator bg-success"></div>
-                        <div class="soc-summary-data">
-                            <div class="soc-summary-label"><i class="fas fa-clock-rotate-left me-1 text-success"></i>LAST SYNC</div>
-                            <div class="soc-summary-val font-mono text-success" id="execLastSync" style="font-size: 1.15rem;">Live</div>
-                            <div class="soc-summary-sub" id="execLastSyncSub"><span class="soc-ping-dot bg-success me-1"></span>Continuous Ingestion</div>
+                        <div class="soc-kpi-body">
+                            <div class="soc-kpi-label">ACTIVE VECTORS</div>
+                            <div class="soc-kpi-val font-mono text-accent" id="execActiveVectors">0 / 5</div>
+                            <div class="soc-kpi-sub">Monitored Attack Surfaces</div>
+                            <div class="soc-kpi-trend text-muted font-mono" style="font-size: 0.65rem;">Coverage Active</div>
                         </div>
                     </div>
                 </div>
@@ -260,18 +260,22 @@
                                 <h5 class="fw-bold mb-0 text-primary-soc" style="font-size: 0.95rem;">System Security Assessment</h5>
                             </div>
                             <div id="postureStatusBadgeContainer">
-                                <span class="soc-pill-safe" id="postureLevelPill">LOW RISK POSTURE</span>
+                                <span class="soc-pill-dominant" id="postureLevelPill">CRITICAL</span>
                             </div>
                         </div>
 
-                        <!-- Score & Confidence Hero -->
-                        <div class="soc-posture-score-block p-3 rounded mb-3">
-                            <div class="d-flex align-items-baseline gap-3">
-                                <div class="soc-posture-score-number font-mono" id="postureScoreNum">95<span class="soc-score-pct">%</span></div>
-                                <div class="flex-grow-1">
-                                    <div class="fw-bold font-mono mb-1" id="postureThreatLevel" style="font-size: 1.05rem; color: var(--threat-safe, #15803d);">LOW RISK POSTURE</div>
-                                    <p class="text-muted small mb-0" id="postureSubtext">Environment currently shows low threat activity across inspected communications.</p>
-                                </div>
+                        <!-- Score & Confidence Hero (Radial Circular Gauge) -->
+                        <div class="soc-posture-hero-layout mb-3">
+                            <div class="soc-radial-gauge-container">
+                                <svg class="soc-radial-gauge" viewBox="0 0 100 100">
+                                    <circle class="gauge-bg" cx="50" cy="50" r="40"></circle>
+                                    <circle class="gauge-fill" id="postureGaugeCircle" cx="50" cy="50" r="40" stroke-dasharray="251.2" stroke-dashoffset="188.4"></circle>
+                                </svg>
+                                <div class="gauge-center-text font-mono" id="postureScoreNum">25%</div>
+                            </div>
+                            <div class="soc-posture-narrative">
+                                <div class="fw-bold font-mono text-danger mb-1" id="postureThreatLevel" style="font-size: 1.1rem; letter-spacing: 0.04em;">CRITICAL THREAT</div>
+                                <p class="text-muted small mb-0" id="postureSubtext" style="font-size: 0.78rem; line-height: 1.45;">28 critical incident(s) require immediate analyst intervention across monitored communications.</p>
                             </div>
                         </div>
 
@@ -279,7 +283,7 @@
                         <div class="mb-3">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <span class="soc-micro-label">ACTIVE MONITORED VECTORS</span>
-                                <span class="soc-micro-label font-mono" id="postureMonitoredRatio">5 of 5 Monitored</span>
+                                <span class="soc-micro-label font-mono" id="postureMonitoredRatio">4 ACTIVE / 1 CLEAR</span>
                             </div>
                             <div class="soc-posture-vector-pills" id="postureVectorsQuickState">
                                 <!-- Populated dynamically by loadDashboardStats() -->
@@ -290,7 +294,7 @@
                         <div>
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <span class="soc-micro-label">SEVERITY DISTRIBUTION</span>
-                                <span class="soc-micro-label font-mono" id="postureSeverityTotal">0 Incidents</span>
+                                <span class="soc-micro-label font-mono" id="postureSeverityTotal">0 ANALYZED</span>
                             </div>
                             <div class="soc-severity-stacked-bar">
                                 <div class="sev-seg-crit" id="sevSegCrit" style="width: 0%;" title="Critical"></div>
@@ -299,38 +303,18 @@
                                 <div class="sev-seg-low" id="sevSegLow" style="width: 100%;" title="Clean/Low"></div>
                             </div>
                             <div class="d-flex justify-content-between align-items-center mt-2 small font-mono">
-                                <span class="text-danger" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>Crit: <strong id="sevNumCrit">0</strong></span>
-                                <span class="text-warning" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>High: <strong id="sevNumHigh">0</strong></span>
-                                <span class="text-info" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>Med: <strong id="sevNumMed">0</strong></span>
-                                <span class="text-success" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>Low: <strong id="sevNumLow">0</strong></span>
+                                <span class="sev-legend-crit" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>Critical: <strong id="sevNumCrit">0</strong></span>
+                                <span class="sev-legend-high" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>High: <strong id="sevNumHigh">0</strong></span>
+                                <span class="sev-legend-med" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>Medium: <strong id="sevNumMed">0</strong></span>
+                                <span class="sev-legend-low" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>Low: <strong id="sevNumLow">0</strong></span>
                             </div>
-                        </div>
-                    </div>
-
-                    <!-- Col 2: Real Threat Trend Over Time -->
-                    <div class="soc-trend-card">
-                        <div class="soc-card-header d-flex justify-content-between align-items-center mb-2">
-                            <div>
-                                <span class="soc-card-tag"><i class="fas fa-chart-line text-accent me-1"></i>THREAT TREND</span>
-                                <h5 class="fw-bold mb-0 text-primary-soc" style="font-size: 0.95rem;">Ingestion & Threat Velocity Over Time</h5>
-                            </div>
-                            <div>
-                                <span class="soc-pill-safe" id="threatTrendStatusBadge">STABLE POSTURE</span>
-                            </div>
-                        </div>
-                        <div class="soc-trend-chart-container" style="height: 245px; position: relative;">
-                            <canvas id="threatTrendCanvas"></canvas>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top border-subtle small text-muted font-mono" style="font-size: 0.72rem;">
-                            <span><i class="fas fa-database me-1 text-accent"></i> Real-time Ingestion Stream</span>
-                            <span><i class="fas fa-arrows-rotate me-1 text-success"></i> Synchronized Telemetry</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- 3. Threat Vector Analytics & Current Threat Intelligence (Level 3) -->
+                <!-- 3. Threat Analytics & Threat Trend Velocity (Row 2) -->
                 <div class="soc-analytics-intelligence-grid mb-4">
-                    <!-- Left: Threat Vector Analytics -->
+                    <!-- Threat Vector Analytics -->
                     <div class="soc-panel p-4" id="threatVectorAnalyticsPanel">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <div>
@@ -344,19 +328,31 @@
                         </div>
                     </div>
 
-                    <!-- Right: Current Threat Signal & Intelligence -->
-                    <div class="soc-panel p-4" id="threatIntelligenceSignalPanel">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
+                    <!-- Col 2: Real Threat Trend Over Time -->
+                    <div class="soc-trend-card">
+                        <div class="soc-card-header d-flex justify-content-between align-items-center mb-2">
                             <div>
-                                <span class="soc-card-tag"><i class="fas fa-satellite-dish text-accent me-1"></i>CURRENT THREAT SIGNAL</span>
-                                <h5 class="fw-bold mb-0 text-primary-soc" style="font-size: 0.95rem;">SOC Analyst Intelligence & Telemetry</h5>
+                                <span class="soc-card-tag"><i class="fas fa-chart-line text-accent me-1"></i>THREAT TREND</span>
+                                <h5 class="fw-bold mb-0 text-primary-soc" style="font-size: 0.95rem;">Ingestion & Threat Velocity Over Time</h5>
                             </div>
-                            <button type="button" class="btn-soc-outline btn-sm" id="btnRefreshCommandCenter" onclick="handleCommandCenterRefresh()">
-                                <i class="fas fa-arrows-rotate me-1"></i> Refresh
-                            </button>
+                            <div class="d-flex align-items-center gap-2">
+                                <select class="form-select soc-select-sm font-mono" id="trendTimeRangeSelect" onchange="handleTrendRangeChange(this.value)" aria-label="Trend Time Window">
+                                    <option value="7d" selected>Last 7 Days</option>
+                                    <option value="24h">Last 24 Hours</option>
+                                    <option value="30d">Last 30 Days</option>
+                                </select>
+                            </div>
                         </div>
-                        <div id="threatCenterSideTelemetry">
-                            <!-- Populated dynamically by renderThreatIntelligenceCommandCenter -->
+                        <div class="d-flex align-items-center justify-content-end gap-3 mb-2 font-mono" style="font-size: 0.72rem;">
+                            <span style="color: var(--text-secondary);"><i class="fas fa-circle me-1" style="color: #818cf8; font-size: 0.5rem;"></i>Total Ingested</span>
+                            <span style="color: var(--text-secondary);"><i class="fas fa-circle me-1" style="color: #ef4444; font-size: 0.5rem;"></i>High/Critical Threats</span>
+                        </div>
+                        <div class="soc-trend-chart-container" style="height: 220px; position: relative;">
+                            <canvas id="threatTrendCanvas"></canvas>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top border-subtle small text-muted font-mono" style="font-size: 0.72rem;">
+                            <span><span class="soc-ping-dot bg-success me-1"></span>Real-time Ingestion Stream</span>
+                            <span><i class="fas fa-arrows-rotate me-1 text-success"></i> Synchronized Telemetry</span>
                         </div>
                     </div>
                 </div>
@@ -384,14 +380,19 @@
                  ============================================================== -->
             <section id="tab-analyze" class="tab-content-pane" style="display: none;">
                 <div class="forensic-workstation">
-                    <!-- Case Banner Bar -->
+                    <!-- Case Banner Bar with Engine Mode Segmented Control -->
                     <div class="case-banner-bar">
                         <div>
-                            <span class="case-id-tag"><i class="fas fa-terminal me-1"></i> WORKSTATION INTAKE // CASE-STREAM</span>
-                            <h4 class="text-primary-soc mb-0 mt-1" style="font-size: 1.3rem;">Digital Forensic Investigation Console</h4>
+                            <h4 class="text-primary-soc mb-0" style="font-size: 1.3rem;">Digital Forensic Investigation Console</h4>
+                            <p class="text-muted small mb-0 font-mono">Select analysis engine: Standard ML or AI / LLM Threat Reasoning</p>
                         </div>
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="badge-risk SAFE">ENGINE: HYBRID TF-IDF/RULES</span>
+                        <div class="soc-engine-toggle-group" id="threatAnalyzerEngineToggle" role="group" aria-label="Analysis Engine Mode">
+                            <button type="button" class="btn-engine-toggle active" id="btnEngineNormal" onclick="setThreatAnalyzerEngine('normal')" title="Standard ML and Multi-Vector Rule Engine">
+                                <i class="fas fa-shield-alt me-1"></i> NORMAL
+                            </button>
+                            <button type="button" class="btn-engine-toggle" id="btnEngineLLM" onclick="setThreatAnalyzerEngine('llm')" title="NVIDIA Nemotron 3.5 Lightning AI Threat Engine">
+                                <i class="fas fa-brain me-1 text-accent"></i> AI
+                            </button>
                         </div>
                     </div>
 
@@ -402,7 +403,7 @@
                             <span class="preset-card-sub">Academic Notice</span>
                         </button>
                         <button type="button" class="preset-card-btn" onclick="loadSampleEmail('single_insult')">
-                            <span class="preset-card-tag" style="color: var(--threat-medium);"><i class="fas fa-bolt"></i> Single</span>
+                            <span class="preset-card-tag text-warning"><i class="fas fa-bolt"></i> Single</span>
                             <span class="preset-card-sub">Insult ("idiot")</span>
                         </button>
                         <button type="button" class="preset-card-btn" onclick="loadSampleEmail('bullying')">
@@ -428,6 +429,7 @@
                     </div>
 
                     <form id="formAnalyzeEmail" enctype="multipart/form-data">
+                        <input type="hidden" id="inputAnalysisEngine" name="engine" value="normal">
                         <!-- Analyst Intake Metadata Grid -->
                         <div class="analyst-intake-grid">
                             <div>
@@ -457,25 +459,29 @@
                                 <span class="text-muted font-mono" id="charCountDisplay">0 chars • 0 words</span>
                             </div>
                             <textarea class="form-control soc-input soc-textarea" id="inputEmailText" name="email_text" rows="5" placeholder="Paste or type raw email content for multi-vector threat inspection..."></textarea>
-                        </div>
 
-                        <!-- Forensic File Intake Dropzones -->
-                        <div class="forensic-dropzone-grid">
-                            <!-- Attachments -->
-                            <div class="forensic-intake-box" id="attachmentDropzone">
-                                <input type="file" id="inputAttachments" name="attachments" multiple style="display: none;">
-                                <div class="forensic-icon"><i class="fas fa-paperclip"></i></div>
-                                <div class="forensic-title">ATTACHMENT FORENSICS</div>
-                                <div class="forensic-sub">Drop suspicious files or browse • Safe static in-memory inspection</div>
+                            <!-- Compact WhatsApp-style Attachment Controls -->
+                            <div class="soc-compact-attachment-bar">
+                                <div class="soc-attachment-btn-group">
+                                    <!-- Hidden native file inputs (preserved for backend & DOM) -->
+                                    <input type="file" id="inputAttachments" name="attachments" multiple style="display: none;">
+                                    <input type="file" id="inputImages" name="images" accept="image/*" multiple style="display: none;">
+
+                                    <!-- Compact Attach File Button -->
+                                    <button type="button" class="btn-soc-attachment-compact" id="btnTriggerAttachFile" onclick="document.getElementById('inputAttachments').click()" title="Attach files for static security inspection">
+                                        <i class="fas fa-paperclip"></i>
+                                        <span>Attach File</span>
+                                    </button>
+
+                                    <!-- Compact Image Button -->
+                                    <button type="button" class="btn-soc-attachment-compact" id="btnTriggerAttachImage" onclick="document.getElementById('inputImages').click()" title="Attach images for passive EXIF & compression analysis">
+                                        <i class="fas fa-image"></i>
+                                        <span>Image</span>
+                                    </button>
+                                </div>
+
+                                <!-- Attached Files Preview Chips -->
                                 <div class="file-preview-list" id="attachmentPreviewList"></div>
-                            </div>
-
-                            <!-- Images -->
-                            <div class="forensic-intake-box" id="imageDropzone">
-                                <input type="file" id="inputImages" name="images" accept="image/*" multiple style="display: none;">
-                                <div class="forensic-icon"><i class="fas fa-image"></i></div>
-                                <div class="forensic-title">IMAGE FORENSICS</div>
-                                <div class="forensic-sub">Drop images or browse • Passive EXIF metadata & compression check</div>
                                 <div class="file-preview-list" id="imagePreviewList"></div>
                             </div>
                         </div>
@@ -590,20 +596,27 @@
                  SECTION 5: Threat Incident Archive (Analysis History)
                  ============================================================== -->
             <section id="tab-history" class="tab-content-pane" style="display: none;">
-                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                    <div>
-                        <h4 class="text-primary-soc mb-1"><i class="fas fa-history text-accent me-2"></i>Threat Incident Archive</h4>
-                        <p class="text-muted small mb-0">Search, filter, and inspect past security assessments via the contextual drawer.</p>
+                <div class="history-archive-header">
+                    <div class="history-archive-title">
+                        <h4 class="text-primary-soc"><i class="fas fa-history text-accent me-2"></i>Threat Incident Archive</h4>
+                        <p>Search, filter, and inspect past security assessments via the contextual drawer.</p>
                     </div>
-                    <div class="d-flex gap-2">
-                        <select class="form-select soc-input form-select-sm" onchange="loadAnalysisHistory(this.value)" style="width: 150px;">
+                    <div class="history-controls-bar">
+                        <select id="historyRiskSelect" class="form-select soc-input history-risk-select" onchange="handleHistoryFilterChange()" aria-label="Filter history by risk level">
                             <option value="">All Risk Levels</option>
                             <option value="CRITICAL">Critical Threats</option>
                             <option value="HIGH">High Risk</option>
                             <option value="MEDIUM">Medium Risk</option>
                             <option value="LOW">Low / Clean</option>
                         </select>
-                        <a href="/api/reports/download-csv" class="btn-soc-secondary btn-sm">
+                        <select id="historyStatusSelect" class="form-select soc-input history-status-select" onchange="handleHistoryFilterChange()" aria-label="Filter history by admin status">
+                            <option value="">All Statuses</option>
+                            <option value="PENDING">Pending</option>
+                            <option value="WARNING_SENT">Warning Sent</option>
+                            <option value="REVIEWED">Reviewed</option>
+                            <option value="FALSE_POSITIVE">False Positive</option>
+                        </select>
+                        <a href="/api/reports/download-csv" id="historyExportCsvBtn" class="btn-soc-secondary btn-history-export">
                             <i class="fas fa-file-csv me-1"></i> Export CSV
                         </a>
                     </div>
@@ -1105,6 +1118,160 @@
                         <div class="modal-body">
                             <div id="mailboxDetailsContent">
                                 <div class="p-3 text-center text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Loading telemetry details...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Admin Warning Confirmation Modal (Human-In-The-Loop) -->
+            <div class="modal fade soc-action-modal" id="sendWarningModal" tabindex="-1" aria-labelledby="sendWarningModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered modal-lg">
+                    <div class="modal-content soc-panel p-3">
+                        <div class="modal-header border-0 pb-1">
+                            <h5 class="modal-title font-mono text-warning d-flex align-items-center gap-2" id="sendWarningModalLabel">
+                                <i class="fas fa-paper-plane"></i> Send Advisory Warning
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body pt-2">
+                            <div class="alert alert-warning border border-warning-subtle small font-mono mb-3">
+                                <i class="fas fa-info-circle me-2"></i>This will send an advisory communication warning to the original sender of this email.
+                            </div>
+
+                            <input type="hidden" id="warningModalAnalysisId">
+
+                            <div class="soc-panel p-3 mb-3" style="background: var(--bg-inset, rgba(0,0,0,0.2)); border: 1px solid var(--border-color, rgba(255,255,255,0.1)); border-radius: 8px;">
+                                <div class="row g-2 mb-2 font-mono small">
+                                    <div class="col-sm-2 text-muted fw-bold">Recipient:</div>
+                                    <div class="col-sm-10 text-primary-soc fw-bold" id="warningModalTo">student@example.com</div>
+                                </div>
+                                <div class="row g-2 mb-2 font-mono small">
+                                    <div class="col-sm-2 text-muted fw-bold">From:</div>
+                                    <div class="col-sm-10 text-secondary-soc" id="warningModalFrom">BullyMail Administration &lt;configured SMTP sender&gt;</div>
+                                </div>
+                                <div class="row g-2 mb-3 font-mono small">
+                                    <div class="col-sm-2 text-muted fw-bold">Subject:</div>
+                                    <div class="col-sm-10 text-accent fw-bold" id="warningModalSubject">Notice Regarding University Communication Guidelines</div>
+                                </div>
+                                <div class="border-top border-secondary-subtle pt-2">
+                                    <div class="text-muted small font-mono mb-1 text-uppercase" style="font-size: 0.75rem; letter-spacing: 0.05em;">Message Body:</div>
+                                    <div class="p-3 rounded font-mono small text-secondary-soc" id="warningModalBody" style="background: var(--bg-card, rgba(255,255,255,0.03)); border: 1px solid var(--border-color, rgba(255,255,255,0.07)); white-space: pre-wrap; line-height: 1.6; max-height: 200px; overflow-y: auto;"></div>
+                                </div>
+                            </div>
+
+                            <div id="warningModalStatusNotice"></div>
+
+                            <div class="d-flex justify-content-between align-items-center gap-2 mt-3 pt-2 border-top border-secondary-subtle">
+                                <span class="text-muted small font-mono" id="warningModalSmtpHint"><i class="fas fa-lock me-1"></i>Secure SMTP TLS Delivery</span>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="button" class="btn-soc-primary btn-sm font-mono px-3" id="btnExecuteSendWarning" onclick="executeSendWarningSubmit()">
+                                        <i class="fas fa-paper-plane me-1"></i> Send Warning
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mark Reviewed Confirmation Modal -->
+            <div class="modal fade soc-action-modal" id="markReviewedModal" tabindex="-1" aria-labelledby="markReviewedModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-success font-mono" id="markReviewedModalLabel">
+                                <i class="fas fa-check-double text-success me-2"></i>Confirm Mark Reviewed
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="hidden" id="reviewModalAnalysisId">
+                            <p class="text-muted font-mono small mb-3">
+                                Are you sure you want to mark this incident as reviewed? The case status will be updated to <strong>REVIEWED</strong> and logged in the audit trail without dispatching an email.
+                            </p>
+                            <div class="mb-3">
+                                <label class="intake-field-label">ADMINISTRATIVE NOTE (OPTIONAL)</label>
+                                <textarea class="form-control soc-input font-mono small" id="reviewModalNotes" rows="2" placeholder="Reviewed and acknowledged by administrator..."></textarea>
+                            </div>
+                            <div class="d-flex justify-content-end gap-2 mt-4">
+                                <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn-soc-primary btn-sm font-mono" id="btnSubmitMarkReviewed" onclick="executeMarkReviewedSubmit()">
+                                    <i class="fas fa-check-double me-1"></i> Confirm Review
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- False Positive Modal -->
+            <div class="modal fade soc-action-modal" id="falsePositiveModal" tabindex="-1" aria-labelledby="falsePositiveModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-primary-soc font-mono" id="falsePositiveModalLabel">
+                                <i class="fas fa-shield-slash text-warning me-2"></i>Mark as False Positive
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="hidden" id="fpModalAnalysisId">
+                            <div class="mb-3">
+                                <label class="intake-field-label">CLASSIFICATION REASON</label>
+                                <select class="form-select soc-input font-mono" id="fpModalReasonSelect">
+                                    <option value="Academic criticism">Academic criticism / Feedback</option>
+                                    <option value="Benign language">Benign / Non-threatening language</option>
+                                    <option value="Model false positive" selected>Model false positive</option>
+                                    <option value="Quoted complaint / Grievance report">Quoted complaint / Grievance report</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="intake-field-label">ADMINISTRATIVE NOTES (OPTIONAL)</label>
+                                <textarea class="form-control soc-input font-mono small" id="fpModalNotes" rows="3" placeholder="Contextual rationale for marking this detection as a false positive..."></textarea>
+                            </div>
+                            <div class="d-flex justify-content-end gap-2 mt-4">
+                                <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn-soc-primary btn-sm font-mono" id="btnSubmitFalsePositive" onclick="executeFalsePositiveSubmit()">
+                                    <i class="fas fa-check me-1"></i> Confirm False Positive
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Delete Analysis Confirmation Modal -->
+            <div class="modal fade soc-action-modal" id="deleteAnalysisConfirmModal" tabindex="-1" aria-labelledby="deleteAnalysisConfirmModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-danger font-mono" id="deleteAnalysisConfirmModalLabel">
+                                <i class="fas fa-trash-can text-danger me-2"></i>Delete Analysis?
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="hidden" id="deleteModalAnalysisId">
+                            <div class="p-3 mb-3 rounded" style="background: var(--bg-surface-elevated, #0d1424); border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));">
+                                <div class="mb-2">
+                                    <span class="text-muted small font-mono">SUBJECT:</span>
+                                    <div class="fw-bold text-primary-soc font-mono small text-truncate" id="deleteModalSubject">—</div>
+                                </div>
+                                <div>
+                                    <span class="text-muted small font-mono">SENDER:</span>
+                                    <div class="fw-bold text-primary-soc font-mono small text-truncate" id="deleteModalSender">—</div>
+                                </div>
+                            </div>
+                            <p class="text-muted small font-mono mb-4">
+                                This action will permanently remove this analysis from Analysis History.
+                            </p>
+                            <div class="d-flex justify-content-end gap-2">
+                                <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn-soc-danger btn-sm font-mono" id="btnConfirmDeleteAnalysis" onclick="executeDeleteAnalysis()">
+                                    <i class="fas fa-trash-can me-1"></i> Delete
+                                </button>
                             </div>
                         </div>
                     </div>

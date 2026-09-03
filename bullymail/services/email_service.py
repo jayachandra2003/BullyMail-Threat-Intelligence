@@ -212,13 +212,7 @@ class EmailService:
                      last_synced_at = CURRENT_TIMESTAMP
                  WHERE id = %s AND sync_lease_id = %s"""
         count = execute_query(sql, (final_status, last_error, mailbox_id, lease_id))
-        if count == 0:
-            # Fallback reset if lease was lost or expired, ensuring status is never stuck on 'SYNCING'
-            execute_query(
-                "UPDATE email_config SET sync_status = %s, sync_lease_id = NULL, sync_lease_expires_at = NULL WHERE id = %s AND sync_status = 'SYNCING'",
-                (final_status, mailbox_id)
-            )
-        return True
+        return count > 0
 
     def test_preflight_connection(self, email_address, app_password, imap_server='imap.gmail.com', imap_port=993):
         """Pre-flight connection test via IMAP TLS. Never logs or persists credentials."""

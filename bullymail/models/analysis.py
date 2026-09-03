@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from ..database.connection import fetch_one, fetch_all, execute_query
 
 class AnalysisModel:
@@ -55,6 +55,7 @@ class AnalysisModel:
             'overall_risk_level': report_data.get('overall_risk_level', 'LOW'),
             'overall_confidence': report_data.get('overall_confidence', 0.0),
             'threat_score': report_data.get('threat_score', 0.0),
+            'incident_status': report_data.get('incident_status', 'PENDING_REVIEW'),
             'is_bullying': 1 if report_data.get('bullying_analysis', {}).get('is_bullying') else 0,
             'confidence': report_data.get('bullying_analysis', {}).get('confidence', 0.0),
             'rule_based_matches': bullying_matches_str,
@@ -143,8 +144,10 @@ class AnalysisModel:
             overall_conf = row.get('confidence') or row.get('ml_confidence') or (0.85 if is_bull else 0.15)
         row['overall_confidence'] = float(overall_conf)
 
-        if row.get('threat_score') is None or row.get('threat_score') == 0.0:
-            row['threat_score'] = round(float(overall_conf), 2)
+        if row.get('threat_score') is None:
+            row['threat_score'] = round(float(overall_conf), 2) if overall_risk != 'LOW' else 0.0
+        else:
+            row['threat_score'] = float(row.get('threat_score'))
 
         # Build nested vector analyses expected by UI drawer:
         bull_conf = float(row.get('confidence') or row.get('ml_confidence') or 0.0)
@@ -230,12 +233,73 @@ class AnalysisModel:
                     'title': f'{sus_urls} Suspicious URL(s) Detected',
                     'details': 'Hyperlinks flagged for suspicious redirect or credential harvesting risk.'
                 })
-        row['evidence'] = ev_list
+        row['incident_status'] = row.get('incident_status') or 'PENDING_REVIEW'
+
+        # Retrieve incident audit history
+        try:
+            audit_rows = fetch_all(
+                "SELECT id, analysis_id, institution_id, admin_id, admin_username, action, original_sender, original_recipient, warning_recipient, warning_subject, delivery_status, reason, created_at FROM incident_audit_log WHERE analysis_id = %s ORDER BY id DESC",
+                (analysis_id,)
+            )
+            row['audit_logs'] = audit_rows or []
+        except Exception:
+            row['audit_logs'] = []
 
         return row
 
     @staticmethod
-    def get_history(limit=50, offset=0, risk_filter=None, search=None, institution_id=1, user_id=None, role=None):
+    def update_incident_status(analysis_id, new_status, institution_id=None):
+        """Updates the administrative incident status for a threat analysis record."""
+        if institution_id is not None:
+            query = "UPDATE analyzed_emails SET incident_status = %s WHERE id = %s AND institution_id = %s"
+            return execute_query(query, (new_status, analysis_id, institution_id))
+        query = "UPDATE analyzed_emails SET incident_status = %s WHERE id = %s"
+        return execute_query(query, (new_status, analysis_id))
+
+    @staticmethod
+    def record_audit_action(analysis_id, institution_id, admin_id, admin_username, action,
+                            original_sender=None, original_recipient=None, warning_recipient=None,
+                            warning_subject=None, delivery_status='SUCCESS', reason=None):
+        """Inserts an immutable audit log entry for human-in-the-loop administrative decisions."""
+        query = """
+            INSERT INTO incident_audit_log
+            (analysis_id, institution_id, admin_id, admin_username, action, original_sender, original_recipient, warning_recipient, warning_subject, delivery_status, reason)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        return execute_query(
+            query,
+            (analysis_id, institution_id, admin_id, admin_username, action,
+             original_sender, original_recipient, warning_recipient, warning_subject, delivery_status, reason)
+        )
+
+    @staticmethod
+    def get_audit_history(analysis_id, institution_id=None):
+        """Retrieves complete audit trail for a specific incident."""
+        if institution_id is not None:
+            return fetch_all(
+                "SELECT * FROM incident_audit_log WHERE analysis_id = %s AND institution_id = %s ORDER BY id DESC",
+                (analysis_id, institution_id)
+            )
+        return fetch_all(
+            "SELECT * FROM incident_audit_log WHERE analysis_id = %s ORDER BY id DESC",
+            (analysis_id,)
+        )
+
+    @staticmethod
+    def get_last_warning_audit(analysis_id, institution_id=None):
+        """Returns the most recent WARNING_SENT audit entry for an incident."""
+        if institution_id is not None:
+            return fetch_one(
+                "SELECT * FROM incident_audit_log WHERE analysis_id = %s AND institution_id = %s AND action = 'WARNING_SENT' ORDER BY id DESC LIMIT 1",
+                (analysis_id, institution_id)
+            )
+        return fetch_one(
+            "SELECT * FROM incident_audit_log WHERE analysis_id = %s AND action = 'WARNING_SENT' ORDER BY id DESC LIMIT 1",
+            (analysis_id,)
+        )
+
+    @staticmethod
+    def get_history(limit=50, offset=0, risk_filter=None, status_filter=None, search=None, institution_id=1, user_id=None, role=None):
         query = "SELECT * FROM analyzed_emails"
         conditions = []
         params = []
@@ -258,6 +322,14 @@ class AnalysisModel:
                 conditions.append("is_bullying = 1")
             elif risk_filter.upper() == 'LOW':
                 conditions.append("is_bullying = 0")
+
+        if status_filter:
+            norm_status = status_filter.strip().upper().replace(' ', '_')
+            if norm_status in ('PENDING', 'PENDING_REVIEW'):
+                conditions.append("(incident_status = 'PENDING_REVIEW' OR incident_status = 'PENDING' OR incident_status IS NULL OR incident_status = '')")
+            elif norm_status in ('WARNING_SENT', 'REVIEWED', 'FALSE_POSITIVE'):
+                conditions.append("incident_status = %s")
+                params.append(norm_status)
             
         if search:
             conditions.append("(email_subject LIKE %s OR email_from LIKE %s OR email_text LIKE %s)")
@@ -457,3 +529,145 @@ class AnalysisModel:
             'model_count': model_count,
             'dataset_count': dataset_count
         }
+
+    @staticmethod
+    def get_threat_trend(range_window='7d', institution_id=1, user_id=None, role=None):
+        """
+        Calculates time-bucketed threat ingestion and velocity statistics over the specified window.
+        Supports '24h' (hourly buckets), '7d' (daily buckets), and '30d' (daily buckets).
+        """
+        now = datetime.utcnow()
+        range_window = (range_window or '7d').lower().strip()
+
+        if range_window in ('24h', 'last_24_hours', '1d'):
+            range_key = '24h'
+            start_time = (now - timedelta(hours=23)).replace(minute=0, second=0, microsecond=0)
+            bucket_keys = []
+            labels = []
+            for i in range(24):
+                b_dt = start_time + timedelta(hours=i)
+                bucket_keys.append(b_dt.strftime('%Y-%m-%d %H'))
+                labels.append(b_dt.strftime('%H:00'))
+        elif range_window in ('30d', 'last_30_days', '1m'):
+            range_key = '30d'
+            start_time = (now - timedelta(days=29)).replace(hour=0, minute=0, second=0, microsecond=0)
+            bucket_keys = []
+            labels = []
+            for i in range(30):
+                b_dt = start_time + timedelta(days=i)
+                bucket_keys.append(b_dt.strftime('%Y-%m-%d'))
+                labels.append(b_dt.strftime('%b %d'))
+        else:  # Default 7d
+            range_key = '7d'
+            start_time = (now - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+            bucket_keys = []
+            labels = []
+            for i in range(7):
+                b_dt = start_time + timedelta(days=i)
+                bucket_keys.append(b_dt.strftime('%Y-%m-%d'))
+                labels.append(b_dt.strftime('%b %d'))
+
+        inst_clause = "WHERE institution_id = %s"
+        params = [institution_id or 1]
+
+        if role != 'admin' and user_id is not None:
+            inst_clause += " AND user_id = %s"
+            params.append(user_id)
+
+        start_str = start_time.strftime('%Y-%m-%d %H:%M:%S')
+        query = f"SELECT created_at, overall_risk_level, is_bullying FROM analyzed_emails {inst_clause} AND created_at >= %s ORDER BY created_at ASC"
+        params.append(start_str)
+
+        rows = fetch_all(query, tuple(params))
+
+        total_counts = {k: 0 for k in bucket_keys}
+        high_counts = {k: 0 for k in bucket_keys}
+
+        for r in rows:
+            raw_ts = r.get('created_at')
+            if not raw_ts:
+                continue
+            if isinstance(raw_ts, str):
+                try:
+                    clean_ts = raw_ts.replace('T', ' ').split('.')[0]
+                    dt = datetime.strptime(clean_ts, '%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    continue
+            elif isinstance(raw_ts, datetime):
+                dt = raw_ts
+            else:
+                continue
+
+            if range_key == '24h':
+                b_key = dt.strftime('%Y-%m-%d %H')
+            else:
+                b_key = dt.strftime('%Y-%m-%d')
+
+            if b_key in total_counts:
+                total_counts[b_key] += 1
+                is_high = (r.get('overall_risk_level') in ('HIGH', 'CRITICAL')) or bool(r.get('is_bullying'))
+                if is_high:
+                    high_counts[b_key] += 1
+
+        total_series = [total_counts[k] for k in bucket_keys]
+        high_threat_series = [high_counts[k] for k in bucket_keys]
+
+        return {
+            'range': range_key,
+            'labels': labels,
+            'total_series': total_series,
+            'high_threat_series': high_threat_series,
+            'summary': {
+                'total_ingested': sum(total_series),
+                'high_threats': sum(high_threat_series),
+                'start_time': start_time.isoformat(),
+                'end_time': now.isoformat()
+            }
+        }
+
+    @staticmethod
+    def delete_analysis(analysis_id, institution_id=None):
+        """
+        Safely deletes an analysis record and its dependent incident audit logs.
+        Nullifies references in ingested_messages to preserve ingestion logs.
+        Never cascades to users, institutions, or configurations.
+        """
+        try:
+            # 1. Verify existence and tenant ownership
+            if institution_id is not None:
+                record = fetch_one("SELECT id FROM analyzed_emails WHERE id = %s AND institution_id = %s", (analysis_id, institution_id))
+            else:
+                record = fetch_one("SELECT id FROM analyzed_emails WHERE id = %s", (analysis_id,))
+
+            if not record:
+                return False, "Analysis record not found or inaccessible"
+
+            # 2. Nullify references in ingested_messages to keep ingestion logs safe
+            try:
+                execute_query("UPDATE ingested_messages SET analysis_id = NULL WHERE analysis_id = %s", (analysis_id,))
+            except Exception:
+                pass
+
+            # 3. Clean up dependent audit logs for this specific incident
+            try:
+                execute_query("DELETE FROM incident_audit_log WHERE analysis_id = %s", (analysis_id,))
+            except Exception:
+                pass
+            try:
+                execute_query("DELETE FROM admin_warning_log WHERE analysis_id = %s", (analysis_id,))
+            except Exception:
+                pass
+            try:
+                execute_query("DELETE FROM incident_escalation_log WHERE analysis_id = %s", (analysis_id,))
+            except Exception:
+                pass
+
+            # 4. Delete the analyzed_emails row
+            if institution_id is not None:
+                execute_query("DELETE FROM analyzed_emails WHERE id = %s AND institution_id = %s", (analysis_id, institution_id))
+            else:
+                execute_query("DELETE FROM analyzed_emails WHERE id = %s", (analysis_id,))
+
+            return True, "Analysis record permanently deleted"
+        except Exception as e:
+            return False, f"Failed to delete analysis: {str(e)}"
