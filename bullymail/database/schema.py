@@ -284,6 +284,27 @@ def apply_migrations(cursor, engine):
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ''')
 
+    # -------------------------------------------------------------------------
+    # 5. Model History Table Migrations
+    # -------------------------------------------------------------------------
+    model_cols = _get_existing_columns(cursor, 'model_history', engine)
+    if model_cols:
+        if 'confusion_matrix' not in model_cols:
+            cursor.execute("ALTER TABLE model_history ADD COLUMN confusion_matrix TEXT NULL")
+        if 'evaluation_type' not in model_cols:
+            cursor.execute("ALTER TABLE model_history ADD COLUMN evaluation_type VARCHAR(50) DEFAULT 'Synthetic Evaluation'")
+        if 'dataset_used' not in model_cols:
+            cursor.execute("ALTER TABLE model_history ADD COLUMN dataset_used VARCHAR(255) DEFAULT 'default_academic_dataset'")
+
+    # -------------------------------------------------------------------------
+    # 6. Dataset History Table Migrations
+    # -------------------------------------------------------------------------
+    dataset_cols = _get_existing_columns(cursor, 'dataset_history', engine)
+    if dataset_cols:
+        if 'neutral_samples' not in dataset_cols:
+            col_type = "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0"
+            cursor.execute(f"ALTER TABLE dataset_history ADD COLUMN neutral_samples {col_type}")
+
 def setup_database():
     """Sets up all required database tables with UTF-8 support and idempotent secure administrator initialization."""
     engine = get_engine_type()

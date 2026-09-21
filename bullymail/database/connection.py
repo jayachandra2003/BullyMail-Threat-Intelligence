@@ -66,12 +66,9 @@ def get_connection():
     return conn
 
 def get_engine_type():
-    """Returns 'mysql' or 'sqlite' depending on current active connection."""
-    global _active_engine
-    if _active_engine is None:
-        conn = get_connection()
-        conn.close()
-    return _active_engine
+    """Returns 'mysql' or 'sqlite' depending on current active configuration."""
+    db_type = str(_get_config_val('DB_TYPE', 'sqlite')).strip().lower()
+    return 'mysql' if db_type == 'mysql' else 'sqlite'
 
 @contextmanager
 def get_db():

@@ -44,10 +44,12 @@ def get_model_status(current_user):
 @require_role('admin')
 def train_model(current_user):
     """Trains a new cyberbullying model on generated or uploaded data with proper evaluation metrics (Admin Only)."""
+    import logging
     data = request.get_json() or {}
-    model_type = data.get('model_type', 'logistic')
+    model_type = data.get('model_type') or data.get('algorithm') or data.get('model') or 'logistic'
+    raw_samples = data.get('training_samples') or data.get('sample_size') or data.get('dataset_size') or 2000
     try:
-        training_samples = min(max(int(data.get('training_samples', 2000)), 100), 50000)
+        training_samples = min(max(int(raw_samples), 100), 50000)
     except (ValueError, TypeError):
         training_samples = 2000
         
@@ -56,6 +58,12 @@ def train_model(current_user):
         from ..routes.datasets import generate_synthetic_samples
         emails, labels, telemetry = generate_synthetic_samples(training_samples)
         
+        if not emails or not labels:
+            return jsonify({
+                'success': False,
+                'error': 'Training dataset generation produced zero valid samples.'
+            }), 400
+            
         # Train model with proper train/test evaluation and atomic saving
         metrics = detector.train_model(
             emails=emails,
@@ -88,8 +96,13 @@ def train_model(current_user):
             'results': metrics,
             'dataset_telemetry': telemetry
         })
-    except Exception:
-        return jsonify({'success': False, 'error': 'Failed to complete model training pipeline.'}), 500
+    except Exception as e:
+        logging.error(f"[Model Studio] Failed to complete model training pipeline: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': 'Failed to complete model training pipeline.',
+            'detail': str(e)
+        }), 500
 
 @models_bp.route('/api/load-model', methods=['POST'])
 def load_model():
