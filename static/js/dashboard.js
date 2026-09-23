@@ -3073,6 +3073,9 @@ function renderSecureMailboxesList(mailboxes, container) {
                         <button type="button" class="btn-soc-outline btn-sm font-mono ${isEnabled ? 'text-warning' : 'text-success'}" onclick="handleMailboxToggle(${m.id}, '${m.status}')">
                             <i class="fas ${isEnabled ? 'fa-pause' : 'fa-play'} me-1"></i> ${isEnabled ? 'Disable' : 'Enable'}
                         </button>
+                        <button type="button" class="btn-soc-outline btn-sm font-mono text-danger" onclick="handleMailboxDelete(${m.id}, '${escapeHtml(m.email_address)}')">
+                            <i class="fas fa-trash me-1"></i> Delete
+                        </button>
                         ` : ''}
                         <button type="button" class="btn-soc-outline btn-sm font-mono" onclick="openMailboxDetails(${m.id})">
                             <i class="fas fa-chart-line me-1"></i> Activity Details
@@ -3084,6 +3087,41 @@ function renderSecureMailboxesList(mailboxes, container) {
     });
 
     container.innerHTML = html;
+}
+
+async function handleMailboxDelete(mailboxId, emailAddress) {
+    if (!confirm(`Are you sure you want to remove the secure mailbox '${emailAddress}'?\n\nHistorical threat analysis reports will be preserved, but automatic and manual synchronization will be stopped.`)) {
+        return;
+    }
+
+    try {
+        const res = await fetchWithTimeout(`/api/admin/mailboxes/${mailboxId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        }, 15000);
+
+        const data = await res.json();
+        if (data.success) {
+            if (typeof showToast === 'function') {
+                showToast(data.message || 'Mailbox deleted successfully.', 'success');
+            } else {
+                alert(data.message || 'Mailbox deleted successfully.');
+            }
+            loadSecureMailboxes();
+        } else {
+            if (typeof showToast === 'function') {
+                showToast(data.error || 'Failed to delete mailbox.', 'danger');
+            } else {
+                alert(data.error || 'Failed to delete mailbox.');
+            }
+        }
+    } catch (err) {
+        if (typeof showToast === 'function') {
+            showToast(`Error deleting mailbox: ${err.message}`, 'danger');
+        } else {
+            alert(`Error deleting mailbox: ${err.message}`);
+        }
+    }
 }
 
 window.currentMailboxId = null;

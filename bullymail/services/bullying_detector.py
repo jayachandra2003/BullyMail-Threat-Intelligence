@@ -72,6 +72,7 @@ PHYSICAL_THREAT_PATTERNS = [
 
 # 2. Tier 2: Severe Abusive Language & Hostile Profanity (HIGH Severity)
 SEVERE_ABUSIVE_PATTERNS = [
+    (r'\b(fucker|fuckers|fuck|fucking|fucked|motherfucker|motherfuckers|motherfucking)\b', 'Severe Profane Abuse', 0.88),
     (r'\b(mother[\s\-_]?fuck(er|ers|ing|ed)?)\b', 'Severe Profane Abuse', 0.85),
     (r'\b(fuck\s+(you|off|u))\b', 'Aggressive Hostile Attack', 0.85),
     (r'\b(shut\s+the\s+fuck\s+up|stfu)\b', 'Aggressive Silencing Attack', 0.80),
@@ -359,7 +360,7 @@ class BullyingDetector:
                 score = round(max(0.92, max(unique_weights)), 3)
                 severity = 'CRITICAL'
             elif has_severe_abuse or distinct_count >= 2 or any(w >= 0.70 for w in unique_weights):
-                if is_context_mitigated and not has_severe_abuse:
+                if is_context_mitigated:
                     score = 0.20
                     severity = 'LOW'
                 else:
@@ -581,3 +582,45 @@ class BullyingDetector:
             joblib.dump(self.vectorizer, latest_vec_path)
 
         return True
+
+def check_abusive_terms(text: str) -> dict:
+    """
+    Standalone reusable deterministic rule-based abusive term filter.
+    Enforces case-insensitive pattern matching against severe profanity, epithets, and slurs.
+    """
+    if not text or not isinstance(text, str):
+        return {'has_abuse': False, 'matches': [], 'score': 0.0, 'severity': 'LOW'}
+
+    text_lower = text.lower()
+    matches = []
+    max_score = 0.0
+
+    for pat, cat, weight in SEVERE_ABUSIVE_PATTERNS:
+        found = re.findall(pat, text_lower)
+        if found:
+            for item in found:
+                match_str = item[0] if isinstance(item, tuple) else item
+                if match_str and match_str not in matches:
+                    matches.append(match_str)
+            if weight > max_score:
+                max_score = weight
+
+    for pat, cat, weight in DEHUMANIZING_DISCRIMINATORY_PATTERNS:
+        found = re.findall(pat, text_lower)
+        if found:
+            for item in found:
+                match_str = item[0] if isinstance(item, tuple) else item
+                if match_str and match_str not in matches:
+                    matches.append(match_str)
+            if weight > max_score:
+                max_score = weight
+
+    has_abuse = len(matches) > 0
+    severity = 'HIGH' if max_score >= 0.75 else ('MEDIUM' if has_abuse else 'LOW')
+
+    return {
+        'has_abuse': has_abuse,
+        'matches': matches,
+        'score': max_score if has_abuse else 0.0,
+        'severity': severity
+    }

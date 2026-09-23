@@ -131,11 +131,44 @@ class AdminWarningService:
         sender_name = cfg['from_name']
 
         try:
-            msg = MIMEMultipart()
+            import html
+            import email.utils
+
+            msg = MIMEMultipart('alternative')
             msg['From'] = f"{sender_name} <{sender_email}>" if sender_name else sender_email
             msg['To'] = clean_recipient
             msg['Subject'] = sub
-            msg.attach(MIMEText(msg_body, 'plain', 'utf-8'))
+            msg['Date'] = email.utils.formatdate(localtime=True)
+            msg['Message-ID'] = email.utils.make_msgid(domain=(sender_email.split('@')[-1] if '@' in sender_email else 'bullymail.local'))
+            msg['MIME-Version'] = '1.0'
+
+            # Attach plain text part
+            text_part = MIMEText(msg_body, 'plain', 'utf-8')
+            msg.attach(text_part)
+
+            # Attach formatted HTML alternative part for modern email client compatibility
+            html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #1e293b; background-color: #f8fafc; margin: 0; padding: 20px; }}
+.container {{ max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 30px; }}
+.header {{ font-weight: bold; font-size: 18px; color: #0f172a; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }}
+.content {{ white-space: pre-wrap; font-size: 14px; color: #334155; }}
+.footer {{ margin-top: 30px; padding-top: 15px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; }}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">{html.escape(sub)}</div>
+<div class="content">{html.escape(msg_body)}</div>
+<div class="footer">BullyMail Security Governance & Operational Monitoring</div>
+</div>
+</body>
+</html>"""
+            html_part = MIMEText(html_body, 'html', 'utf-8')
+            msg.attach(html_part)
 
             context = ssl.create_default_context()
             server = smtplib.SMTP(cfg['host'], cfg['port'], timeout=15)

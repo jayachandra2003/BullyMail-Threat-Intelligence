@@ -9,6 +9,53 @@ from ..models.ingested_message import IngestedMessageModel
 
 logger = logging.getLogger('bullymail.worker.processor')
 
+def _parse_datetime(val):
+    if not val:
+        return None
+    if isinstance(val, datetime.datetime):
+        dt = val
+    else:
+        try:
+            val_str = str(val).split('.')[0]
+            dt = datetime.datetime.fromisoformat(val_str.replace('Z', ''))
+        except Exception:
+            try:
+                import email.utils
+                dt = email.utils.parsedate_to_datetime(str(val))
+            except Exception:
+                return None
+    if dt is not None:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        else:
+            dt = dt.astimezone(datetime.timezone.utc)
+    return dt
+
+def _parse_email_date(date_str):
+    if not date_str:
+        return None
+    try:
+        import email.utils
+        dt = email.utils.parsedate_to_datetime(str(date_str))
+        if dt is not None:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=datetime.timezone.utc)
+            else:
+                dt = dt.astimezone(datetime.timezone.utc)
+        return dt
+    except Exception:
+        try:
+            val_str = str(date_str).split('.')[0]
+            dt = datetime.datetime.fromisoformat(val_str.replace('Z', ''))
+            if dt is not None:
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=datetime.timezone.utc)
+                else:
+                    dt = dt.astimezone(datetime.timezone.utc)
+            return dt
+        except Exception:
+            return None
+
 class MailboxProcessor:
     """
     Processes institutional email inboxes sequentially.
@@ -165,28 +212,74 @@ class MailboxProcessor:
         try:
             _, uidvalidity, msg_count = imap_client.select_mailbox('INBOX')
 
-            last_known_uid = None
+            # Fetch mailbox initialization state and UID boundaries
+            mb_cfg = fetch_one(
+                "SELECT mailbox_initialized, initial_uid, last_processed_uid, uid_validity, configured_at, monitoring_started_at FROM email_config WHERE id = %s",
+                (cfg_id,)
+            ) or {}
+
+            is_initialized = bool(mb_cfg.get('mailbox_initialized'))
+            stored_uid_validity = str(mb_cfg.get('uid_validity')) if mb_cfg.get('uid_validity') is not None else None
+            current_uid_validity = str(uidvalidity) if uidvalidity is not None else None
+            dt1 = _parse_datetime(mb_cfg.get('configured_at'))
+            dt2 = _parse_datetime(mb_cfg.get('monitoring_started_at'))
+            baseline_dt = min(dt1, dt2) if (dt1 and dt2) else (dt1 or dt2)
+
+            # Handle initial baseline setup for newly added/uninitialized mailboxes
+            if not is_initialized or stored_uid_validity is None or stored_uid_validity != current_uid_validity:
+                raw_max_uid = imap_client.get_max_uid()
+                try:
+                    max_inbox_uid = int(raw_max_uid)
+                except (TypeError, ValueError):
+                    max_inbox_uid = 0
+                logger.info(f"[SYNC] Baseline initialization for config_id={cfg_id}: establishing starting UID boundary at {max_inbox_uid}")
+
+                execute_query(
+                    '''UPDATE email_config
+                       SET mailbox_initialized = 1,
+                           initial_uid = %s,
+                           last_processed_uid = %s,
+                           uid_validity = %s,
+                           monitoring_started_at = COALESCE(monitoring_started_at, CURRENT_TIMESTAMP)
+                       WHERE id = %s''',
+                    (max_inbox_uid, max_inbox_uid, current_uid_validity, cfg_id)
+                )
+
+                self.update_telemetry(cfg_id, sync_status='OK', lease_id=lease_id)
+                imap_client.disconnect()
+                summary['success'] = True
+                summary['status'] = 'OK'
+                summary['emails_found'] = 0
+                summary['emails_processed'] = 0
+                summary['sync_completion_time'] = datetime.datetime.utcnow().isoformat()
+                logger.info(f"[SYNC] Baseline boundary established for config_id={cfg_id} (UID boundary: {max_inbox_uid}). Historical backfill suppressed.")
+                return summary if return_summary else True
+
+            # Incremental Sync for initialized mailboxes (only process UIDs > last_processed_uid)
+            last_known_uid = mb_cfg.get('last_processed_uid')
+            if last_known_uid is None:
+                db_max = fetch_one(
+                    "SELECT MAX(imap_uid) as max_uid FROM ingested_messages WHERE institution_id = %s AND email_config_id = %s",
+                    (inst_id, cfg_id)
+                )
+                last_known_uid = db_max.get('max_uid') if db_max else 0
+
+            last_known_uid = int(last_known_uid or 0)
             try:
-                if uidvalidity is not None:
-                    row = fetch_one(
-                        "SELECT MAX(imap_uid) as max_uid FROM ingested_messages WHERE institution_id = %s AND email_config_id = %s AND (uidvalidity = %s OR uidvalidity IS NULL)",
-                        (inst_id, cfg_id, uidvalidity)
-                    )
-                else:
-                    row = fetch_one(
-                        "SELECT MAX(imap_uid) as max_uid FROM ingested_messages WHERE institution_id = %s AND email_config_id = %s",
-                        (inst_id, cfg_id)
-                    )
-                if row and row.get('max_uid'):
-                    last_known_uid = int(row['max_uid'])
-            except Exception:
-                last_known_uid = None
+                max_inbox_uid = int(imap_client.get_max_uid())
+            except (ValueError, TypeError):
+                max_inbox_uid = 0
+
+            # Safety check: if stored last_known_uid exceeds current inbox max_uid, correct it
+            if max_inbox_uid > 0 and last_known_uid > max_inbox_uid:
+                logger.warning(f"[SYNC] Stored last_processed_uid ({last_known_uid}) exceeds inbox max_uid ({max_inbox_uid}). Correcting watermark to {max_inbox_uid}.")
+                last_known_uid = max_inbox_uid
+                execute_query("UPDATE email_config SET last_processed_uid = %s WHERE id = %s", (last_known_uid, cfg_id))
 
             uids = imap_client.fetch_unseen_uids(last_known_uid=last_known_uid)
-            if last_known_uid and isinstance(last_known_uid, int) and last_known_uid > 0:
-                uids = [u for u in uids if u > last_known_uid]
+            uids = [u for u in uids if u > last_known_uid]
 
-            logger.info(f"[SYNC] IMAP check complete: {len(uids)} new candidate messages in INBOX (last_known_uid={last_known_uid})")
+            logger.info(f"[SYNC] IMAP check complete for config_id={cfg_id}: {len(uids)} new candidate messages in INBOX (cutoff UID > {last_known_uid})")
             summary['emails_found'] = len(uids)
 
             if not uids:
@@ -198,22 +291,50 @@ class MailboxProcessor:
                 logger.info(f"[SYNC] Complete: 0 new messages to ingest for config {cfg_id}")
                 return summary if return_summary else True
 
+            contiguous_watermark_uid = last_known_uid
+            encountered_failure = False
+
             for uid in uids:
                 if should_stop and should_stop():
                     logger.info(f"[SYNC] Mid-batch shutdown requested for Institution {inst_id}. Halting message loop.")
                     break
 
                 record_id = None
+                msg_handled = False
                 try:
-                    logger.info(f"[SYNC] New message detected: UID={uid} for config {cfg_id}")
+                    logger.info(f"[SYNC] New message candidate: UID={uid} for config_id={cfg_id}")
 
-                    # 1. Fetch raw RFC822 bytes
-                    raw_bytes = imap_client.fetch_rfc822_message(uid)
-                    logger.info(f"[SYNC] Fetched raw RFC822 for UID={uid} ({len(raw_bytes)} bytes)")
+                    # 1. Fetch raw RFC822 bytes and IMAP internal date
+                    try:
+                        meta_res = imap_client.fetch_message_with_metadata(uid)
+                        if isinstance(meta_res, (list, tuple)) and len(meta_res) == 2:
+                            raw_bytes, internal_date = meta_res
+                        elif isinstance(meta_res, (bytes, bytearray)):
+                            raw_bytes, internal_date = meta_res, None
+                        else:
+                            raw_bytes = imap_client.fetch_rfc822_message(uid)
+                            internal_date = None
+                    except Exception:
+                        raw_bytes = imap_client.fetch_rfc822_message(uid)
+                        internal_date = None
+
+                    logger.info(f"[SYNC] Fetched raw RFC822 for UID={uid} ({len(raw_bytes) if raw_bytes else 0} bytes, internal_date={internal_date})")
 
                     # 2. Parse MIME structure safely
                     parsed = SafeMIMEParser.parse_email_bytes(raw_bytes)
                     msg_hash = parsed['message_id_hash']
+
+                    # 2b. Strict Baseline Date Boundary Enforcement
+                    if baseline_dt:
+                        email_dt = _parse_email_date(parsed.get('date'))
+                        if not email_dt and internal_date:
+                            email_dt = _parse_email_date(internal_date)
+                        if email_dt and email_dt < baseline_dt:
+                            logger.info(f"[SYNC] Skipping historical email UID={uid} for config {cfg_id}: date ({email_dt.isoformat()}) is prior to baseline ({baseline_dt.isoformat()})")
+                            msg_handled = True
+                            if not encountered_failure and uid > contiguous_watermark_uid:
+                                contiguous_watermark_uid = uid
+                            continue
 
                     # 3. Atomic Claim or Retry in IngestedMessageModel
                     claimed, record_id, attempt_cnt = IngestedMessageModel.claim_message_for_processing(
@@ -228,6 +349,9 @@ class MailboxProcessor:
                     if not claimed:
                         logger.debug(f"[SYNC] Skipping duplicate/in-progress message (Hash: {msg_hash[:12]}...) for Institution {inst_id}")
                         summary['duplicates_skipped'] += 1
+                        msg_handled = True
+                        if not encountered_failure and uid > contiguous_watermark_uid:
+                            contiguous_watermark_uid = uid
                         continue
 
                     logger.info(f"[SYNC] Ingested and claimed UID={uid} for processing")
@@ -253,6 +377,9 @@ class MailboxProcessor:
                     )
                     if updated:
                         summary['emails_processed'] += 1
+                        msg_handled = True
+                        if not encountered_failure and uid > contiguous_watermark_uid:
+                            contiguous_watermark_uid = uid
                         if report.get('overall_risk_level') in ('HIGH', 'CRITICAL') or report.get('bullying_analysis', {}).get('is_bullying'):
                             summary['threats_detected'] += 1
                         lease_ok = self.update_telemetry(cfg_id, sync_status='SYNCING', increment_count=True, lease_id=lease_id)
@@ -263,9 +390,11 @@ class MailboxProcessor:
                     else:
                         logger.warning(f"[SYNC] Lost processing ownership for UID {uid} due to stale recovery timeout reset.")
                         summary['failures'] += 1
+                        encountered_failure = True
 
                 except Exception as e:
                     summary['failures'] += 1
+                    encountered_failure = True
                     logger.error(f"[SYNC] Error processing message UID {uid} for Institution {inst_id}: {e}")
                     if record_id:
                         try:
@@ -276,11 +405,17 @@ class MailboxProcessor:
                             pass
                     continue
 
+            if contiguous_watermark_uid > last_known_uid:
+                execute_query(
+                    "UPDATE email_config SET last_processed_uid = %s WHERE id = %s",
+                    (contiguous_watermark_uid, cfg_id)
+                )
+
             self.update_telemetry(cfg_id, sync_status='OK', lease_id=lease_id)
             summary['success'] = True
             summary['status'] = 'OK'
             summary['sync_completion_time'] = datetime.datetime.utcnow().isoformat()
-            logger.info(f"[SYNC] Complete: {summary['emails_processed']} processed, {summary['duplicates_skipped']} skipped, {summary['threats_detected']} threats detected")
+            logger.info(f"[SYNC] Complete: {summary['emails_processed']} processed, {summary['duplicates_skipped']} skipped, {summary['threats_detected']} threats detected (high watermark UID: {contiguous_watermark_uid})")
             return summary if return_summary else True
         except Exception as e:
             logger.error(f"[SYNC] Error during mailbox loop for Institution {inst_id}: {e}")

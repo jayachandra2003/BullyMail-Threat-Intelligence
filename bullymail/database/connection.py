@@ -28,9 +28,12 @@ def get_connection():
         try:
             import mysql.connector
             from mysql.connector import ClientFlag
+            db_host = _get_config_val('DB_HOST', 'localhost')
+            if str(db_host).strip().lower() == 'localhost':
+                db_host = '127.0.0.1'
             db_pass = _get_config_val('DB_PASSWORD', '')
             conn = mysql.connector.connect(
-                host=_get_config_val('DB_HOST', 'localhost'),
+                host=db_host,
                 port=int(_get_config_val('DB_PORT', 3306)),
                 user=_get_config_val('DB_USER', 'root'),
                 password=db_pass,

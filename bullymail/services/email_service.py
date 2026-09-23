@@ -3,6 +3,7 @@ import ssl
 import email
 import imaplib
 import smtplib
+import datetime
 from email.header import decode_header
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -120,7 +121,7 @@ class EmailService:
         return fetch_all(
             """SELECT id, institution_id, email_address, imap_server, smtp_server, smtp_port, status,
                       sync_status, sync_lease_id, sync_lease_expires_at, last_synced_at, last_error,
-                      total_ingested_count, configured_at
+                      total_ingested_count, configured_at, monitoring_started_at, initial_uid, last_processed_uid, uid_validity, mailbox_initialized
                FROM email_config WHERE institution_id = %s ORDER BY id ASC""",
             (institution_id,)
         )
@@ -132,7 +133,7 @@ class EmailService:
         return fetch_one(
             """SELECT id, institution_id, email_address, imap_server, smtp_server, smtp_port, status,
                       sync_status, sync_lease_id, sync_lease_expires_at, last_synced_at, last_error,
-                      total_ingested_count, configured_at
+                      total_ingested_count, configured_at, monitoring_started_at, initial_uid, last_processed_uid, uid_validity, mailbox_initialized
                FROM email_config WHERE id = %s AND institution_id = %s""",
             (mailbox_id, institution_id)
         )
@@ -148,13 +149,37 @@ class EmailService:
         imap_host = imap_server or self.imap_server
         smtp_host = smtp_server or self.smtp_server
         smtp_p = int(smtp_port) if smtp_port else self.smtp_port
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
 
         execute_query(
-            '''INSERT INTO email_config (institution_id, email_address, encrypted_app_password, imap_server, smtp_server, smtp_port, status, sync_status)
-               VALUES (%s, %s, %s, %s, %s, %s, 'active', 'IDLE')''',
-            (institution_id, clean_email, enc_password, imap_host, smtp_host, smtp_p)
+            '''INSERT INTO email_config (
+                   institution_id, email_address, encrypted_app_password, imap_server, smtp_server, smtp_port,
+                   status, sync_status, configured_at, monitoring_started_at, mailbox_initialized
+               )
+               VALUES (%s, %s, %s, %s, %s, %s, 'active', 'IDLE', %s, %s, 0)''',
+            (institution_id, clean_email, enc_password, imap_host, smtp_host, smtp_p, now_utc, now_utc)
         )
-        return self.get_mailboxes_for_institution(institution_id)[-1]
+        mb = self.get_mailboxes_for_institution(institution_id)[-1]
+
+        # Try initializing boundary immediately if IMAP is reachable
+        try:
+            from .imap_client import IMAPClient
+            client = IMAPClient(institution_id=institution_id, mailbox_id=mb['id'])
+            if client.connect():
+                _, uidvalidity, msg_count = client.select_mailbox('INBOX')
+                max_uid = client.get_max_uid()
+                execute_query(
+                    '''UPDATE email_config
+                       SET initial_uid = %s, last_processed_uid = %s, uid_validity = %s, mailbox_initialized = 1
+                       WHERE id = %s''',
+                    (max_uid, max_uid, uidvalidity, mb['id'])
+                )
+                client.disconnect()
+                mb = self.get_mailbox_by_id(mb['id'], institution_id)
+        except Exception:
+            pass
+
+        return mb
 
     def update_mailbox_status(self, mailbox_id, institution_id, new_status):
         """Updates mailbox status ('active' or 'disabled') for tenant-owned mailbox."""
@@ -166,6 +191,42 @@ class EmailService:
             (new_status, mailbox_id, institution_id)
         )
         return True
+
+    def delete_mailbox(self, mailbox_id, institution_id):
+        """
+        Deletes/removes a tenant-owned mailbox configuration safely.
+        Wipes credentials, releases active sync leases, detaches analyzed email references, and removes record.
+        """
+        mailbox = self.get_mailbox_by_id(mailbox_id, institution_id)
+        if not mailbox:
+            return False, "Mailbox not found."
+
+        try:
+            # Release active sync lease if present
+            if mailbox.get('sync_lease_id'):
+                self.release_sync_lease(mailbox_id, mailbox['sync_lease_id'], final_status='RELEASED')
+        except Exception as e:
+            logger.warning(f"Error releasing sync lease for mailbox {mailbox_id}: {e}")
+
+        try:
+            # Safe detachment from analyzed_emails to preserve threat analysis records
+            execute_query("UPDATE analyzed_emails SET email_config_id = NULL WHERE email_config_id = %s", (mailbox_id,))
+        except Exception as e:
+            logger.warning(f"Note updating analyzed_emails email_config_id: {e}")
+
+        try:
+            execute_query("DELETE FROM email_sync_audit WHERE email_config_id = %s", (mailbox_id,))
+        except Exception:
+            pass
+
+        try:
+            execute_query("DELETE FROM ingested_messages WHERE email_config_id = %s", (mailbox_id,))
+        except Exception:
+            pass
+
+        execute_query("DELETE FROM email_config WHERE id = %s AND institution_id = %s", (mailbox_id, institution_id))
+        return True, "Mailbox deleted successfully."
+
 
     def acquire_sync_lease(self, mailbox_id, institution_id):
         """

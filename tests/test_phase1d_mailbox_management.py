@@ -95,6 +95,11 @@ def test_cross_tenant_mailbox_status_access_returns_404(client, setup_tenants):
     assert res.status_code == 404
     assert res.get_json()['error'] == 'Mailbox not found.'
 
+    # Cross-tenant delete attempt
+    res = client.delete(f'/api/admin/mailboxes/{beta_mb_id}')
+    assert res.status_code == 404
+    assert res.get_json()['error'] == 'Mailbox not found.'
+
 def test_role_authorization_for_mailbox_management(client, setup_tenants):
     """Verify non-admin users (analysts) receive HTTP 403 Forbidden on admin endpoints."""
     with client.session_transaction() as sess:
@@ -104,6 +109,35 @@ def test_role_authorization_for_mailbox_management(client, setup_tenants):
 
     res = client.get('/api/admin/mailboxes')
     assert res.status_code == 403
+
+    alpha_mb_id = setup_tenants['mb_alpha_id']
+    res = client.delete(f'/api/admin/mailboxes/{alpha_mb_id}')
+    assert res.status_code == 403
+
+def test_delete_mailbox_success(client, setup_tenants):
+    """Verify admin can delete a mailbox belonging to their institution."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = 100
+        sess['username'] = 'admin_alpha'
+        sess['role'] = 'admin'
+
+    alpha_mb_id = setup_tenants['mb_alpha_id']
+
+    # Delete mailbox
+    res = client.delete(f'/api/admin/mailboxes/{alpha_mb_id}')
+    assert res.status_code == 200
+    assert res.get_json()['success'] is True
+    assert 'deleted' in res.get_json()['message'].lower() or 'removed' in res.get_json()['message'].lower()
+
+    # Verify mailbox is no longer returned in listing
+    res = client.get('/api/admin/mailboxes')
+    assert res.status_code == 200
+    assert len(res.get_json()['mailboxes']) == 0
+
+    # Delete non-existent mailbox returns 404
+    res = client.delete(f'/api/admin/mailboxes/{alpha_mb_id}')
+    assert res.status_code == 404
+    assert res.get_json()['error'] == 'Mailbox not found.'
 
 def test_password_secret_protection_in_api_responses(client, setup_tenants):
     """Verify plaintext or encrypted app_passwords are never leaked in API JSON responses."""
@@ -348,8 +382,9 @@ def test_process_mailbox_halts_immediately_on_lease_loss(app, setup_tenants, mon
     mock_imap.fetch_rfc822_message.return_value = msg.as_bytes()
     monkeypatch.setattr('bullymail.worker.processor.IMAPClient', lambda institution_id: mock_imap)
 
+    execute_query("UPDATE email_config SET mailbox_initialized = 1, uid_validity = '12345', last_processed_uid = 800 WHERE id = %s", (alpha_mb_id,))
+    config_row = fetch_one("SELECT * FROM email_config WHERE id = %s", (alpha_mb_id,))
     processor = MailboxProcessor()
-    config_row = {'id': alpha_mb_id, 'institution_id': 10, 'email_address': 'alpha@alpha.com'}
 
     with app.app_context():
         # Acquire initial lease
