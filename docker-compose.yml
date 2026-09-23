@@ -6,7 +6,7 @@ services:
     container_name: bullymail_app
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     environment:
       - FLASK_ENV=production
       - DB_TYPE=mysql
@@ -16,14 +16,38 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME:-bullymail_db}
       - SECRET_KEY=${SECRET_KEY}
+      - BULLYMAIL_MASTER_KEY=${BULLYMAIL_MASTER_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - APP_BASE_URL=${APP_BASE_URL:-http://localhost:5000}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     volumes:
       - ./saved_models:/app/saved_models
       - ./datasets:/app/datasets
       - ./uploads:/app/uploads
+
+  worker:
+    build: .
+    container_name: bullymail_worker
+    restart: unless-stopped
+    command: python -m bullymail.worker.daemon
+    environment:
+      - FLASK_ENV=production
+      - DB_TYPE=mysql
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=${DB_USER:-bullymail_user}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME:-bullymail_db}
+      - BULLYMAIL_MASTER_KEY=${BULLYMAIL_MASTER_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./saved_models:/app/saved_models
 
   db:
     image: mysql:8.0
@@ -34,8 +58,13 @@ services:
       - MYSQL_USER=${DB_USER:-bullymail_user}
       - MYSQL_PASSWORD=${DB_PASSWORD}
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-    ports:
-      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    # Security: Do NOT map port 3306 to the host. Accessible only inside docker network.
     volumes:
       - mysql_data:/var/lib/mysql
       - ./database_setup.sql:/docker-entrypoint-initdb.d/init.sql

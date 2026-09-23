@@ -431,6 +431,8 @@ class BullyingDetector:
             # Rule detected single insult, multiple insults, severe abuse, or threat
             is_bullying = True
             combined_score = max(rule_score, round((rule_score * 0.6) + (ml_prob * 0.4), 3))
+            if severity == 'MEDIUM' and combined_score >= 0.70:
+                combined_score = 0.68
             final_confidence = round(max(combined_score, rule_score), 3)
         elif self.model and self.vectorizer:
             combined_score = round((rule_score * 0.4) + (ml_prob * 0.6), 3)

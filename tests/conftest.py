@@ -33,7 +33,7 @@ def mock_default_email_delivery(monkeypatch):
 @pytest.fixture
 def app():
     """Creates a fresh test application supporting isolated SQLite or isolated MySQL test database."""
-    target_db_type = os.getenv('DB_TYPE', 'sqlite').strip().lower()
+    target_db_type = os.getenv('TEST_DB_TYPE', 'sqlite').strip().lower()
 
     os.environ['BULLYMAIL_MASTER_KEY'] = 'ghNXQBv5dpR4x5h5UCkhrnfBLXR3nKrZY2mHHTPGRGE='
     from bullymail.services.crypto_service import CryptoService

@@ -24,6 +24,14 @@ ENV/
 *.db-journal
 *.db-wal
 *.db-shm
+mysql_data/
+
+# SSL Certificates & Private Keys
+certs/
+certbot/
+*.pem
+*.key
+*.crt
 
 # Academic, Paper & Review Preparation Artifacts
 research_paper*

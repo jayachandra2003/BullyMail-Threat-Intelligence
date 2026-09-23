@@ -177,3 +177,20 @@ def test_login_route_success_and_failure(client):
     data_fail = res_fail.get_json()
     assert data_fail['success'] is False
     assert data_fail['error'] == 'Invalid username or password'
+
+def test_admin_credential_synchronization_on_startup(app):
+    """14. Verify that when ADMIN_PASSWORD or ADMIN_USERNAME environment variables change, init_db updates the database admin credentials seamlessly."""
+    new_admin_user = "render_admin_user"
+    new_admin_pass = "RenderNewSecretPass2026!"
+
+    app.config['ADMIN_USERNAME'] = new_admin_user
+    app.config['ADMIN_PASSWORD'] = new_admin_pass
+
+    # Re-trigger database initialization/sync
+    init_db()
+
+    # Login with new updated environment credentials
+    auth_user, status = UserModel.authenticate(new_admin_user, new_admin_pass)
+    assert auth_user is not None
+    assert status == 'SUCCESS'
+    assert auth_user['username'] == new_admin_user
