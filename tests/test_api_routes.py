@@ -70,3 +70,11 @@ def test_favicon_route(client):
     assert res.status_code == 200
     assert 'svg' in res.content_type
 
+def test_health_route(client):
+    res = client.get('/health')
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data['status'] == 'ok'
+    assert 'BullyMail' in data['service']
+
+

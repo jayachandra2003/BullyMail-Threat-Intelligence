@@ -1,5 +1,5 @@
 import os
-from flask import Blueprint, render_template, session, redirect, url_for, send_from_directory, current_app
+from flask import Blueprint, render_template, session, redirect, url_for, send_from_directory, current_app, jsonify
 
 from .auth import get_current_user
 
@@ -36,3 +36,9 @@ def favicon():
         'favicon.svg',
         mimetype='image/svg+xml'
     )
+
+@main_bp.route('/health')
+def health():
+    """Lightweight zero-overhead health check endpoint for cloud platform probes (e.g., Render)."""
+    return jsonify({'status': 'ok', 'service': 'BullyMail Threat Intelligence Platform'}), 200
+
