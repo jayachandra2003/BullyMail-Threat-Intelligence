@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms & Conditions — BullyMail SOC</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <script>
+        (function() {
+            const saved = localStorage.getItem('bullymail_theme');
+            const theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.style.colorScheme = theme;
+        })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <style>
+        body {
+            background-color: var(--bg-surface, #0f172a);
+            color: var(--text-primary, #f8fafc);
+            min-height: 100vh;
+            font-family: 'Inter', sans-serif;
+            padding: 40px 20px;
+        }
+        .legal-card {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px);
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="legal-card">
+        <h2 class="fw-bold mb-4"><i class="fas fa-file-contract me-3 text-primary"></i>Terms & Conditions</h2>
+        <p class="text-secondary mb-4">Effective Date: September 2026</p>
+        
+        <h5 class="fw-semibold text-light mt-4">1. Authorized Institutional Use</h5>
+        <p class="text-secondary">BullyMail Threat Intelligence Platform is designed for authorized SOC operators, cybersecurity analysts, and academic institutions. Unauthorized automated access, credential sharing, or malicious ingestion is strictly prohibited.</p>
+
+        <h5 class="fw-semibold text-light mt-4">2. Machine Learning & Threat Telemetry Disclaimers</h5>
+        <p class="text-secondary">Automated risk scores and explainable threat evidence are generated via calibrated machine learning classifiers and multi-vector heuristic rules. Security analysts should review high-severity incidents prior to taking disciplinary or administrative action.</p>
+
+        <h5 class="fw-semibold text-light mt-4">3. System Availability</h5>
+        <p class="text-secondary">The platform is provided "as is" with enterprise availability features. Maintenance windows and background model retraining operations may occur periodically.</p>
+
+        <div class="mt-5 pt-3 border-top border-secondary border-opacity-25 d-flex justify-content-between">
+            <a href="{{ url_for('main.index') }}" class="btn btn-outline-light"><i class="fas fa-arrow-left me-2"></i>Back to Home</a>
+            <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary"><i class="fas fa-shield-halved me-2"></i>SOC Console</a>
+        </div>
+    </div>
+</body>
+</html>

@@ -37,6 +37,30 @@ def favicon():
         mimetype='image/svg+xml'
     )
 
+@main_bp.route('/robots.txt')
+def robots():
+    return send_from_directory(
+        os.path.join(current_app.root_path, '..', 'static'),
+        'robots.txt',
+        mimetype='text/plain'
+    )
+
+@main_bp.route('/sitemap.xml')
+def sitemap():
+    return send_from_directory(
+        os.path.join(current_app.root_path, '..', 'static'),
+        'sitemap.xml',
+        mimetype='application/xml'
+    )
+
+@main_bp.route('/privacy')
+def privacy():
+    return render_template('privacy.html')
+
+@main_bp.route('/terms')
+def terms():
+    return render_template('terms.html')
+
 @main_bp.route('/health')
 def health():
     """Lightweight zero-overhead health check endpoint for cloud platform probes (e.g., Render)."""

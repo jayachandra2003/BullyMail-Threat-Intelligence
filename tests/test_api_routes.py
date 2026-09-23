@@ -77,4 +77,37 @@ def test_health_route(client):
     assert data['status'] == 'ok'
     assert 'BullyMail' in data['service']
 
+def test_robots_txt_route(client):
+    res = client.get('/robots.txt')
+    assert res.status_code == 200
+    assert 'text/plain' in res.content_type
+    assert b'Disallow: /api/' in res.data
+
+def test_sitemap_xml_route(client):
+    res = client.get('/sitemap.xml')
+    assert res.status_code == 200
+    assert 'application/xml' in res.content_type
+    assert b'<urlset' in res.data
+
+def test_privacy_policy_route(client):
+    res = client.get('/privacy')
+    assert res.status_code == 200
+    assert b'Privacy Policy' in res.data
+
+def test_terms_conditions_route(client):
+    res = client.get('/terms')
+    assert res.status_code == 200
+    assert b'Terms &amp; Conditions' in res.data or b'Terms & Conditions' in res.data
+
+def test_custom_404_template_route(client):
+    res = client.get('/non-existent-page-path-123')
+    assert res.status_code == 404
+    assert b'Target Resource Not Found' in res.data
+
+def test_index_page_seo_and_social_tags(client):
+    res = client.get('/')
+    assert res.status_code == 200
+    assert b'meta name="twitter:card"' in res.data
+    assert b'meta property="og:title"' in res.data
+
 

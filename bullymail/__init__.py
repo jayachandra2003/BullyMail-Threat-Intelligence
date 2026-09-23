@@ -124,7 +124,8 @@ def create_app(config_class=Config):
     def not_found(e):
         if request.path.startswith('/api/') or request.is_json:
             return jsonify({'success': False, 'error': 'Endpoint or resource not found'}), 404
-        return "Resource Not Found", 404
+        from flask import render_template
+        return render_template('404.html'), 404
 
     @app.errorhandler(405)
     def method_not_allowed(e):
