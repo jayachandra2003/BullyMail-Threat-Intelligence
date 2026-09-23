@@ -19,9 +19,10 @@ RUN python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')"
 # Copy application code
 COPY . .
 
-EXPOSE 5000
+EXPOSE 10000
 
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "wsgi.py"]
+CMD ["sh", "-c", "gunicorn --workers 1 --threads 2 --bind 0.0.0.0:${PORT:-10000} wsgi:app"]
+
