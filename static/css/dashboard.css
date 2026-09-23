@@ -2077,6 +2077,74 @@
     .sidebar-v2.mobile-open {
         transform: translateX(0);
     }
+
+    /* Sidebar Mobile Backdrop Overlay */
+    .sidebar-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(15, 23, 42, 0.75);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        z-index: 999;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.25s ease, visibility 0.25s ease;
+        cursor: pointer;
+    }
+    .sidebar-backdrop.show {
+        opacity: 1;
+        visibility: visible;
+    }
+}
+
+@media (min-width: 993px) {
+    .sidebar-backdrop {
+        display: none !important;
+    }
+}
+
+/* ==========================================================================
+   SOC Standardized Empty State Component
+   ========================================================================== */
+.soc-empty-state {
+    padding: 32px 20px;
+    text-align: center;
+    max-width: 460px;
+    margin: 0 auto;
+}
+.soc-empty-icon {
+    width: 60px;
+    height: 60px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-primary);
+    font-size: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.soc-empty-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+.soc-empty-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 18px;
+    line-height: 1.5;
+}
+
     .main-wrapper {
         margin-left: 0 !important;
         padding: 14px 16px;

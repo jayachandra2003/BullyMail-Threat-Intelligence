@@ -71,6 +71,7 @@ function initNavigation() {
 
             // Close mobile sidebar if open
             document.querySelector('.sidebar-v2')?.classList.remove('mobile-open');
+            document.querySelector('.sidebar-backdrop')?.classList.remove('show');
         });
     });
 }
@@ -80,6 +81,12 @@ function initSidebarToggle() {
     const toggleBtn = document.getElementById('sidebarToggleBtn');
     const mobileToggleBtn = document.getElementById('mobileMenuBtn');
     const brandLogo = document.querySelector('.brand-logo');
+    const backdrop = document.querySelector('.sidebar-backdrop');
+
+    const closeMobileSidebar = () => {
+        if (sidebar) sidebar.classList.remove('mobile-open');
+        if (backdrop) backdrop.classList.remove('show');
+    };
 
     // Restore state from localStorage
     const savedState = localStorage.getItem('bullymail_sidebar_collapsed');
@@ -124,10 +131,24 @@ function initSidebarToggle() {
     }
 
     if (mobileToggleBtn && sidebar) {
-        mobileToggleBtn.addEventListener('click', () => {
-            sidebar.classList.toggle('mobile-open');
+        mobileToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = sidebar.classList.toggle('mobile-open');
+            if (backdrop) backdrop.classList.toggle('show', isOpen);
         });
     }
+
+    if (backdrop) {
+        backdrop.addEventListener('click', () => {
+            closeMobileSidebar();
+        });
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && sidebar && sidebar.classList.contains('mobile-open')) {
+            closeMobileSidebar();
+        }
+    });
 }
 
 function initCharCounter() {

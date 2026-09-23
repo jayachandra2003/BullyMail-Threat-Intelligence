@@ -101,13 +101,13 @@ TARGETED_INSULT_PATTERNS = [
     # Full sentence personal attacks
     (r'\b(you(\s+are|\'re|r)?\s+(a\s+|an\s+|so\s+|totally\s+|completely\s+|utterly\s+)?(idiot|stupid|moron|loser|useless|pathetic|fool|incompetent|joke|failure|clueless|moronic|worthless|hopeless|garbage|disaster|imbecile|dumbass|ignorant|dumb|jerk|pig|swine|dog|rat|scum|trash|freak|psycho|creep))\b', 'Targeted Personal Insult', 0.58),
     (r'\b(you\s+(idiot|moron|loser|fool|imbecile|dumbass|clown|jerk|failure|scumbag|pig|swine|dog|rat|scum|trash|freak|psycho|creep))\b', 'Direct Vocative Insult', 0.58),
-    
+
     # Standalone direct lexical insults (inherently hostile offensive nouns)
     (r'\b(idiot|moron|imbecile|loser|dumbass|fool|useless|incompetent|dumb|worthless)\b', 'Direct Lexical Insult', 0.58),
-    
+
     # Standalone single-word "pathetic"
     (r'^\s*pathetic[\.!\?]*\s*$', 'Direct Lexical Insult', 0.58),
-    
+
     # Targeted personal / work references with "pathetic" (avoids matching untargeted literary "pathetic flaw/fallacy")
     (r'\b(you|he|she|they|[a-z]+)\s+(is|are|\'re|\'s)\s+(a\s+|an\s+|so\s+|totally\s+|completely\s+|utterly\s+|truly\s+|just\s+)?pathetic\b', 'Targeted Personal Insult', 0.58),
     (r'\b(stop\s+being\s+pathetic|so\s+pathetic|such\s+a\s+pathetic\s+(loser|effort|attempt|joke|person|student|excuse|work))\b', 'Targeted Personal Insult', 0.58),
@@ -174,10 +174,10 @@ BULLYING_PHRASES = [
 
 class BullyingDetector:
     """Cyberbullying Threat Detection Engine combining ML with Calibrated Multitier Rules and Severity Differentiation"""
-    
+
     # Configured binary threshold for classifying an email as cyberbullying
     BULLYING_THRESHOLD = 0.50
-    
+
     def __init__(self, model_dir=None):
         self.model_dir = model_dir or Config.MODEL_PATH
         os.makedirs(self.model_dir, exist_ok=True)
@@ -195,22 +195,22 @@ class BullyingDetector:
         """
         m_path = model_path_or_filename if os.path.isabs(model_path_or_filename) else os.path.join(self.model_dir, model_path_or_filename)
         v_path = vectorizer_path_or_filename if os.path.isabs(vectorizer_path_or_filename) else os.path.join(self.model_dir, vectorizer_path_or_filename)
-        
+
         if not os.path.exists(m_path):
             raise FileNotFoundError(f"Model artifact not found: {m_path}")
         if not os.path.exists(v_path):
             raise FileNotFoundError(f"Paired vectorizer artifact not found: {v_path}")
-            
+
         temp_model = joblib.load(m_path)
         temp_vectorizer = joblib.load(v_path)
-        
+
         # Verify feature dimension compatibility
         n_model_features = None
         if hasattr(temp_model, 'n_features_in_'):
             n_model_features = temp_model.n_features_in_
         elif hasattr(temp_model, 'coef_'):
             n_model_features = temp_model.coef_.shape[1]
-            
+
         if hasattr(temp_vectorizer, 'vocabulary_') and n_model_features is not None:
             n_vec_features = len(temp_vectorizer.vocabulary_)
             if n_vec_features != n_model_features:
@@ -218,7 +218,7 @@ class BullyingDetector:
                     f"Feature dimension mismatch: Model expects {n_model_features} features, "
                     f"but Vectorizer produces {n_vec_features} features."
                 )
-                
+
         # Atomic assignment
         self.model = temp_model
         self.vectorizer = temp_vectorizer
@@ -241,12 +241,12 @@ class BullyingDetector:
     def is_educational_or_quoted_context(self, text):
         """Determines whether abusive terms appear strictly inside educational, analytical, or formal complaint reporting context."""
         text_lower = text.lower()
-        
+
         # 1. Educational / Linguistic study context
         for pattern in EDUCATIONAL_CONTEXT_PATTERNS:
             if re.search(pattern, text_lower):
                 return True
-                
+
         # 2. Formal Complaint / Incident Report context
         for pattern in REPORTING_CONTEXT_PATTERNS:
             if re.search(pattern, text_lower):
@@ -257,20 +257,20 @@ class BullyingDetector:
                 )
                 if not is_direct_sender_assertion:
                     return True
-                    
+
         return False
 
     def rule_based_check(self, text):
         """Calibrated rule-based matching with generalized tiers, severity classification, adversarial normalization, and context sensitivity."""
         if not isinstance(text, str) or not text.strip():
             return [], 0.0, [], 'LOW'
-            
+
         text_lower = text.lower().strip()
         # Internal adversarial normalization layer for evading patterns (spaced/dotted/leetspeak)
         norm_text = self.preprocessor.normalize_adversarial_text(text)
-        
+
         matched_items = []
-        
+
         # Check for educational / reporting context
         is_context_mitigated = self.is_educational_or_quoted_context(text_lower)
 
@@ -376,7 +376,7 @@ class BullyingDetector:
             else:
                 score = 0.58
                 severity = 'MEDIUM'
-            
+
         return unique_matches, score, unique_categories, severity
 
     def predict(self, email_text, email_subject=""):
@@ -399,15 +399,15 @@ class BullyingDetector:
                 'combined_score': 0.0,
                 'top_features': []
             }
-            
+
         # 1. Rule-based check
         rule_matches, rule_score, matched_categories, severity = self.rule_based_check(full_content)
-        
+
         # 2. ML Prediction (if model loaded)
         ml_pred = False
         ml_prob = 0.0
         top_features = []
-        
+
         if self.model and self.vectorizer:
             try:
                 clean_t = self.preprocessor.clean_text(email_text)
@@ -418,14 +418,14 @@ class BullyingDetector:
                         ml_prob = float(self.model.predict_proba(vec)[0][1])
                     else:
                         ml_prob = 1.0 if ml_pred else 0.0
-                        
+
                     # Extract top contributing features if relevant
                     if ml_prob >= 0.40:
                         top_features = self._extract_contributing_words(clean_t)
             except Exception as e:
                 print(f"[BullyingDetector] Prediction error: {e}")
                 ml_prob = 0.0
-                
+
         # 3. Decision Fusion & Binary Classification Thresholding
         if rule_score >= self.BULLYING_THRESHOLD:
             # Rule detected single insult, multiple insults, severe abuse, or threat
@@ -478,13 +478,13 @@ class BullyingDetector:
             words = clean_text.split()
             feature_names = np.array(self.vectorizer.get_feature_names_out())
             coefs = self.model.coef_[0]
-            
+
             top_words = []
             for w in words:
                 idx = np.where(feature_names == w)[0]
                 if len(idx) > 0 and coefs[idx[0]] > 0.1:
                     top_words.append({'word': w, 'weight': round(float(coefs[idx[0]]), 3)})
-                    
+
             top_words.sort(key=lambda x: x['weight'], reverse=True)
             return top_words[:5]
         except Exception:
@@ -494,17 +494,17 @@ class BullyingDetector:
         """Trains a new classifier and calculates proper test evaluation metrics including Confusion Matrix."""
         # Clean emails using adversarial-aware preprocessing
         cleaned_emails = [self.preprocessor.clean_text(e) for e in emails]
-        
+
         # Split
         X_train, X_test, y_train, y_test = train_test_split(
             cleaned_emails, labels, test_size=test_size, random_state=42, stratify=labels
         )
-        
+
         # Vectorize
         self.vectorizer = TfidfVectorizer(max_features=4000, ngram_range=(1, 2), min_df=1)
         X_train_vec = self.vectorizer.fit_transform(X_train)
         X_test_vec = self.vectorizer.transform(X_test)
-        
+
         # Initialize model
         if model_type.lower() == 'svm':
             self.model = SVC(kernel='linear', probability=True, random_state=42)
@@ -512,19 +512,19 @@ class BullyingDetector:
         else:
             self.model = LogisticRegression(random_state=42, max_iter=1000)
             self.model_type = 'Logistic Regression'
-            
+
         # Fit
         self.model.fit(X_train_vec, y_train)
-        
+
         # Evaluate on Test Split
         y_pred = self.model.predict(X_test_vec)
-        
+
         acc = round(accuracy_score(y_test, y_pred), 3)
         prec = round(precision_score(y_test, y_pred, zero_division=0), 3)
         rec = round(recall_score(y_test, y_pred, zero_division=0), 3)
         f1 = round(f1_score(y_test, y_pred, zero_division=0), 3)
         cm = confusion_matrix(y_test, y_pred).tolist()
-        
+
         self.last_metrics = {
             'model_type': self.model_type,
             'accuracy': acc,
@@ -540,7 +540,7 @@ class BullyingDetector:
                 "Real-world generalization varies with noisy unseen emails."
             )
         }
-        
+
         # Save atomic model + vectorizer pair to disk
         self.save_model()
         return self.last_metrics
@@ -549,16 +549,35 @@ class BullyingDetector:
         """Serializes the current model and vectorizer atomically to disk."""
         if not self.model or not self.vectorizer:
             return False
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        os.makedirs(self.model_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         model_name = self.model_type.replace(' ', '_').replace('(', '').replace(')', '')
-        
+
         model_file = f"{model_name}_{timestamp}.joblib"
         vec_file = f"vectorizer_{timestamp}.joblib"
-        
+
         joblib.dump(self.model, os.path.join(self.model_dir, model_file))
         joblib.dump(self.vectorizer, os.path.join(self.model_dir, vec_file))
-        
-        # Save pointers to latest atomically
-        joblib.dump(self.model, os.path.join(self.model_dir, 'latest_model.joblib'))
-        joblib.dump(self.vectorizer, os.path.join(self.model_dir, 'latest_vectorizer.joblib'))
+
+        # Save pointers to latest atomically using os.replace to prevent Windows file lock conflicts
+        latest_model_path = os.path.join(self.model_dir, 'latest_model.joblib')
+        latest_vec_path = os.path.join(self.model_dir, 'latest_vectorizer.joblib')
+
+        tmp_model_path = os.path.join(self.model_dir, f'latest_model_{timestamp}.tmp')
+        tmp_vec_path = os.path.join(self.model_dir, f'latest_vectorizer_{timestamp}.tmp')
+
+        try:
+            joblib.dump(self.model, tmp_model_path)
+            os.replace(tmp_model_path, latest_model_path)
+        except Exception as e:
+            logger.warning(f"Atomic update of latest_model.joblib failed: {e}")
+            joblib.dump(self.model, latest_model_path)
+
+        try:
+            joblib.dump(self.vectorizer, tmp_vec_path)
+            os.replace(tmp_vec_path, latest_vec_path)
+        except Exception as e:
+            logger.warning(f"Atomic update of latest_vectorizer.joblib failed: {e}")
+            joblib.dump(self.vectorizer, latest_vec_path)
+
         return True
