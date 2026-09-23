@@ -105,11 +105,9 @@ def train_model(current_user):
         }), 500
 
 @models_bp.route('/api/load-model', methods=['POST'])
-def load_model():
-    """Atomically loads a specific model and its paired vectorizer from saved_models directory."""
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-        
+@require_role('admin')
+def load_model(current_user):
+    """Atomically loads a specific model and its paired vectorizer from saved_models directory (Admin Only)."""
     data = request.get_json() or {}
     model_name = data.get('model_type', 'latest')
     

@@ -10,6 +10,8 @@ def test_train_model_requires_admin_role(client, app):
     # 1. Unauthenticated request
     res_unauth = client.post('/api/train-model', json={'model_type': 'logistic', 'training_samples': 1000})
     assert res_unauth.status_code == 401
+    res_load_unauth = client.post('/api/load-model', json={'model_type': 'latest'})
+    assert res_load_unauth.status_code == 401
 
     # 2. Analyst role request
     with app.app_context():
@@ -29,6 +31,8 @@ def test_train_model_requires_admin_role(client, app):
         
     res_analyst = client.post('/api/train-model', json={'model_type': 'logistic', 'training_samples': 1000})
     assert res_analyst.status_code == 403
+    res_load_analyst = client.post('/api/load-model', json={'model_type': 'latest'})
+    assert res_load_analyst.status_code == 403
 
 def test_train_model_logistic_success_2000_samples(auth_client):
     """Verifies that training Logistic Regression with 2,000 samples succeeds end-to-end."""
