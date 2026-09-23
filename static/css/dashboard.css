@@ -2077,6 +2077,19 @@
     .sidebar-v2.mobile-open {
         transform: translateX(0);
     }
+    .main-wrapper {
+        margin-left: 0 !important;
+        width: 100% !important;
+        padding: 14px 16px;
+    }
+    .forensic-dropzone-grid {
+        grid-template-columns: 1fr;
+    }
+    .assessment-hero-row {
+        grid-template-columns: 1fr;
+        text-align: center;
+        justify-items: center;
+    }
 
     /* Sidebar Mobile Backdrop Overlay */
     .sidebar-backdrop {
@@ -2143,20 +2156,6 @@
     color: var(--text-secondary);
     margin-bottom: 18px;
     line-height: 1.5;
-}
-
-    .main-wrapper {
-        margin-left: 0 !important;
-        padding: 14px 16px;
-    }
-    .forensic-dropzone-grid {
-        grid-template-columns: 1fr;
-    }
-    .assessment-hero-row {
-        grid-template-columns: 1fr;
-        text-align: center;
-        justify-items: center;
-    }
 }
 
 @media (max-width: 768px) {
