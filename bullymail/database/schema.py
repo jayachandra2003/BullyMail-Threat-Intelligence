@@ -760,55 +760,84 @@ def setup_database():
             cursor.close()
 
     # -------------------------------------------------------------------------
-    # Idempotent & Secure Administrator Initialization
+    # Idempotent & Secure Administrator Initialization & Environment Sync
     # -------------------------------------------------------------------------
-    admin_user = fetch_one("SELECT * FROM users WHERE role = 'admin' LIMIT 1")
-    if not admin_user:
-        try:
-            from flask import current_app
-            if current_app:
-                admin_username = current_app.config.get('ADMIN_USERNAME') or Config.ADMIN_USERNAME or 'admin'
-                admin_email = current_app.config.get('ADMIN_EMAIL') or Config.ADMIN_EMAIL or 'admin@bullymail.local'
-                admin_password = current_app.config.get('ADMIN_PASSWORD') or Config.ADMIN_PASSWORD
-                is_testing = current_app.config.get('TESTING', False)
-                is_production = current_app.config.get('FLASK_ENV') == 'production'
-            else:
-                admin_username = Config.ADMIN_USERNAME or 'admin'
-                admin_email = Config.ADMIN_EMAIL or 'admin@bullymail.local'
-                admin_password = Config.ADMIN_PASSWORD
-                is_testing = Config.TESTING
-                is_production = Config.FLASK_ENV == 'production'
-        except Exception:
+    try:
+        from flask import current_app
+        if current_app:
+            admin_username = current_app.config.get('ADMIN_USERNAME') or Config.ADMIN_USERNAME or 'admin'
+            admin_email = current_app.config.get('ADMIN_EMAIL') or Config.ADMIN_EMAIL or 'admin@bullymail.local'
+            admin_password = current_app.config.get('ADMIN_PASSWORD') or Config.ADMIN_PASSWORD
+            is_testing = current_app.config.get('TESTING', False)
+            is_production = current_app.config.get('FLASK_ENV') == 'production'
+        else:
             admin_username = Config.ADMIN_USERNAME or 'admin'
             admin_email = Config.ADMIN_EMAIL or 'admin@bullymail.local'
             admin_password = Config.ADMIN_PASSWORD
-            is_testing = Config.TESTING
+            is_testing = getattr(Config, 'TESTING', False)
             is_production = Config.FLASK_ENV == 'production'
-        
-        if not admin_password:
-            if is_production:
-                raise RuntimeError(
-                    "[BullyMail Security Fatal] Production environment detected without ADMIN_PASSWORD configured. "
-                    "You must explicitly set ADMIN_PASSWORD in your environment / .env file before starting in production."
-                )
-            elif is_testing:
-                admin_password = getattr(Config, 'ADMIN_PASSWORD', None) or "TEST_ONLY_PASSWORD_DO_NOT_USE_IN_PRODUCTION_123!"
-            else:
-                # In development/test mode without explicit password: generate a secure cryptographically random token
-                generated_token = secrets.token_urlsafe(16)
-                admin_password = f"DevAdmin_{generated_token}"
-                print("==================================================================")
-                print(" [BullyMail First-Time Dev Init] Temporary Admin Password Generated:")
-                print(f" Username: {admin_username}")
-                print(f" Password: {admin_password}")
-                print(" Set ADMIN_PASSWORD in .env to specify a permanent custom password.")
-                print("==================================================================")
+    except Exception:
+        admin_username = Config.ADMIN_USERNAME or 'admin'
+        admin_email = Config.ADMIN_EMAIL or 'admin@bullymail.local'
+        admin_password = Config.ADMIN_PASSWORD
+        is_testing = getattr(Config, 'TESTING', False)
+        is_production = Config.FLASK_ENV == 'production'
 
-        from ..models.user import UserModel
+
+    if not admin_password:
+        if is_production:
+            raise RuntimeError(
+                "[BullyMail Security Fatal] Production environment detected without ADMIN_PASSWORD configured. "
+                "You must explicitly set ADMIN_PASSWORD in your environment / .env file before starting in production."
+            )
+        elif is_testing:
+            admin_password = getattr(Config, 'ADMIN_PASSWORD', None) or "TEST_ONLY_PASSWORD_DO_NOT_USE_IN_PRODUCTION_123!"
+        else:
+            # In development/test mode without explicit password: generate a secure cryptographically random token
+            generated_token = secrets.token_urlsafe(16)
+            admin_password = f"DevAdmin_{generated_token}"
+            print("==================================================================")
+            print(" [BullyMail First-Time Dev Init] Temporary Admin Password Generated:")
+            print(f" Username: {admin_username}")
+            print(f" Password: {admin_password}")
+            print(" Set ADMIN_PASSWORD in .env to specify a permanent custom password.")
+            print("==================================================================")
+
+    from ..models.user import UserModel
+    admin_user = fetch_one("SELECT * FROM users WHERE role = 'admin' LIMIT 1")
+    if not admin_user:
         hashed_pw = UserModel.hash_password(admin_password)
         execute_query(
             "INSERT INTO users (username, password_hash, role, email, status) VALUES (%s, %s, %s, %s, %s)",
             (admin_username, hashed_pw, 'admin', admin_email, 'ACTIVE')
         )
-        
+    else:
+        # Admin user exists: synchronize credentials if environment parameters differ
+        sql_parts = []
+        update_params = []
+
+        if admin_username and admin_user.get('username') != admin_username:
+            sql_parts.append("username = %s")
+            update_params.append(admin_username)
+
+        if admin_email and admin_user.get('email') != admin_email:
+            sql_parts.append("email = %s")
+            update_params.append(admin_email)
+
+        if admin_user.get('status') != 'ACTIVE':
+            sql_parts.append("status = %s")
+            update_params.append('ACTIVE')
+
+        if admin_password:
+            stored_hash = admin_user.get('password_hash') or ''
+            if not UserModel.verify_password(stored_hash, admin_password):
+                new_hash = UserModel.hash_password(admin_password)
+                sql_parts.append("password_hash = %s")
+                update_params.append(new_hash)
+
+        if sql_parts:
+            update_params.append(admin_user['id'])
+            sql = f"UPDATE users SET {', '.join(sql_parts)} WHERE id = %s"
+            execute_query(sql, tuple(update_params))
+
     return True
