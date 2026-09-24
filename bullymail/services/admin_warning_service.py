@@ -1,5 +1,6 @@
 import ssl
 import smtplib
+import socket
 import logging
 from email.utils import parseaddr
 from email.mime.text import MIMEText
@@ -65,8 +66,8 @@ class AdminWarningService:
                 inst_id = institution_id
                 if inst_id is None:
                     try:
-                        from flask import session
-                        inst_id = session.get('institution_id') or 1
+                        from flask import session, g
+                        inst_id = (getattr(g, 'current_user', {}) or {}).get('institution_id') or session.get('institution_id') or 1
                     except Exception:
                         inst_id = 1
                 mailboxes = email_service.get_mailboxes_for_institution(inst_id)
@@ -79,20 +80,20 @@ class AdminWarningService:
                         mailbox_id=active_mb.get('id')
                     )
                     if mb_addr and mb_pw:
-                        username = username or mb_addr
-                        password = password or mb_pw
-                        host = mb_smtp or host or 'smtp.gmail.com'
-                        port = mb_port or port or 587
-                        from_email = from_email or mb_addr
+                        username = mb_addr
+                        password = mb_pw
+                        host = mb_smtp or 'smtp.gmail.com'
+                        port = int(mb_port or 587)
+                        from_email = mb_addr
             except Exception as e:
                 logger.debug(f"Active mailbox SMTP resolution fallback notice: {e}")
 
-        if not from_email:
+        if not from_email or '@bullymail.local' in from_email or '@' not in from_email:
             from_email = username or 'admin@bullymail.local'
 
         return {
-            'host': host,
-            'port': port,
+            'host': (host or 'smtp.gmail.com').strip(),
+            'port': int(port or 587),
             'username': (username or '').strip(),
             'password': (password or '').strip(),
             'use_tls': bool(use_tls),
@@ -153,34 +154,45 @@ class AdminWarningService:
         """
         clean_recipient = cls.extract_clean_email(recipient_email)
         if not clean_recipient or '@' not in clean_recipient:
+            logger.warning(f"[SMTP WARN] Warning email send rejected: Invalid recipient email address '{recipient_email}'")
             return False, "Invalid recipient email address for warning dispatch."
 
         cfg = cls.get_smtp_config(institution_id=institution_id)
         if not cfg['host'] or not cfg['password'] or not (cfg['username'] or cfg['from_email']):
+            logger.error("[SMTP WARN] Warning email send failed: SMTP server credentials are not configured in environment or active mailbox.")
             return False, "SMTP server credentials are not configured. Please configure SMTP_HOST, SMTP_USERNAME, and SMTP_PASSWORD or connect an active institutional mailbox."
 
         sub = subject or cls.DEFAULT_WARNING_SUBJECT
         msg_body = body or cls.DEFAULT_WARNING_TEMPLATE
-        sender_email = cfg['from_email'] or cfg['username']
-        sender_name = cfg['from_name']
+
+        # Gmail SMTP requires From header to match authenticated username
+        auth_user = cfg['username']
+        sender_email = auth_user if ('gmail.com' in cfg['host'].lower() or not cfg['from_email']) else cfg['from_email']
+        sender_name = cfg['from_name'] or 'BullyMail Administration'
+
+        logger.info(
+            f"[SMTP WARN] Dispatching advisory warning | Host: {cfg['host']}:{cfg['port']} | "
+            f"Auth User: {auth_user[:3]}***@{auth_user.split('@')[-1] if '@' in auth_user else 'local'} | "
+            f"From: {sender_email[:3]}***@{sender_email.split('@')[-1] if '@' in sender_email else 'local'} | "
+            f"To: {clean_recipient[:3]}***@{clean_recipient.split('@')[-1] if '@' in clean_recipient else 'local'}"
+        )
 
         try:
             import html
             import email.utils
 
             msg = MIMEMultipart('alternative')
-            msg['From'] = f"{sender_name} <{sender_email}>" if sender_name else sender_email
+            msg['From'] = f"{sender_name} <{sender_email}>"
             msg['To'] = clean_recipient
             msg['Subject'] = sub
             msg['Date'] = email.utils.formatdate(localtime=True)
-            msg['Message-ID'] = email.utils.make_msgid(domain=(sender_email.split('@')[-1] if '@' in sender_email else 'bullymail.local'))
+            domain_part = sender_email.split('@')[-1] if '@' in sender_email else 'gmail.com'
+            msg['Message-ID'] = email.utils.make_msgid(domain=domain_part)
             msg['MIME-Version'] = '1.0'
 
-            # Attach plain text part
             text_part = MIMEText(msg_body, 'plain', 'utf-8')
             msg.attach(text_part)
 
-            # Attach formatted HTML alternative part for modern email client compatibility
             html_body = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -205,24 +217,53 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helv
             msg.attach(html_part)
 
             context = ssl.create_default_context()
-            server = smtplib.SMTP(cfg['host'], cfg['port'], timeout=15)
-            if cfg['use_tls']:
-                server.starttls(context=context)
 
-            if cfg['username'] and cfg['password']:
-                server.login(cfg['username'], cfg['password'])
+            if cfg['port'] == 465:
+                server = smtplib.SMTP_SSL(cfg['host'], cfg['port'], timeout=15, context=context)
+            else:
+                server = smtplib.SMTP(cfg['host'], cfg['port'], timeout=15)
+                if cfg['use_tls']:
+                    server.starttls(context=context)
 
-            server.sendmail(sender_email, [clean_recipient], msg.as_string())
+            if auth_user and cfg['password']:
+                server.login(auth_user, cfg['password'])
+
+            refused = server.sendmail(sender_email, [clean_recipient], msg.as_string())
             server.quit()
 
-            logger.info(f"Admin warning email dispatched successfully to {clean_recipient[:3]}***@{clean_recipient.split('@')[-1]}")
+            if refused and clean_recipient in refused:
+                err_code, err_msg_bytes = refused[clean_recipient]
+                err_str = err_msg_bytes.decode('utf-8', errors='ignore') if isinstance(err_msg_bytes, bytes) else str(err_msg_bytes)
+                logger.error(f"[SMTP WARN] Recipient refused by SMTP server: {clean_recipient[:3]}***: Code {err_code} - {err_str}")
+                return False, f"Recipient refused by mail server (Code {err_code}): {err_str}"
+
+            logger.info(f"[SMTP WARN] Admin warning email accepted by SMTP server for delivery to {clean_recipient[:3]}***@{clean_recipient.split('@')[-1]}")
             return True, "Warning email sent successfully."
+
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error(f"[SMTP WARN] SMTP Authentication Failed for user {auth_user[:3]}***: {e.smtp_code} {e.smtp_error}")
+            return False, f"SMTP Authentication Failed (Code {e.smtp_code}): Check your Gmail App Password or SMTP credentials."
+
+        except smtplib.SMTPRecipientsRefused as e:
+            logger.error(f"[SMTP WARN] Recipient email refused by server: {e}")
+            return False, "Recipient address was refused by target mail server."
+
+        except (smtplib.SMTPConnectError, socket.error, TimeoutError) as e:
+            logger.error(f"[SMTP WARN] SMTP Connection Failed to {cfg['host']}:{cfg['port']}: {e}")
+            return False, f"Could not connect to SMTP server ({cfg['host']}:{cfg['port']}). Network or firewall error."
+
+        except smtplib.SMTPException as e:
+            err_str = str(e)
+            if cfg['password'] and cfg['password'] in err_str:
+                err_str = err_str.replace(cfg['password'], '********')
+            logger.error(f"[SMTP WARN] SMTP Protocol Exception: {err_str}")
+            return False, f"SMTP Protocol Error: {err_str}"
 
         except Exception as e:
             err_str = str(e)
             if cfg['password'] and cfg['password'] in err_str:
                 err_str = err_str.replace(cfg['password'], '********')
-            logger.error(f"Failed to dispatch warning email to target sender: {err_str}")
-            return False, f"SMTP transmission failed: {err_str}"
+            logger.error(f"[SMTP WARN] Unexpected Exception during warning email dispatch: {err_str}")
+            return False, f"Failed to dispatch warning email: {err_str}"
 
 admin_warning_service = AdminWarningService()

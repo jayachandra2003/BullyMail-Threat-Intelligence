@@ -48,16 +48,22 @@ class EmailService:
 
         return self._get_credentials(institution_id=institution_id)
 
-    def _get_credentials(self, institution_id=1):
+    def _get_credentials(self, institution_id=1, mailbox_id=None):
         """Resolves active email credentials dynamically from database for target institution or Config."""
         inst_id = institution_id if institution_id is not None else 1
 
         # Check database first for institution-scoped configuration
         try:
-            row = fetch_one(
-                "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE institution_id = %s AND status = 'active' ORDER BY id DESC LIMIT 1",
-                (inst_id,)
-            )
+            if mailbox_id is not None:
+                row = fetch_one(
+                    "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE id = %s AND institution_id = %s",
+                    (mailbox_id, inst_id)
+                )
+            else:
+                row = fetch_one(
+                    "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE institution_id = %s AND status = 'active' ORDER BY id DESC LIMIT 1",
+                    (inst_id,)
+                )
             if row and row.get('email_address') and row.get('encrypted_app_password'):
                 email_addr = row['email_address']
                 enc_pw = row['encrypted_app_password']
