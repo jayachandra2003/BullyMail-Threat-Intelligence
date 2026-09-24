@@ -49,8 +49,10 @@ def create_app(config_class=Config):
     try:
         init_db()
     except Exception as e:
-        # Avoid printing internal exception trace in logs
-        print(f"[BullyMail Schema Setup] Notification: {type(e).__name__}")
+        import traceback
+        print(f"[BullyMail Schema Setup ERROR] Database schema initialization failed: {e}")
+        traceback.print_exc()
+        raise e
 
     # =========================================================================
     # Global Security Headers Middleware

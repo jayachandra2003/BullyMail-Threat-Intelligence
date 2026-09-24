@@ -53,14 +53,14 @@ def test_restart_safe_idempotent_schema_initialization(app):
     with app.app_context():
         # Setup DB first time
         assert setup_database() is True
-        
+
         # Verify default institution exists
         inst = fetch_one("SELECT * FROM institutions WHERE id = 1")
         assert inst is not None
 
         # Re-run setup_database simulating service restart
         assert setup_database() is True
-        
+
         # Verify institution still exists
         inst_after = fetch_one("SELECT * FROM institutions WHERE id = 1")
         assert inst_after is not None
@@ -89,3 +89,36 @@ def test_mailbox_and_analyzed_email_persistence_contract(app):
         assert email_record is not None
         assert email_record['email_subject'] == 'Threat Test'
         assert email_record['overall_risk_level'] == 'CRITICAL'
+
+def test_all_required_tables_exist_and_login_flow_operational(app):
+    """Verifies that all 10 required database tables are created and endpoints (/login, /api/threat-trend) operate cleanly."""
+    with app.app_context():
+        setup_database()
+
+        # Verify existence of all 10 required production tables
+        required_tables = [
+            'institutions', 'users', 'email_verification_tokens', 'password_reset_tokens',
+            'analyzed_emails', 'incident_audit_log', 'model_history', 'dataset_history',
+            'email_config', 'ingested_messages'
+        ]
+
+        for table in required_tables:
+            res = fetch_one(f"SELECT COUNT(*) as cnt FROM {table}")
+            assert res is not None, f"Table '{table}' is missing or unreadable"
+
+        # Verify admin user lookup and login API endpoint
+        with app.test_client() as client:
+            resp = client.get('/login')
+            assert resp.status_code == 200
+
+            # Test threat-trend API endpoint
+            with client.session_transaction() as sess:
+                sess['user_id'] = 1
+                sess['role'] = 'admin'
+                sess['username'] = 'admin'
+                sess['institution_id'] = 1
+
+            trend_resp = client.get('/api/threat-trend')
+            assert trend_resp.status_code == 200
+            data = trend_resp.get_json()
+            assert data.get('success') is True

@@ -7,7 +7,7 @@ from .connection import get_db, get_engine_type, execute_query, fetch_one
 def _get_existing_columns(cursor, table_name, engine):
     """
     Returns a set of lowercase column names present in the specified table.
-    Works seamlessly across SQLite and MySQL.
+    Works seamlessly across SQLite, MySQL, and PostgreSQL.
     """
     columns = set()
     try:
@@ -15,6 +15,11 @@ def _get_existing_columns(cursor, table_name, engine):
             cursor.execute(f"PRAGMA table_info({table_name})")
             for row in cursor.fetchall():
                 name = row[1] if isinstance(row, (tuple, list)) else row['name']
+                columns.add(name.lower())
+        elif engine == 'postgres':
+            cursor.execute(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table_name.lower()}'")
+            for row in cursor.fetchall():
+                name = row[0] if isinstance(row, (tuple, list)) else (row.get('column_name') or row.get('COLUMN_NAME'))
                 columns.add(name.lower())
         else:
             cursor.execute(f"SHOW COLUMNS FROM `{table_name}`")
@@ -51,6 +56,8 @@ def apply_migrations(cursor, engine):
     try:
         if engine == 'sqlite':
             cursor.execute("INSERT OR IGNORE INTO institutions (id, name, domain, code, status) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE')")
+        elif engine == 'postgres':
+            cursor.execute("INSERT INTO institutions (id, name, domain, code, status) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE') ON CONFLICT DO NOTHING")
         else:
             cursor.execute("INSERT IGNORE INTO institutions (id, name, domain, code, status) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE')")
     except Exception:
@@ -348,10 +355,10 @@ def apply_migrations(cursor, engine):
 def setup_database():
     """Sets up all required database tables with UTF-8 support and idempotent secure administrator initialization."""
     engine = get_engine_type()
-    
+
     with get_db() as conn:
         cursor = conn.cursor()
-        
+
         if engine == 'sqlite':
             # Institutions / Tenants Table
             cursor.execute('''
@@ -386,7 +393,7 @@ def setup_database():
                     FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE RESTRICT
                 )
             ''')
-            
+
             # Email Verification Tokens Table (Stores SHA-256 Hashes Only)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS email_verification_tokens (
@@ -399,7 +406,7 @@ def setup_database():
                     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 )
             ''')
-            
+
             # Password Reset Tokens Table (Stores SHA-256 Hashes Only)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -412,7 +419,7 @@ def setup_database():
                     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 )
             ''')
-            
+
             # Multi-Vector Threat Analysis Table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS analyzed_emails (
@@ -424,13 +431,13 @@ def setup_database():
                     email_from TEXT,
                     email_to TEXT,
                     email_text TEXT NOT NULL,
-                    
+
                     -- Overall Unified Risk
                     overall_risk_level VARCHAR(20) NOT NULL DEFAULT 'LOW',
                     overall_confidence FLOAT NOT NULL DEFAULT 0.0,
                     threat_score FLOAT NOT NULL DEFAULT 0.0,
                     incident_status VARCHAR(30) NOT NULL DEFAULT 'PENDING_REVIEW',
-                    
+
                     -- Cyberbullying Detection Vector
                     is_bullying INTEGER NOT NULL DEFAULT 0,
                     confidence FLOAT NOT NULL DEFAULT 0.0,
@@ -439,48 +446,48 @@ def setup_database():
                     ml_prediction INTEGER DEFAULT 0,
                     ml_confidence FLOAT DEFAULT 0.0,
                     model_used VARCHAR(50) DEFAULT 'Hybrid',
-                    
+
                     -- Phishing Detection Vector
                     phishing_risk_level VARCHAR(20) DEFAULT 'LOW',
                     phishing_confidence FLOAT DEFAULT 0.0,
                     phishing_indicators TEXT DEFAULT '[]',
-                    
+
                     -- URL & Link Analysis Vector
                     urls_detected INTEGER DEFAULT 0,
                     suspicious_urls_count INTEGER DEFAULT 0,
                     url_analysis_summary TEXT DEFAULT '[]',
-                    
+
                     -- Look-Alike / Domain Vector
                     domain_analysis_summary TEXT DEFAULT '{}',
-                    
+
                     -- Social Engineering Vector
                     social_eng_risk_level VARCHAR(20) DEFAULT 'LOW',
                     social_eng_confidence FLOAT DEFAULT 0.0,
                     social_eng_techniques TEXT DEFAULT '[]',
-                    
+
                     -- Attachment / Malware Vector
                     attachments_count INTEGER DEFAULT 0,
                     malware_detected INTEGER DEFAULT 0,
                     malicious_attachments_count INTEGER DEFAULT 0,
                     attachment_risk_level VARCHAR(20) DEFAULT 'LOW',
                     attachment_findings TEXT DEFAULT '[]',
-                    
+
                     -- Image Forensics Vector
                     images_count INTEGER DEFAULT 0,
                     suspicious_images_count INTEGER DEFAULT 0,
                     image_forensics_summary TEXT DEFAULT '[]',
-                    
+
                     -- Explanation / XAI
                     explanation TEXT DEFAULT '{}',
                     top_risk_factors TEXT DEFAULT '[]',
-                    
+
                     -- Metadata
                     analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     email_date TIMESTAMP NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
-            
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS incident_audit_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -518,7 +525,7 @@ def setup_database():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
-            
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS dataset_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -531,7 +538,7 @@ def setup_database():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
-            
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS email_config (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -579,10 +586,227 @@ def setup_database():
                     UNIQUE (institution_id, email_config_id, message_id_hash)
                 )
             ''')
-            
+
             # Apply schema migrations for existing SQLite databases
             apply_migrations(cursor, engine)
-            
+
+        elif engine == 'postgres':
+            # PostgreSQL Database Engine Setup
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS institutions (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL,
+                    domain VARCHAR(100) UNIQUE NOT NULL,
+                    code VARCHAR(30) NULL,
+                    status VARCHAR(20) DEFAULT 'ACTIVE',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    institution_id INT NULL,
+                    username VARCHAR(50) UNIQUE NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    role VARCHAR(20) DEFAULT 'analyst',
+                    email VARCHAR(100) UNIQUE,
+                    status VARCHAR(30) DEFAULT 'PENDING_EMAIL_VERIFICATION',
+                    requested_institution_name VARCHAR(100) NULL,
+                    requested_institution_domain VARCHAR(100) NULL,
+                    email_verified_at TIMESTAMP NULL,
+                    failed_login_attempts INT DEFAULT 0,
+                    locked_until TIMESTAMP NULL,
+                    last_login_at TIMESTAMP NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE RESTRICT
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS email_verification_tokens (
+                    id SERIAL PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    token_hash VARCHAR(64) UNIQUE NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    used_at TIMESTAMP NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                    id SERIAL PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    token_hash VARCHAR(64) UNIQUE NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    used_at TIMESTAMP NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS analyzed_emails (
+                    id SERIAL PRIMARY KEY,
+                    institution_id INT DEFAULT 1,
+                    user_id INT NULL,
+                    email_config_id INT NULL,
+                    email_subject VARCHAR(255),
+                    email_from VARCHAR(255),
+                    email_to VARCHAR(255),
+                    email_text TEXT NOT NULL,
+
+                    overall_risk_level VARCHAR(20) NOT NULL DEFAULT 'LOW',
+                    overall_confidence FLOAT NOT NULL DEFAULT 0.0,
+                    threat_score FLOAT NOT NULL DEFAULT 0.0,
+                    incident_status VARCHAR(30) NOT NULL DEFAULT 'PENDING_REVIEW',
+
+                    is_bullying INT NOT NULL DEFAULT 0,
+                    confidence FLOAT NOT NULL DEFAULT 0.0,
+                    rule_based_matches TEXT DEFAULT '',
+                    rule_based_score FLOAT DEFAULT 0.0,
+                    ml_prediction INT DEFAULT 0,
+                    ml_confidence FLOAT DEFAULT 0.0,
+                    model_used VARCHAR(50) DEFAULT 'Hybrid',
+
+                    phishing_risk_level VARCHAR(20) DEFAULT 'LOW',
+                    phishing_confidence FLOAT DEFAULT 0.0,
+                    phishing_indicators TEXT DEFAULT '[]',
+
+                    urls_detected INT DEFAULT 0,
+                    suspicious_urls_count INT DEFAULT 0,
+                    url_analysis_summary TEXT DEFAULT '[]',
+
+                    domain_analysis_summary TEXT DEFAULT '{}',
+
+                    social_eng_risk_level VARCHAR(20) DEFAULT 'LOW',
+                    social_eng_confidence FLOAT DEFAULT 0.0,
+                    social_eng_techniques TEXT DEFAULT '[]',
+
+                    attachments_count INT DEFAULT 0,
+                    malware_detected INT DEFAULT 0,
+                    malicious_attachments_count INT DEFAULT 0,
+                    attachment_risk_level VARCHAR(20) DEFAULT 'LOW',
+                    attachment_findings TEXT DEFAULT '[]',
+
+                    images_count INT DEFAULT 0,
+                    suspicious_images_count INT DEFAULT 0,
+                    image_forensics_summary TEXT DEFAULT '[]',
+
+                    explanation TEXT DEFAULT '{}',
+                    top_risk_factors TEXT DEFAULT '[]',
+
+                    analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    email_date TIMESTAMP NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS incident_audit_log (
+                    id SERIAL PRIMARY KEY,
+                    analysis_id INT NOT NULL,
+                    institution_id INT NOT NULL,
+                    admin_id INT NOT NULL,
+                    admin_username VARCHAR(50) NOT NULL,
+                    action VARCHAR(30) NOT NULL,
+                    original_sender VARCHAR(255) NULL,
+                    original_recipient VARCHAR(255) NULL,
+                    warning_recipient VARCHAR(255) NULL,
+                    warning_subject VARCHAR(255) NULL,
+                    delivery_status VARCHAR(30) DEFAULT 'SUCCESS',
+                    reason TEXT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (analysis_id) REFERENCES analyzed_emails (id) ON DELETE CASCADE,
+                    FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE,
+                    FOREIGN KEY (admin_id) REFERENCES users (id) ON DELETE CASCADE
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS model_history (
+                    id SERIAL PRIMARY KEY,
+                    model_type VARCHAR(50) NOT NULL,
+                    precision_score FLOAT DEFAULT 0.0,
+                    recall_score FLOAT DEFAULT 0.0,
+                    f1_score FLOAT DEFAULT 0.0,
+                    accuracy FLOAT DEFAULT 0.0,
+                    confusion_matrix TEXT,
+                    training_samples INT DEFAULT 0,
+                    test_samples INT DEFAULT 0,
+                    evaluation_type VARCHAR(50) DEFAULT 'Synthetic Evaluation',
+                    dataset_used VARCHAR(255) DEFAULT 'default_academic_dataset',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS dataset_history (
+                    id SERIAL PRIMARY KEY,
+                    filename VARCHAR(255) NOT NULL,
+                    total_samples INT DEFAULT 0,
+                    bullying_samples INT DEFAULT 0,
+                    non_bullying_samples INT DEFAULT 0,
+                    neutral_samples INT DEFAULT 0,
+                    file_size VARCHAR(50) DEFAULT '0 MB',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS email_config (
+                    id SERIAL PRIMARY KEY,
+                    institution_id INT NOT NULL,
+                    email_address VARCHAR(255),
+                    app_password TEXT NULL,
+                    encrypted_app_password TEXT,
+                    imap_server VARCHAR(255) DEFAULT 'imap.gmail.com',
+                    smtp_server VARCHAR(255) DEFAULT 'smtp.gmail.com',
+                    smtp_port INT DEFAULT 587,
+                    status VARCHAR(50) DEFAULT 'inactive',
+                    last_synced_at TIMESTAMP NULL,
+                    sync_status VARCHAR(30) DEFAULT 'IDLE',
+                    sync_lease_id VARCHAR(64) NULL,
+                    sync_lease_expires_at TIMESTAMP NULL,
+                    last_error TEXT NULL,
+                    total_ingested_count INT DEFAULT 0,
+                    configured_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    monitoring_started_at TIMESTAMP NULL,
+                    initial_uid INT NULL,
+                    last_processed_uid INT NULL,
+                    uid_validity INT NULL,
+                    mailbox_initialized INT DEFAULT 0,
+                    FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ingested_messages (
+                    id SERIAL PRIMARY KEY,
+                    institution_id INT NOT NULL,
+                    email_config_id INT NOT NULL,
+                    message_id_hash VARCHAR(64) NOT NULL,
+                    imap_uid INT NULL,
+                    uidvalidity INT NULL,
+                    processing_status VARCHAR(30) DEFAULT 'DISCOVERED',
+                    attempt_count INT DEFAULT 0,
+                    last_attempt_at TIMESTAMP NULL,
+                    error_message TEXT NULL,
+                    analysis_id INT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE,
+                    FOREIGN KEY (email_config_id) REFERENCES email_config (id) ON DELETE CASCADE,
+                    FOREIGN KEY (analysis_id) REFERENCES analyzed_emails (id) ON DELETE SET NULL,
+                    CONSTRAINT uq_inst_cfg_msg UNIQUE (institution_id, email_config_id, message_id_hash)
+                )
+            ''')
+
+            apply_migrations(cursor, engine)
+
         else:
             # MySQL Database Engine Setup
             cursor.execute('''
@@ -616,7 +840,7 @@ def setup_database():
                     FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE RESTRICT
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ''')
-            
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS email_verification_tokens (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -628,7 +852,7 @@ def setup_database():
                     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ''')
-            
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS password_reset_tokens (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -640,7 +864,7 @@ def setup_database():
                     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ''')
-            
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS analyzed_emails (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -651,12 +875,12 @@ def setup_database():
                     email_from VARCHAR(255),
                     email_to VARCHAR(255),
                     email_text MEDIUMTEXT,
-                    
+
                     overall_risk_level VARCHAR(20) NOT NULL DEFAULT 'LOW',
                     overall_confidence FLOAT NOT NULL DEFAULT 0.0,
                     threat_score FLOAT NOT NULL DEFAULT 0.0,
                     incident_status VARCHAR(30) NOT NULL DEFAULT 'PENDING_REVIEW',
-                    
+
                     is_bullying TINYINT(1) NOT NULL DEFAULT 0,
                     confidence FLOAT NOT NULL DEFAULT 0.0,
                     rule_based_matches TEXT,
@@ -664,34 +888,34 @@ def setup_database():
                     ml_prediction TINYINT(1) DEFAULT 0,
                     ml_confidence FLOAT DEFAULT 0.0,
                     model_used VARCHAR(50) DEFAULT 'Hybrid',
-                    
+
                     phishing_risk_level VARCHAR(20) DEFAULT 'LOW',
                     phishing_confidence FLOAT DEFAULT 0.0,
                     phishing_indicators MEDIUMTEXT,
-                    
+
                     urls_detected INT DEFAULT 0,
                     suspicious_urls_count INT DEFAULT 0,
                     url_analysis_summary MEDIUMTEXT,
-                    
+
                     domain_analysis_summary MEDIUMTEXT,
-                    
+
                     social_eng_risk_level VARCHAR(20) DEFAULT 'LOW',
                     social_eng_confidence FLOAT DEFAULT 0.0,
                     social_eng_techniques MEDIUMTEXT,
-                    
+
                     attachments_count INT DEFAULT 0,
                     malware_detected TINYINT(1) DEFAULT 0,
                     malicious_attachments_count INT DEFAULT 0,
                     attachment_risk_level VARCHAR(20) DEFAULT 'LOW',
                     attachment_findings MEDIUMTEXT,
-                    
+
                     images_count INT DEFAULT 0,
                     suspicious_images_count INT DEFAULT 0,
                     image_forensics_summary MEDIUMTEXT,
-                    
+
                     explanation MEDIUMTEXT,
                     top_risk_factors MEDIUMTEXT,
-                    
+
                     analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     email_date TIMESTAMP NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -701,7 +925,7 @@ def setup_database():
                     INDEX idx_created (created_at)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ''')
-            
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS incident_audit_log (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -742,7 +966,7 @@ def setup_database():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ''')
-            
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS dataset_history (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -755,7 +979,7 @@ def setup_database():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ''')
-            
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS email_config (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -804,7 +1028,7 @@ def setup_database():
                     UNIQUE KEY uq_inst_cfg_msg (institution_id, email_config_id, message_id_hash)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ''')
-            
+
             # Apply schema migrations for existing MySQL databases
             apply_migrations(cursor, engine)
             cursor.close()
