@@ -30,6 +30,31 @@ def _get_existing_columns(cursor, table_name, engine):
         pass
     return columns
 
+def _safe_execute(cursor, engine, sql, params=None):
+    """
+    Executes a database query safely.
+    On PostgreSQL, wraps the query in a SAVEPOINT so that if an optional query fails,
+    the transaction is not left in an aborted state ('InFailedSqlTransaction').
+    """
+    if engine == 'postgres':
+        try:
+            cursor.execute("SAVEPOINT migration_sp")
+            cursor.execute(sql, params or ())
+            cursor.execute("RELEASE SAVEPOINT migration_sp")
+            return True
+        except Exception:
+            try:
+                cursor.execute("ROLLBACK TO SAVEPOINT migration_sp")
+            except Exception:
+                pass
+            return False
+    else:
+        try:
+            cursor.execute(sql, params or ())
+            return True
+        except Exception:
+            return False
+
 def apply_migrations(cursor, engine):
     """
     Idempotently inspects database tables and applies non-destructive schema migrations
@@ -41,27 +66,22 @@ def apply_migrations(cursor, engine):
     inst_cols = _get_existing_columns(cursor, 'institutions', engine)
     if inst_cols:
         if 'code' not in inst_cols:
-            cursor.execute("ALTER TABLE institutions ADD COLUMN code VARCHAR(30) NULL")
+            _safe_execute(cursor, engine, "ALTER TABLE institutions ADD COLUMN code VARCHAR(30) NULL")
         if 'status' not in inst_cols:
-            cursor.execute("ALTER TABLE institutions ADD COLUMN status VARCHAR(20) DEFAULT 'ACTIVE'")
+            _safe_execute(cursor, engine, "ALTER TABLE institutions ADD COLUMN status VARCHAR(20) DEFAULT 'ACTIVE'")
         if 'updated_at' not in inst_cols:
-            cursor.execute("ALTER TABLE institutions ADD COLUMN updated_at TIMESTAMP NULL")
-        try:
-            cursor.execute("UPDATE institutions SET code = 'BM-DEMO' WHERE (code IS NULL OR code = '') AND id = 1")
-            cursor.execute("UPDATE institutions SET status = 'ACTIVE' WHERE status IS NULL OR status = ''")
-        except Exception:
-            pass
+            _safe_execute(cursor, engine, "ALTER TABLE institutions ADD COLUMN updated_at TIMESTAMP NULL")
+
+        _safe_execute(cursor, engine, "UPDATE institutions SET code = 'BM-DEMO' WHERE (code IS NULL OR code = '') AND id = 1")
+        _safe_execute(cursor, engine, "UPDATE institutions SET status = 'ACTIVE' WHERE status IS NULL OR status = ''")
 
     # Ensure default institution exists
-    try:
-        if engine == 'sqlite':
-            cursor.execute("INSERT OR IGNORE INTO institutions (id, name, domain, code, status) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE')")
-        elif engine == 'postgres':
-            cursor.execute("INSERT INTO institutions (id, name, domain, code, status) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE') ON CONFLICT DO NOTHING")
-        else:
-            cursor.execute("INSERT IGNORE INTO institutions (id, name, domain, code, status) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE')")
-    except Exception:
-        pass
+    if engine == 'sqlite':
+        _safe_execute(cursor, engine, "INSERT OR IGNORE INTO institutions (id, name, domain, code, status) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE')")
+    elif engine == 'postgres':
+        _safe_execute(cursor, engine, "INSERT INTO institutions (id, name, domain, code, status) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE') ON CONFLICT DO NOTHING")
+    else:
+        _safe_execute(cursor, engine, "INSERT IGNORE INTO institutions (id, name, domain, code, status) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE')")
 
     # -------------------------------------------------------------------------
     # 1. Users Table Migrations
@@ -69,58 +89,47 @@ def apply_migrations(cursor, engine):
     user_cols = _get_existing_columns(cursor, 'users', engine)
     if user_cols:
         if engine == 'mysql' and 'password' in user_cols:
-            try:
-                cursor.execute("ALTER TABLE users MODIFY COLUMN password VARCHAR(255) NULL")
-            except Exception:
-                pass
+            _safe_execute(cursor, engine, "ALTER TABLE users MODIFY COLUMN password VARCHAR(255) NULL")
         elif engine == 'postgres' and 'password' in user_cols:
-            try:
-                cursor.execute("ALTER TABLE users ALTER COLUMN password TYPE VARCHAR(255), ALTER COLUMN password DROP NOT NULL")
-            except Exception:
-                pass
+            _safe_execute(cursor, engine, "ALTER TABLE users ALTER COLUMN password TYPE VARCHAR(255), ALTER COLUMN password DROP NOT NULL")
 
         if 'email' not in user_cols:
-            cursor.execute("ALTER TABLE users ADD COLUMN email VARCHAR(100) NULL UNIQUE")
+            _safe_execute(cursor, engine, "ALTER TABLE users ADD COLUMN email VARCHAR(100) NULL UNIQUE")
 
         if 'password_hash' not in user_cols:
-            cursor.execute("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NULL")
+            _safe_execute(cursor, engine, "ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NULL")
 
-        try:
-            cursor.execute("UPDATE users SET password_hash = password WHERE (password_hash IS NULL OR password_hash = '') AND password IS NOT NULL")
-        except Exception:
-            pass
+        if 'password' in user_cols:
+            _safe_execute(cursor, engine, "UPDATE users SET password_hash = password WHERE (password_hash IS NULL OR password_hash = '') AND password IS NOT NULL")
 
         if 'status' not in user_cols:
-            cursor.execute("ALTER TABLE users ADD COLUMN status VARCHAR(30) DEFAULT 'ACTIVE'")
+            _safe_execute(cursor, engine, "ALTER TABLE users ADD COLUMN status VARCHAR(30) DEFAULT 'ACTIVE'")
 
         if 'email_verified_at' not in user_cols:
-            cursor.execute("ALTER TABLE users ADD COLUMN email_verified_at TIMESTAMP NULL")
+            _safe_execute(cursor, engine, "ALTER TABLE users ADD COLUMN email_verified_at TIMESTAMP NULL")
 
         if 'failed_login_attempts' not in user_cols:
             col_type = "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0"
-            cursor.execute(f"ALTER TABLE users ADD COLUMN failed_login_attempts {col_type}")
+            _safe_execute(cursor, engine, f"ALTER TABLE users ADD COLUMN failed_login_attempts {col_type}")
 
         if 'locked_until' not in user_cols:
-            cursor.execute("ALTER TABLE users ADD COLUMN locked_until TIMESTAMP NULL")
+            _safe_execute(cursor, engine, "ALTER TABLE users ADD COLUMN locked_until TIMESTAMP NULL")
 
         if 'last_login_at' not in user_cols:
-            cursor.execute("ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP NULL")
+            _safe_execute(cursor, engine, "ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP NULL")
 
         if 'institution_id' not in user_cols:
             col_type = "INTEGER NULL" if engine == 'sqlite' else "INT NULL"
-            cursor.execute(f"ALTER TABLE users ADD COLUMN institution_id {col_type}")
+            _safe_execute(cursor, engine, f"ALTER TABLE users ADD COLUMN institution_id {col_type}")
 
         if 'requested_institution_name' not in user_cols:
-            cursor.execute("ALTER TABLE users ADD COLUMN requested_institution_name VARCHAR(100) NULL")
+            _safe_execute(cursor, engine, "ALTER TABLE users ADD COLUMN requested_institution_name VARCHAR(100) NULL")
 
         if 'requested_institution_domain' not in user_cols:
-            cursor.execute("ALTER TABLE users ADD COLUMN requested_institution_domain VARCHAR(100) NULL")
+            _safe_execute(cursor, engine, "ALTER TABLE users ADD COLUMN requested_institution_domain VARCHAR(100) NULL")
 
         # Backfill active status for legacy accounts without altering pending registrations
-        try:
-            cursor.execute("UPDATE users SET status = 'ACTIVE' WHERE status IS NULL OR status = ''")
-        except Exception:
-            pass
+        _safe_execute(cursor, engine, "UPDATE users SET status = 'ACTIVE' WHERE status IS NULL OR status = ''")
 
     # -------------------------------------------------------------------------
     # 2. Multi-Vector Analyzed Emails Migrations
@@ -129,21 +138,18 @@ def apply_migrations(cursor, engine):
     if email_cols:
         if 'institution_id' not in email_cols:
             col_type = "INTEGER DEFAULT 1" if engine == 'sqlite' else "INT DEFAULT 1"
-            cursor.execute(f"ALTER TABLE analyzed_emails ADD COLUMN institution_id {col_type}")
+            _safe_execute(cursor, engine, f"ALTER TABLE analyzed_emails ADD COLUMN institution_id {col_type}")
 
         if 'user_id' not in email_cols:
             col_type = "INTEGER NULL" if engine == 'sqlite' else "INT NULL"
-            cursor.execute(f"ALTER TABLE analyzed_emails ADD COLUMN user_id {col_type}")
+            _safe_execute(cursor, engine, f"ALTER TABLE analyzed_emails ADD COLUMN user_id {col_type}")
 
         if 'email_config_id' not in email_cols:
             col_type = "INTEGER NULL" if engine == 'sqlite' else "INT NULL"
-            cursor.execute(f"ALTER TABLE analyzed_emails ADD COLUMN email_config_id {col_type}")
+            _safe_execute(cursor, engine, f"ALTER TABLE analyzed_emails ADD COLUMN email_config_id {col_type}")
 
-        try:
-            cursor.execute("UPDATE analyzed_emails SET institution_id = 1 WHERE institution_id IS NULL OR institution_id = 0")
-            cursor.execute("UPDATE analyzed_emails SET email_config_id = (SELECT email_config_id FROM ingested_messages WHERE analyzed_email_id = analyzed_emails.id) WHERE email_config_id IS NULL")
-        except Exception:
-            pass
+        _safe_execute(cursor, engine, "UPDATE analyzed_emails SET institution_id = 1 WHERE institution_id IS NULL OR institution_id = 0")
+        _safe_execute(cursor, engine, "UPDATE analyzed_emails SET email_config_id = (SELECT email_config_id FROM ingested_messages WHERE analysis_id = analyzed_emails.id) WHERE email_config_id IS NULL")
 
         missing_defs = {
             'overall_risk_level': "VARCHAR(20) DEFAULT 'LOW'",
@@ -157,30 +163,24 @@ def apply_migrations(cursor, engine):
             'suspicious_urls_count': "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0",
             'url_analysis_summary': 'TEXT NULL',
             'evidence_summary': 'TEXT NULL',
-            'domain_analysis_summary': 'TEXT DEFAULT "{}"',
+            'domain_analysis_summary': "TEXT DEFAULT '{}'",
             'social_eng_risk_level': "VARCHAR(20) DEFAULT 'LOW'",
             'social_eng_confidence': "FLOAT DEFAULT 0.0",
-            'social_eng_techniques': 'TEXT DEFAULT "[]"',
+            'social_eng_techniques': "TEXT DEFAULT '[]'",
             'attachments_count': "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0",
             'malware_detected': "INTEGER DEFAULT 0" if engine == 'sqlite' else ("INT DEFAULT 0" if engine == 'postgres' else "TINYINT(1) DEFAULT 0"),
             'malicious_attachments_count': "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0",
             'attachment_risk_level': "VARCHAR(20) DEFAULT 'LOW'",
-            'attachment_findings': 'TEXT DEFAULT "[]"',
+            'attachment_findings': "TEXT DEFAULT '[]'",
             'images_count': "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0",
             'suspicious_images_count': "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0",
-            'image_forensics_summary': 'TEXT DEFAULT "[]"'
+            'image_forensics_summary': "TEXT DEFAULT '[]'"
         }
         for col_name, col_def in missing_defs.items():
             if col_name not in email_cols:
-                try:
-                    cursor.execute(f"ALTER TABLE analyzed_emails ADD COLUMN {col_name} {col_def}")
-                except Exception:
-                    pass
+                _safe_execute(cursor, engine, f"ALTER TABLE analyzed_emails ADD COLUMN {col_name} {col_def}")
 
-        try:
-            cursor.execute("UPDATE analyzed_emails SET incident_status = 'PENDING_REVIEW' WHERE incident_status IS NULL OR incident_status = ''")
-        except Exception:
-            pass
+        _safe_execute(cursor, engine, "UPDATE analyzed_emails SET incident_status = 'PENDING_REVIEW' WHERE incident_status IS NULL OR incident_status = ''")
 
     # -------------------------------------------------------------------------
     # 3. Email Config Migrations
@@ -189,109 +189,105 @@ def apply_migrations(cursor, engine):
     if config_cols:
         if 'institution_id' not in config_cols:
             col_type = "INTEGER" if engine == 'sqlite' else "INT"
-            cursor.execute(f"ALTER TABLE email_config ADD COLUMN institution_id {col_type}")
+            _safe_execute(cursor, engine, f"ALTER TABLE email_config ADD COLUMN institution_id {col_type}")
 
         if 'encrypted_app_password' not in config_cols:
-            cursor.execute("ALTER TABLE email_config ADD COLUMN encrypted_app_password TEXT")
+            _safe_execute(cursor, engine, "ALTER TABLE email_config ADD COLUMN encrypted_app_password TEXT")
 
         if 'imap_server' not in config_cols:
-            cursor.execute("ALTER TABLE email_config ADD COLUMN imap_server VARCHAR(255) DEFAULT 'imap.gmail.com'")
+            _safe_execute(cursor, engine, "ALTER TABLE email_config ADD COLUMN imap_server VARCHAR(255) DEFAULT 'imap.gmail.com'")
 
         if 'smtp_server' not in config_cols:
-            cursor.execute("ALTER TABLE email_config ADD COLUMN smtp_server VARCHAR(255) DEFAULT 'smtp.gmail.com'")
+            _safe_execute(cursor, engine, "ALTER TABLE email_config ADD COLUMN smtp_server VARCHAR(255) DEFAULT 'smtp.gmail.com'")
 
         if 'smtp_port' not in config_cols:
             col_type = "INTEGER DEFAULT 587" if engine == 'sqlite' else "INT DEFAULT 587"
-            cursor.execute(f"ALTER TABLE email_config ADD COLUMN smtp_port {col_type}")
+            _safe_execute(cursor, engine, f"ALTER TABLE email_config ADD COLUMN smtp_port {col_type}")
 
         if 'last_synced_at' not in config_cols:
-            cursor.execute("ALTER TABLE email_config ADD COLUMN last_synced_at TIMESTAMP NULL")
+            _safe_execute(cursor, engine, "ALTER TABLE email_config ADD COLUMN last_synced_at TIMESTAMP NULL")
 
         if 'sync_status' not in config_cols:
-            cursor.execute("ALTER TABLE email_config ADD COLUMN sync_status VARCHAR(30) DEFAULT 'IDLE'")
+            _safe_execute(cursor, engine, "ALTER TABLE email_config ADD COLUMN sync_status VARCHAR(30) DEFAULT 'IDLE'")
 
         if 'sync_lease_id' not in config_cols:
-            cursor.execute("ALTER TABLE email_config ADD COLUMN sync_lease_id VARCHAR(64) NULL")
+            _safe_execute(cursor, engine, "ALTER TABLE email_config ADD COLUMN sync_lease_id VARCHAR(64) NULL")
 
         if 'sync_lease_expires_at' not in config_cols:
-            cursor.execute("ALTER TABLE email_config ADD COLUMN sync_lease_expires_at TIMESTAMP NULL")
+            _safe_execute(cursor, engine, "ALTER TABLE email_config ADD COLUMN sync_lease_expires_at TIMESTAMP NULL")
 
         if 'last_error' not in config_cols:
-            cursor.execute("ALTER TABLE email_config ADD COLUMN last_error TEXT NULL")
+            _safe_execute(cursor, engine, "ALTER TABLE email_config ADD COLUMN last_error TEXT NULL")
 
         if 'total_ingested_count' not in config_cols:
             col_type = "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0"
-            cursor.execute(f"ALTER TABLE email_config ADD COLUMN total_ingested_count {col_type}")
+            _safe_execute(cursor, engine, f"ALTER TABLE email_config ADD COLUMN total_ingested_count {col_type}")
 
         if 'configured_at' not in config_cols:
-            cursor.execute("ALTER TABLE email_config ADD COLUMN configured_at TIMESTAMP NULL")
+            _safe_execute(cursor, engine, "ALTER TABLE email_config ADD COLUMN configured_at TIMESTAMP NULL")
 
         if 'monitoring_started_at' not in config_cols:
-            cursor.execute("ALTER TABLE email_config ADD COLUMN monitoring_started_at TIMESTAMP NULL")
+            _safe_execute(cursor, engine, "ALTER TABLE email_config ADD COLUMN monitoring_started_at TIMESTAMP NULL")
 
         if 'initial_uid' not in config_cols:
             col_type = "INTEGER NULL" if engine == 'sqlite' else "INT NULL"
-            cursor.execute(f"ALTER TABLE email_config ADD COLUMN initial_uid {col_type}")
+            _safe_execute(cursor, engine, f"ALTER TABLE email_config ADD COLUMN initial_uid {col_type}")
 
         if 'last_processed_uid' not in config_cols:
             col_type = "INTEGER NULL" if engine == 'sqlite' else "INT NULL"
-            cursor.execute(f"ALTER TABLE email_config ADD COLUMN last_processed_uid {col_type}")
+            _safe_execute(cursor, engine, f"ALTER TABLE email_config ADD COLUMN last_processed_uid {col_type}")
 
         if 'uid_validity' not in config_cols:
             col_type = "INTEGER NULL" if engine == 'sqlite' else "INT NULL"
-            cursor.execute(f"ALTER TABLE email_config ADD COLUMN uid_validity {col_type}")
+            _safe_execute(cursor, engine, f"ALTER TABLE email_config ADD COLUMN uid_validity {col_type}")
 
         if 'mailbox_initialized' not in config_cols:
             col_type = "INTEGER DEFAULT 0" if engine == 'sqlite' else ("INT DEFAULT 0" if engine == 'postgres' else "TINYINT(1) DEFAULT 0")
-            cursor.execute(f"ALTER TABLE email_config ADD COLUMN mailbox_initialized {col_type}")
+            _safe_execute(cursor, engine, f"ALTER TABLE email_config ADD COLUMN mailbox_initialized {col_type}")
 
         # Idempotently migrate existing mailboxes that already ingested messages
-        try:
-            cursor.execute("""
-                UPDATE email_config
-                SET mailbox_initialized = 1,
-                    last_processed_uid = (
-                        SELECT MAX(imap_uid) FROM ingested_messages WHERE email_config_id = email_config.id
-                    ),
-                    initial_uid = COALESCE((
-                        SELECT MIN(imap_uid) FROM ingested_messages WHERE email_config_id = email_config.id
-                    ), 0),
-                    monitoring_started_at = COALESCE(configured_at, CURRENT_TIMESTAMP)
-                WHERE (mailbox_initialized IS NULL OR mailbox_initialized = 0)
-                  AND id IN (SELECT DISTINCT email_config_id FROM ingested_messages WHERE imap_uid IS NOT NULL)
-            """)
-        except Exception:
-            pass
+        _safe_execute(cursor, engine, """
+            UPDATE email_config
+            SET mailbox_initialized = 1,
+                last_processed_uid = (
+                    SELECT MAX(imap_uid) FROM ingested_messages WHERE email_config_id = email_config.id
+                ),
+                initial_uid = COALESCE((
+                    SELECT MIN(imap_uid) FROM ingested_messages WHERE email_config_id = email_config.id
+                ), 0),
+                monitoring_started_at = COALESCE(configured_at, CURRENT_TIMESTAMP)
+            WHERE (mailbox_initialized IS NULL OR mailbox_initialized = 0)
+              AND id IN (SELECT DISTINCT email_config_id FROM ingested_messages WHERE imap_uid IS NOT NULL)
+        """)
 
         # Check for legacy unencrypted app_password column and migrate idempotently
         if 'app_password' in config_cols:
             from ..services.crypto_service import CryptoService
-            cursor.execute("SELECT id, app_password FROM email_config WHERE app_password IS NOT NULL AND app_password != ''")
-            rows = cursor.fetchall()
-            for row in rows:
-                cfg_id = row[0] if isinstance(row, (tuple, list)) else row['id']
-                raw_pw = row[1] if isinstance(row, (tuple, list)) else row['app_password']
-                if raw_pw:
-                    enc_pw = CryptoService.encrypt(raw_pw)
-                    # Verify encryption before nullifying plaintext
-                    dec_pw = CryptoService.decrypt(enc_pw)
-                    if dec_pw == raw_pw:
-                        ph = '?' if engine == 'sqlite' else '%s'
-                        cursor.execute(
-                            f"UPDATE email_config SET encrypted_app_password = {ph}, app_password = NULL WHERE id = {ph}",
-                            (enc_pw, cfg_id)
-                        )
+            try:
+                cursor.execute("SELECT id, app_password FROM email_config WHERE app_password IS NOT NULL AND app_password != ''")
+                rows = cursor.fetchall()
+                for row in rows:
+                    cfg_id = row[0] if isinstance(row, (tuple, list)) else row['id']
+                    raw_pw = row[1] if isinstance(row, (tuple, list)) else row['app_password']
+                    if raw_pw:
+                        enc_pw = CryptoService.encrypt(raw_pw)
+                        dec_pw = CryptoService.decrypt(enc_pw)
+                        if dec_pw == raw_pw:
+                            ph = '?' if engine == 'sqlite' else '%s'
+                            _safe_execute(cursor, engine,
+                                f"UPDATE email_config SET encrypted_app_password = {ph}, app_password = NULL WHERE id = {ph}",
+                                (enc_pw, cfg_id)
+                            )
+            except Exception:
+                pass
 
-        try:
-            cursor.execute("UPDATE email_config SET institution_id = 1 WHERE institution_id IS NULL OR institution_id = 0")
-        except Exception:
-            pass
+        _safe_execute(cursor, engine, "UPDATE email_config SET institution_id = 1 WHERE institution_id IS NULL OR institution_id = 0")
 
     # -------------------------------------------------------------------------
     # 4. Incident Audit Log Table Migration
     # -------------------------------------------------------------------------
     if engine == 'sqlite':
-        cursor.execute('''
+        _safe_execute(cursor, engine, '''
             CREATE TABLE IF NOT EXISTS incident_audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 analysis_id INTEGER NOT NULL,
@@ -312,7 +308,7 @@ def apply_migrations(cursor, engine):
             )
         ''')
     elif engine == 'postgres':
-        cursor.execute('''
+        _safe_execute(cursor, engine, '''
             CREATE TABLE IF NOT EXISTS incident_audit_log (
                 id SERIAL PRIMARY KEY,
                 analysis_id INT NOT NULL,
@@ -333,7 +329,7 @@ def apply_migrations(cursor, engine):
             )
         ''')
     else:
-        cursor.execute('''
+        _safe_execute(cursor, engine, '''
             CREATE TABLE IF NOT EXISTS incident_audit_log (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 analysis_id INT NOT NULL,
@@ -363,11 +359,11 @@ def apply_migrations(cursor, engine):
     model_cols = _get_existing_columns(cursor, 'model_history', engine)
     if model_cols:
         if 'confusion_matrix' not in model_cols:
-            cursor.execute("ALTER TABLE model_history ADD COLUMN confusion_matrix TEXT NULL")
+            _safe_execute(cursor, engine, "ALTER TABLE model_history ADD COLUMN confusion_matrix TEXT NULL")
         if 'evaluation_type' not in model_cols:
-            cursor.execute("ALTER TABLE model_history ADD COLUMN evaluation_type VARCHAR(50) DEFAULT 'Synthetic Evaluation'")
+            _safe_execute(cursor, engine, "ALTER TABLE model_history ADD COLUMN evaluation_type VARCHAR(50) DEFAULT 'Synthetic Evaluation'")
         if 'dataset_used' not in model_cols:
-            cursor.execute("ALTER TABLE model_history ADD COLUMN dataset_used VARCHAR(255) DEFAULT 'default_academic_dataset'")
+            _safe_execute(cursor, engine, "ALTER TABLE model_history ADD COLUMN dataset_used VARCHAR(255) DEFAULT 'default_academic_dataset'")
 
     # -------------------------------------------------------------------------
     # 6. Dataset History Table Migrations
@@ -376,7 +372,8 @@ def apply_migrations(cursor, engine):
     if dataset_cols:
         if 'neutral_samples' not in dataset_cols:
             col_type = "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0"
-            cursor.execute(f"ALTER TABLE dataset_history ADD COLUMN neutral_samples {col_type}")
+            _safe_execute(cursor, engine, f"ALTER TABLE dataset_history ADD COLUMN neutral_samples {col_type}")
+
 
 def setup_database():
     """Sets up all required database tables with UTF-8 support and idempotent secure administrator initialization."""

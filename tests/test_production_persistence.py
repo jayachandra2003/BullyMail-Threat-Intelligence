@@ -177,3 +177,82 @@ def test_postgres_schema_creation_and_migration_no_mysql_sql(monkeypatch):
     assert "ENGINE=InnoDB" not in full_sql_dump, "ENGINE=InnoDB was incorrectly sent to PostgreSQL!"
     assert "DEFAULT CHARSET" not in full_sql_dump, "DEFAULT CHARSET was incorrectly sent to PostgreSQL!"
     assert "MODIFY COLUMN" not in full_sql_dump, "MODIFY COLUMN was incorrectly sent to PostgreSQL!"
+
+def test_postgres_migration_failure_transaction_recovery(monkeypatch):
+    """
+    Verifies that if an individual PostgreSQL migration query fails, _safe_execute uses
+    SAVEPOINT / ROLLBACK TO SAVEPOINT to protect the transaction state, allowing subsequent
+    queries and final conn.commit() to succeed without InFailedSqlTransaction.
+    """
+    executed_sqls = []
+
+    class MockPostgresTransactionCursor:
+        def __init__(self):
+            self.in_savepoint = False
+            self.aborted = False
+
+        def execute(self, sql, params=None):
+            sql_str = str(sql).strip()
+            executed_sqls.append(sql_str)
+
+            if "SAVEPOINT migration_sp" in sql_str:
+                self.in_savepoint = True
+                return
+            elif "ROLLBACK TO SAVEPOINT migration_sp" in sql_str:
+                self.in_savepoint = False
+                self.aborted = False
+                return
+            elif "RELEASE SAVEPOINT migration_sp" in sql_str:
+                self.in_savepoint = False
+                return
+
+            if self.aborted:
+                raise Exception("InFailedSqlTransaction: current transaction is aborted, commands ignored until end of transaction block")
+
+            # Simulate failure on a specific optional statement
+            if "simulated_broken_migration_query" in sql_str:
+                if not self.in_savepoint:
+                    self.aborted = True
+                raise Exception("Simulated DB exception on optional migration")
+
+        def fetchall(self):
+            return []
+
+        def fetchone(self):
+            return None
+
+        def close(self):
+            pass
+
+    class MockPostgresTransactionConn:
+        def __init__(self):
+            self.cursor_obj = MockPostgresTransactionCursor()
+            self.committed = False
+
+        def cursor(self, *args, **kwargs):
+            return self.cursor_obj
+
+        def commit(self):
+            if self.cursor_obj.aborted:
+                raise Exception("InFailedSqlTransaction: commit failed due to aborted transaction")
+            self.committed = True
+
+        def rollback(self):
+            self.cursor_obj.aborted = False
+
+        def close(self):
+            pass
+
+    from bullymail.database import schema
+    mock_conn = MockPostgresTransactionConn()
+
+    # Test _safe_execute directly
+    res_fail = schema._safe_execute(mock_conn.cursor_obj, 'postgres', "SELECT * FROM simulated_broken_migration_query")
+    assert res_fail is False
+
+    # Verify transaction was NOT aborted due to savepoint rollback
+    res_success = schema._safe_execute(mock_conn.cursor_obj, 'postgres', "SELECT 1")
+    assert res_success is True
+
+    mock_conn.commit()
+    assert mock_conn.committed is True
