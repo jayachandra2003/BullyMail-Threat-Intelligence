@@ -260,6 +260,13 @@ def apply_migrations(cursor, engine):
               AND id IN (SELECT DISTINCT email_config_id FROM ingested_messages WHERE imap_uid IS NOT NULL)
         """)
 
+        # Idempotently heal any total_ingested_count that fell out of sync
+        _safe_execute(cursor, engine, """
+            UPDATE email_config
+            SET total_ingested_count = (SELECT COUNT(*) FROM ingested_messages WHERE email_config_id = email_config.id)
+            WHERE (SELECT COUNT(*) FROM ingested_messages WHERE email_config_id = email_config.id) > COALESCE(total_ingested_count, 0)
+        """)
+
         # Check for legacy unencrypted app_password column and migrate idempotently
         if 'app_password' in config_cols:
             from ..services.crypto_service import CryptoService

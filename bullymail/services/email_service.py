@@ -123,25 +123,49 @@ class EmailService:
         except Exception:
             pass
 
-        return fetch_all(
+        rows = fetch_all(
             """SELECT id, institution_id, email_address, imap_server, smtp_server, smtp_port, status,
                       sync_status, sync_lease_id, sync_lease_expires_at, last_synced_at, last_error,
                       total_ingested_count, configured_at, monitoring_started_at, initial_uid, last_processed_uid, uid_validity, mailbox_initialized
                FROM email_config WHERE institution_id = %s ORDER BY id ASC""",
             (institution_id,)
         )
+        if not rows:
+            return []
+
+        for m in rows:
+            mb_id = m.get('id')
+            try:
+                ing_row = fetch_one("SELECT COUNT(*) AS cnt FROM ingested_messages WHERE email_config_id = %s", (mb_id,))
+                ing_cnt = ing_row['cnt'] if isinstance(ing_row, dict) else (ing_row[0] if ing_row else 0)
+                an_row = fetch_one("SELECT COUNT(*) AS cnt FROM analyzed_emails WHERE email_config_id = %s", (mb_id,))
+                an_cnt = an_row['cnt'] if isinstance(an_row, dict) else (an_row[0] if an_row else 0)
+                m['total_ingested_count'] = max(ing_cnt, an_cnt, m.get('total_ingested_count') or 0)
+            except Exception:
+                pass
+        return rows
 
     def get_mailbox_by_id(self, mailbox_id, institution_id):
         """Returns a single mailbox if and only if it belongs to institution_id; otherwise returns None (404)."""
         if institution_id is None or mailbox_id is None:
             return None
-        return fetch_one(
+        m = fetch_one(
             """SELECT id, institution_id, email_address, imap_server, smtp_server, smtp_port, status,
                       sync_status, sync_lease_id, sync_lease_expires_at, last_synced_at, last_error,
                       total_ingested_count, configured_at, monitoring_started_at, initial_uid, last_processed_uid, uid_validity, mailbox_initialized
                FROM email_config WHERE id = %s AND institution_id = %s""",
             (mailbox_id, institution_id)
         )
+        if m:
+            try:
+                ing_row = fetch_one("SELECT COUNT(*) AS cnt FROM ingested_messages WHERE email_config_id = %s", (mailbox_id,))
+                ing_cnt = ing_row['cnt'] if isinstance(ing_row, dict) else (ing_row[0] if ing_row else 0)
+                an_row = fetch_one("SELECT COUNT(*) AS cnt FROM analyzed_emails WHERE email_config_id = %s", (mailbox_id,))
+                an_cnt = an_row['cnt'] if isinstance(an_row, dict) else (an_row[0] if an_row else 0)
+                m['total_ingested_count'] = max(ing_cnt, an_cnt, m.get('total_ingested_count') or 0)
+            except Exception:
+                pass
+        return m
 
     def configure_mailbox(self, institution_id, email_address, app_password, imap_server=None, smtp_server=None, smtp_port=None):
         """Configures a new mailbox with Fernet encryption assigned strictly to institution_id."""

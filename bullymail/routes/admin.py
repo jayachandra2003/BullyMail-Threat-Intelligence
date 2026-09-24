@@ -368,9 +368,9 @@ def send_admin_warning(current_user, analysis_id):
 
     # Dispatch outbound warning email via SMTP service
     send_ok, send_msg = admin_warning_service.send_warning_email(
-        recipient_email=target_recipient,
-        subject=subject_to_send,
-        body=body_to_send
+        target_recipient,
+        subject_to_send,
+        body_to_send
     )
 
     if not send_ok:

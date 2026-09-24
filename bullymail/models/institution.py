@@ -87,8 +87,16 @@ class InstitutionModel:
         mb_act_row = fetch_one("SELECT COUNT(*) AS cnt FROM email_config WHERE institution_id = %s AND status = 'active'", (inst_id,))
         active_mailboxes = mb_act_row['cnt'] if isinstance(mb_act_row, dict) else (mb_act_row[0] if mb_act_row else 0)
 
-        em_row = fetch_one("SELECT COUNT(*) AS cnt FROM analyzed_emails WHERE institution_id = %s", (inst_id,))
-        total_emails = em_row['cnt'] if isinstance(em_row, dict) else (em_row[0] if em_row else 0)
+        ing_row = fetch_one("SELECT COUNT(*) AS cnt FROM ingested_messages WHERE institution_id = %s", (inst_id,))
+        ing_cnt = ing_row['cnt'] if isinstance(ing_row, dict) else (ing_row[0] if ing_row else 0)
+
+        an_row = fetch_one("SELECT COUNT(*) AS cnt FROM analyzed_emails WHERE institution_id = %s", (inst_id,))
+        an_cnt = an_row['cnt'] if isinstance(an_row, dict) else (an_row[0] if an_row else 0)
+
+        cfg_row = fetch_one("SELECT COALESCE(SUM(total_ingested_count), 0) AS cnt FROM email_config WHERE institution_id = %s", (inst_id,))
+        cfg_cnt = cfg_row['cnt'] if isinstance(cfg_row, dict) else (cfg_row[0] if cfg_row else 0)
+
+        total_emails = max(ing_cnt, an_cnt, cfg_cnt)
 
         tr_row = fetch_one("SELECT COUNT(*) AS cnt FROM analyzed_emails WHERE institution_id = %s AND overall_risk_level != 'LOW'", (inst_id,))
         total_threats = tr_row['cnt'] if isinstance(tr_row, dict) else (tr_row[0] if tr_row else 0)

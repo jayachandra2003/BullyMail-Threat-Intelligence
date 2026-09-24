@@ -2966,7 +2966,7 @@ function renderSecureMailboxesSummary(mailboxes) {
 
     const total = mailboxes.length;
     const active = mailboxes.filter(m => m.status === 'active').length;
-    const totalIngested = mailboxes.reduce((acc, m) => acc + (m.total_ingested_count || 0), 0);
+    const totalIngested = mailboxes.reduce((acc, m) => acc + (parseInt(m.total_ingested_count, 10) || 0), 0);
 
     if (totalEl) totalEl.textContent = total;
     if (activeEl) activeEl.textContent = active;
