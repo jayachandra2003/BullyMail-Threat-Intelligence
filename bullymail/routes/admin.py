@@ -219,6 +219,25 @@ def update_admin_mailbox_status(current_user, mailbox_id):
     except Exception as e:
         return jsonify({'success': False, 'error': f"Failed to update mailbox status: {e}"}), 500
 
+@admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>', methods=['DELETE'])
+@require_role('admin')
+def delete_admin_mailbox(current_user, mailbox_id):
+    """Deletes/removes a tenant-owned mailbox."""
+    try:
+        inst_id = current_user.get('institution_id')
+        if not inst_id:
+            return jsonify({'success': False, 'error': 'Authenticated user is not assigned to an institution.'}), 400
+
+        from ..services.email_service import email_service
+        success, message = email_service.delete_mailbox(mailbox_id, inst_id)
+        if not success:
+            status_code = 404 if 'not found' in message.lower() else 400
+            return jsonify({'success': False, 'error': message}), status_code
+
+        return jsonify({'success': True, 'message': message})
+    except Exception as e:
+        return jsonify({'success': False, 'error': f"Failed to delete mailbox: {e}"}), 500
+
 @admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>/sync', methods=['POST'])
 @require_role('admin')
 def sync_admin_mailbox(current_user, mailbox_id):

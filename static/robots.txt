@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /api/
+Disallow: /admin
+Allow: /
+
+Sitemap: https://bullymail-threat-intelligence.onrender.com/sitemap.xml

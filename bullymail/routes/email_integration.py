@@ -278,6 +278,7 @@ def create_mailbox(current_user):
     })
 
 @email_bp.route('/api/mailbox/<int:mailbox_id>/sync', methods=['POST'])
+@email_bp.route('/api/mailboxes/<int:mailbox_id>/sync', methods=['POST'])
 @require_role('admin')
 def sync_mailbox(current_user, mailbox_id):
     mb = fetch_one("SELECT * FROM email_config WHERE id = %s", (mailbox_id,))

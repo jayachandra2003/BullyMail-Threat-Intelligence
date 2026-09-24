@@ -77,18 +77,27 @@ You can deploy BullyMail on Render using either **Native Python** or **Docker**.
 
 ## 🔑 REQUIRED ENVIRONMENT VARIABLES
 
-Configure the following environment variables under **Render Dashboard → Web Service → Environment**:
+Configure the following environment variables under **Render Dashboard → Web Service & Background Worker → Environment**:
 
-| Variable Name | Value / Placeholder | Required / Optional |
+| Variable Name | Value / Description | Required / Optional |
 | :--- | :--- | :--- |
 | `FLASK_ENV` | `production` | **Required** |
 | `SECRET_KEY` | `<GENERATE_A_RANDOM_SECRET>` | **Required** |
 | `ADMIN_PASSWORD` | `<CHOOSE_YOUR_ADMIN_PASSWORD>` | **Required** |
-| `DB_TYPE` | `sqlite` | **Required** |
+| `DATABASE_URL` | `mysql://user:pass@host:3306/dbname` or `postgres://user:pass@host:5432/dbname` | **Recommended for Persistence** |
+| `DB_TYPE` | `mysql` or `postgres` (Auto-detected if `DATABASE_URL` or `DB_HOST` is set) | **Required if not using `DATABASE_URL`** |
+| `DB_HOST` | Database Host address (e.g., `mysql.railway.internal` or Aiven/PlanetScale host) | Required for explicit DB config |
+| `DB_USER` | Database Username | Required for explicit DB config |
+| `DB_PASSWORD` | Database Password | Required for explicit DB config |
+| `DB_NAME` | Database Name (e.g., `bullymail_db`) | Required for explicit DB config |
+| `BULLYMAIL_MASTER_KEY` | `<GENERATE_A_FERNET_KEY>` | **Required for Mailbox Encrypted Password Storage** |
 | `ADMIN_USERNAME` | `admin` *(default)* | Optional |
 | `ADMIN_EMAIL` | `admin@bullymail.local` | Optional |
-| `BULLYMAIL_MASTER_KEY` | `<GENERATE_A_FERNET_KEY>` | Optional |
-| `OPENROUTER_API_KEY` | `<OPTIONAL_OPENROUTER_API_KEY>` | Optional |
+
+> ⚠️ **PERSISTENCE REQUIREMENT**:
+> Container local filesystems on Render Free are ephemeral and reset when services cold-start or restart.
+> To persist mailboxes, analyzed emails, threat records, and user data across restarts, set `DATABASE_URL` or `DB_HOST`/`DB_USER`/`DB_PASSWORD`/`DB_NAME` pointing to a persistent MySQL or PostgreSQL database.
+> Make sure both your **Web Service** and **Background Worker** use the **EXACT SAME `DATABASE_URL` / Database configuration**.
 
 ---
 

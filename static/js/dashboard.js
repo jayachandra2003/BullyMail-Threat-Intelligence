@@ -71,6 +71,7 @@ function initNavigation() {
 
             // Close mobile sidebar if open
             document.querySelector('.sidebar-v2')?.classList.remove('mobile-open');
+            document.querySelector('.sidebar-backdrop')?.classList.remove('show');
         });
     });
 }
@@ -80,6 +81,12 @@ function initSidebarToggle() {
     const toggleBtn = document.getElementById('sidebarToggleBtn');
     const mobileToggleBtn = document.getElementById('mobileMenuBtn');
     const brandLogo = document.querySelector('.brand-logo');
+    const backdrop = document.querySelector('.sidebar-backdrop');
+
+    const closeMobileSidebar = () => {
+        if (sidebar) sidebar.classList.remove('mobile-open');
+        if (backdrop) backdrop.classList.remove('show');
+    };
 
     // Restore state from localStorage
     const savedState = localStorage.getItem('bullymail_sidebar_collapsed');
@@ -124,10 +131,24 @@ function initSidebarToggle() {
     }
 
     if (mobileToggleBtn && sidebar) {
-        mobileToggleBtn.addEventListener('click', () => {
-            sidebar.classList.toggle('mobile-open');
+        mobileToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = sidebar.classList.toggle('mobile-open');
+            if (backdrop) backdrop.classList.toggle('show', isOpen);
         });
     }
+
+    if (backdrop) {
+        backdrop.addEventListener('click', () => {
+            closeMobileSidebar();
+        });
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && sidebar && sidebar.classList.contains('mobile-open')) {
+            closeMobileSidebar();
+        }
+    });
 }
 
 function initCharCounter() {
@@ -3052,6 +3073,9 @@ function renderSecureMailboxesList(mailboxes, container) {
                         <button type="button" class="btn-soc-outline btn-sm font-mono ${isEnabled ? 'text-warning' : 'text-success'}" onclick="handleMailboxToggle(${m.id}, '${m.status}')">
                             <i class="fas ${isEnabled ? 'fa-pause' : 'fa-play'} me-1"></i> ${isEnabled ? 'Disable' : 'Enable'}
                         </button>
+                        <button type="button" class="btn-soc-outline btn-sm font-mono text-danger" onclick="handleMailboxDelete(${m.id}, '${escapeHtml(m.email_address)}')">
+                            <i class="fas fa-trash me-1"></i> Delete
+                        </button>
                         ` : ''}
                         <button type="button" class="btn-soc-outline btn-sm font-mono" onclick="openMailboxDetails(${m.id})">
                             <i class="fas fa-chart-line me-1"></i> Activity Details
@@ -3063,6 +3087,41 @@ function renderSecureMailboxesList(mailboxes, container) {
     });
 
     container.innerHTML = html;
+}
+
+async function handleMailboxDelete(mailboxId, emailAddress) {
+    if (!confirm(`Are you sure you want to remove the secure mailbox '${emailAddress}'?\n\nHistorical threat analysis reports will be preserved, but automatic and manual synchronization will be stopped.`)) {
+        return;
+    }
+
+    try {
+        const res = await fetchWithTimeout(`/api/admin/mailboxes/${mailboxId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        }, 15000);
+
+        const data = await res.json();
+        if (data.success) {
+            if (typeof showToast === 'function') {
+                showToast(data.message || 'Mailbox deleted successfully.', 'success');
+            } else {
+                alert(data.message || 'Mailbox deleted successfully.');
+            }
+            loadSecureMailboxes();
+        } else {
+            if (typeof showToast === 'function') {
+                showToast(data.error || 'Failed to delete mailbox.', 'danger');
+            } else {
+                alert(data.error || 'Failed to delete mailbox.');
+            }
+        }
+    } catch (err) {
+        if (typeof showToast === 'function') {
+            showToast(`Error deleting mailbox: ${err.message}`, 'danger');
+        } else {
+            alert(`Error deleting mailbox: ${err.message}`);
+        }
+    }
 }
 
 window.currentMailboxId = null;

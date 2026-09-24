@@ -211,6 +211,46 @@ def apply_migrations(cursor, engine):
             col_type = "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0"
             cursor.execute(f"ALTER TABLE email_config ADD COLUMN total_ingested_count {col_type}")
 
+        if 'configured_at' not in config_cols:
+            cursor.execute("ALTER TABLE email_config ADD COLUMN configured_at TIMESTAMP NULL")
+
+        if 'monitoring_started_at' not in config_cols:
+            cursor.execute("ALTER TABLE email_config ADD COLUMN monitoring_started_at TIMESTAMP NULL")
+
+        if 'initial_uid' not in config_cols:
+            col_type = "INTEGER NULL" if engine == 'sqlite' else "INT NULL"
+            cursor.execute(f"ALTER TABLE email_config ADD COLUMN initial_uid {col_type}")
+
+        if 'last_processed_uid' not in config_cols:
+            col_type = "INTEGER NULL" if engine == 'sqlite' else "INT NULL"
+            cursor.execute(f"ALTER TABLE email_config ADD COLUMN last_processed_uid {col_type}")
+
+        if 'uid_validity' not in config_cols:
+            col_type = "INTEGER NULL" if engine == 'sqlite' else "INT NULL"
+            cursor.execute(f"ALTER TABLE email_config ADD COLUMN uid_validity {col_type}")
+
+        if 'mailbox_initialized' not in config_cols:
+            col_type = "INTEGER DEFAULT 0" if engine == 'sqlite' else "TINYINT(1) DEFAULT 0"
+            cursor.execute(f"ALTER TABLE email_config ADD COLUMN mailbox_initialized {col_type}")
+
+        # Idempotently migrate existing mailboxes that already ingested messages
+        try:
+            cursor.execute("""
+                UPDATE email_config
+                SET mailbox_initialized = 1,
+                    last_processed_uid = (
+                        SELECT MAX(imap_uid) FROM ingested_messages WHERE email_config_id = email_config.id
+                    ),
+                    initial_uid = COALESCE((
+                        SELECT MIN(imap_uid) FROM ingested_messages WHERE email_config_id = email_config.id
+                    ), 0),
+                    monitoring_started_at = COALESCE(configured_at, CURRENT_TIMESTAMP)
+                WHERE (mailbox_initialized IS NULL OR mailbox_initialized = 0)
+                  AND id IN (SELECT DISTINCT email_config_id FROM ingested_messages WHERE imap_uid IS NOT NULL)
+            """)
+        except Exception:
+            pass
+
         # Check for legacy unencrypted app_password column and migrate idempotently
         if 'app_password' in config_cols:
             from ..services.crypto_service import CryptoService
@@ -509,7 +549,12 @@ def setup_database():
                     sync_lease_expires_at TIMESTAMP NULL,
                     last_error TEXT NULL,
                     total_ingested_count INTEGER DEFAULT 0,
-                    configured_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    configured_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    monitoring_started_at TIMESTAMP NULL,
+                    initial_uid INTEGER NULL,
+                    last_processed_uid INTEGER NULL,
+                    uid_validity INTEGER NULL,
+                    mailbox_initialized INTEGER DEFAULT 0
                 )
             ''')
 
@@ -729,6 +774,11 @@ def setup_database():
                     last_error TEXT NULL,
                     total_ingested_count INT DEFAULT 0,
                     configured_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    monitoring_started_at TIMESTAMP NULL,
+                    initial_uid INT NULL,
+                    last_processed_uid INT NULL,
+                    uid_validity INT NULL,
+                    mailbox_initialized TINYINT(1) DEFAULT 0,
                     FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ''')
