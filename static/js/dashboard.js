@@ -2976,6 +2976,7 @@ function renderSecureMailboxesSummary(mailboxes) {
 window.inFlightMailboxSyncs = new Set();
 
 function renderSecureMailboxesList(mailboxes, container) {
+    window.currentMailboxesList = mailboxes;
     if (!mailboxes || mailboxes.length === 0) {
         container.innerHTML = `
             <div class="soc-panel p-4 text-center">
@@ -3070,6 +3071,9 @@ function renderSecureMailboxesList(mailboxes, container) {
                         <button type="button" class="btn-soc-outline btn-sm font-mono" id="btnTest-${m.id}" onclick="handleMailboxTest(${m.id})">
                             <i class="fas fa-plug me-1"></i> Test Connection
                         </button>
+                        <button type="button" class="btn-soc-outline btn-sm font-mono" id="btnEdit-${m.id}" onclick="openEditMailboxModal(${m.id})">
+                            <i class="fas fa-key me-1"></i> Edit Credentials
+                        </button>
                         <button type="button" class="btn-soc-outline btn-sm font-mono ${isEnabled ? 'text-warning' : 'text-success'}" onclick="handleMailboxToggle(${m.id}, '${m.status}')">
                             <i class="fas ${isEnabled ? 'fa-pause' : 'fa-play'} me-1"></i> ${isEnabled ? 'Disable' : 'Enable'}
                         </button>
@@ -3120,6 +3124,114 @@ async function handleMailboxDelete(mailboxId, emailAddress) {
             showToast(`Error deleting mailbox: ${err.message}`, 'danger');
         } else {
             alert(`Error deleting mailbox: ${err.message}`);
+        }
+    }
+}
+
+function openEditMailboxModal(mailboxId) {
+    const list = window.currentMailboxesList || [];
+    const mb = list.find(m => m.id === mailboxId);
+    if (!mb) {
+        if (typeof showToast === 'function') showToast('Mailbox details not found.', 'warning');
+        return;
+    }
+
+    const idEl = document.getElementById('editMailboxId');
+    const emailEl = document.getElementById('inputEditEmailAddress');
+    const passEl = document.getElementById('inputEditAppPassword');
+    const imapHostEl = document.getElementById('inputEditImapServer');
+    const imapPortEl = document.getElementById('inputEditImapPort');
+    const smtpHostEl = document.getElementById('inputEditSmtpServer');
+    const smtpPortEl = document.getElementById('inputEditSmtpPort');
+
+    if (idEl) idEl.value = mb.id;
+    if (emailEl) emailEl.value = mb.email_address || '';
+    if (passEl) passEl.value = '';
+    if (imapHostEl) imapHostEl.value = mb.imap_server || 'imap.gmail.com';
+    if (imapPortEl) imapPortEl.value = mb.imap_port || 993;
+    if (smtpHostEl) smtpHostEl.value = mb.smtp_server || 'smtp.gmail.com';
+    if (smtpPortEl) smtpPortEl.value = mb.smtp_port || 587;
+
+    const modalEl = document.getElementById('editMailboxModal');
+    if (modalEl && typeof bootstrap !== 'undefined') {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
+}
+
+async function handleSaveEditMailbox(event) {
+    if (event) event.preventDefault();
+
+    const mailboxId = document.getElementById('editMailboxId')?.value;
+    const emailAddress = document.getElementById('inputEditEmailAddress')?.value?.trim();
+    const appPassword = document.getElementById('inputEditAppPassword')?.value?.trim();
+    const imapServer = document.getElementById('inputEditImapServer')?.value?.trim();
+    const imapPort = parseInt(document.getElementById('inputEditImapPort')?.value, 10) || 993;
+    const smtpServer = document.getElementById('inputEditSmtpServer')?.value?.trim();
+    const smtpPort = parseInt(document.getElementById('inputEditSmtpPort')?.value, 10) || 587;
+
+    if (!mailboxId) {
+        if (typeof showToast === 'function') showToast('Invalid mailbox selection.', 'danger');
+        return;
+    }
+
+    const btn = document.getElementById('btnSaveEditMailbox');
+    const originalHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
+    }
+
+    try {
+        const payload = {
+            email_address: emailAddress,
+            app_password: appPassword,
+            imap_server: imapServer,
+            imap_port: imapPort,
+            smtp_server: smtpServer,
+            smtp_port: smtpPort
+        };
+
+        const res = await fetchWithTimeout(`/api/admin/mailboxes/${mailboxId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (data && data.success) {
+            if (typeof showToast === 'function') {
+                showToast('Mailbox credentials and configuration updated successfully.', 'success');
+            } else {
+                alert('Mailbox credentials updated successfully.');
+            }
+            const modalEl = document.getElementById('editMailboxModal');
+            if (modalEl && typeof bootstrap !== 'undefined') {
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+            }
+            if (typeof loadSecureMailboxes === 'function') {
+                loadSecureMailboxes();
+            }
+        } else {
+            const errMsg = (data && data.error) ? data.error : 'Failed to update mailbox credentials.';
+            if (typeof showToast === 'function') {
+                showToast(errMsg, 'danger');
+            } else {
+                alert(errMsg);
+            }
+        }
+    } catch (err) {
+        const errStr = `Error updating mailbox credentials: ${err.message}`;
+        if (typeof showToast === 'function') {
+            showToast(errStr, 'danger');
+        } else {
+            alert(errStr);
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
         }
     }
 }

@@ -227,6 +227,41 @@ class EmailService:
         )
         return True
 
+    def update_mailbox_credentials(self, mailbox_id, institution_id, email_address=None, app_password=None, imap_server=None, smtp_server=None, smtp_port=None):
+        """
+        Updates credentials and configuration for an existing tenant-owned mailbox.
+        Preserves existing mailbox ID and preserves existing encrypted password if app_password is empty/None.
+        Encrypts new app_password using current CryptoService master key.
+        """
+        mailbox = self.get_mailbox_by_id(mailbox_id, institution_id)
+        if not mailbox:
+            return None, "Mailbox not found or cross-tenant access denied."
+
+        clean_email = (email_address.strip() if (email_address and isinstance(email_address, str)) else mailbox.get('email_address', '')).strip()
+        imap_host = (imap_server.strip() if (imap_server and isinstance(imap_server, str)) else (mailbox.get('imap_server') or 'imap.gmail.com')).strip()
+        smtp_host = (smtp_server.strip() if (smtp_server and isinstance(smtp_server, str)) else (mailbox.get('smtp_server') or 'smtp.gmail.com')).strip()
+        smtp_p = int(smtp_port) if smtp_port else (mailbox.get('smtp_port') or 587)
+
+        if app_password and isinstance(app_password, str) and app_password.strip():
+            clean_pw = app_password.strip()
+            enc_password = CryptoService.encrypt(clean_pw)
+            execute_query(
+                '''UPDATE email_config
+                   SET email_address = %s, encrypted_app_password = %s, imap_server = %s, smtp_server = %s, smtp_port = %s, last_error = NULL
+                   WHERE id = %s AND institution_id = %s''',
+                (clean_email, enc_password, imap_host, smtp_host, smtp_p, mailbox_id, institution_id)
+            )
+        else:
+            execute_query(
+                '''UPDATE email_config
+                   SET email_address = %s, imap_server = %s, smtp_server = %s, smtp_port = %s
+                   WHERE id = %s AND institution_id = %s''',
+                (clean_email, imap_host, smtp_host, smtp_p, mailbox_id, institution_id)
+            )
+
+        updated_mb = self.get_mailbox_by_id(mailbox_id, institution_id)
+        return updated_mb, "Mailbox credentials updated successfully."
+
     def delete_mailbox(self, mailbox_id, institution_id):
         """
         Deletes/removes a tenant-owned mailbox configuration safely.

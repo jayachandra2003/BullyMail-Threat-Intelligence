@@ -407,4 +407,124 @@ def test_process_mailbox_halts_immediately_on_lease_loss(app, setup_tenants, mon
         msgs = fetch_all("SELECT * FROM ingested_messages WHERE email_config_id = %s", (alpha_mb_id,))
         assert len(msgs) == 1  # Only 1 message processed, 802 and 803 skipped!
 
+def test_admin_update_mailbox_credentials_endpoint(client, setup_tenants):
+    """TEST: Admin can update existing mailbox credentials (email, password, servers) via PUT endpoint."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = 100
+        sess['username'] = 'admin_alpha'
+        sess['role'] = 'admin'
+
+    alpha_mb_id = setup_tenants['mb_alpha_id']
+
+    res = client.put(f'/api/admin/mailboxes/{alpha_mb_id}', json={
+        'email_address': 'updated_alpha@alpha.com',
+        'app_password': 'new_secret_pass_999',
+        'imap_server': 'imap.gmail.com',
+        'smtp_server': 'smtp.gmail.com',
+        'smtp_port': 587
+    })
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data['success'] is True
+    assert data['mailbox']['email_address'] == 'updated_alpha@alpha.com'
+    assert data['mailbox']['id'] == alpha_mb_id  # Mailbox ID preserved!
+
+    # Verify password was encrypted with CryptoService before database save
+    from bullymail.database.connection import fetch_one
+    from bullymail.services.crypto_service import CryptoService
+    row = fetch_one("SELECT email_address, encrypted_app_password FROM email_config WHERE id = %s", (alpha_mb_id,))
+    assert row['email_address'] == 'updated_alpha@alpha.com'
+    assert row['encrypted_app_password'] != 'new_secret_pass_999'
+    assert CryptoService.decrypt(row['encrypted_app_password']) == 'new_secret_pass_999'
+
+def test_update_mailbox_preserve_existing_password_when_empty(client, setup_tenants):
+    """TEST: Empty or blank app_password field preserves existing encrypted password without overwriting."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = 100
+        sess['username'] = 'admin_alpha'
+        sess['role'] = 'admin'
+
+    alpha_mb_id = setup_tenants['mb_alpha_id']
+    from bullymail.database.connection import fetch_one
+    from bullymail.services.crypto_service import CryptoService
+
+    # Set initial password
+    email_service.update_mailbox_credentials(
+        mailbox_id=alpha_mb_id,
+        institution_id=10,
+        app_password='original_pass_123'
+    )
+    orig_enc = fetch_one("SELECT encrypted_app_password FROM email_config WHERE id = %s", (alpha_mb_id,))['encrypted_app_password']
+
+    # Update with empty app_password
+    res = client.put(f'/api/admin/mailboxes/{alpha_mb_id}', json={
+        'email_address': 'new_email_only@alpha.com',
+        'app_password': ''
+    })
+    assert res.status_code == 200
+
+    row_after = fetch_one("SELECT email_address, encrypted_app_password FROM email_config WHERE id = %s", (alpha_mb_id,))
+    assert row_after['email_address'] == 'new_email_only@alpha.com'
+    assert row_after['encrypted_app_password'] == orig_enc
+    assert CryptoService.decrypt(row_after['encrypted_app_password']) == 'original_pass_123'
+
+def test_update_mailbox_plaintext_password_never_returned_in_api(client, setup_tenants):
+    """TEST: Plaintext or decrypted app_passwords are never returned in PUT update API responses."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = 100
+        sess['username'] = 'admin_alpha'
+        sess['role'] = 'admin'
+
+    alpha_mb_id = setup_tenants['mb_alpha_id']
+
+    res = client.put(f'/api/admin/mailboxes/{alpha_mb_id}', json={
+        'app_password': 'sensitive_pass_555'
+    })
+    assert res.status_code == 200
+    mb_data = res.get_json()['mailbox']
+
+    assert 'app_password' not in mb_data
+    assert 'encrypted_app_password' not in mb_data
+    assert 'sensitive_pass_555' not in res.get_data(as_text=True)
+
+def test_unauthorized_and_cross_tenant_update_blocked(client, setup_tenants):
+    """TEST: Analyst users receive 403 Forbidden and cross-tenant updates return 404/403."""
+    # Analyst attempt -> 403
+    with client.session_transaction() as sess:
+        sess['user_id'] = 102
+        sess['username'] = 'analyst_alpha'
+        sess['role'] = 'analyst'
+
+    alpha_mb_id = setup_tenants['mb_alpha_id']
+    res = client.put(f'/api/admin/mailboxes/{alpha_mb_id}', json={'email_address': 'hacked@alpha.com'})
+    assert res.status_code == 403
+
+    # Admin Alpha (Inst 10) attempting to update Admin Beta's mailbox (Inst 20) -> 404
+    with client.session_transaction() as sess:
+        sess['user_id'] = 100
+        sess['username'] = 'admin_alpha'
+        sess['role'] = 'admin'
+
+    beta_mb_id = setup_tenants['mb_beta_id']
+    res_cross = client.put(f'/api/admin/mailboxes/{beta_mb_id}', json={'email_address': 'hacked@beta.com'})
+    assert res_cross.status_code == 404
+
+def test_institution_scoped_mailbox_update_endpoint(client, setup_tenants):
+    """TEST: PUT /api/institutions/<inst_id>/mailboxes/<mailbox_id> updates mailbox successfully."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = 100
+        sess['username'] = 'admin_alpha'
+        sess['role'] = 'admin'
+
+    alpha_mb_id = setup_tenants['mb_alpha_id']
+
+    res = client.put(f'/api/institutions/10/mailboxes/{alpha_mb_id}', json={
+        'email_address': 'inst_route_updated@alpha.com',
+        'app_password': 'inst_route_pass_777'
+    })
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data['success'] is True
+    assert data['mailbox']['email_address'] == 'inst_route_updated@alpha.com'
+
 

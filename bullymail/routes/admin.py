@@ -219,6 +219,49 @@ def update_admin_mailbox_status(current_user, mailbox_id):
     except Exception as e:
         return jsonify({'success': False, 'error': f"Failed to update mailbox status: {e}"}), 500
 
+@admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>', methods=['PUT', 'PATCH'])
+@admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>/update', methods=['POST'])
+@require_role('admin')
+def update_admin_mailbox_credentials(current_user, mailbox_id):
+    """
+    Updates credentials and settings for an existing tenant-owned mailbox (Admin Only).
+    Preserves existing mailbox ID and preserves existing encrypted password if app_password is empty.
+    """
+    try:
+        inst_id = current_user.get('institution_id')
+        if not inst_id:
+            return jsonify({'success': False, 'error': 'Authenticated user is not assigned to an institution.'}), 400
+
+        data = request.get_json() or {}
+        email_address = data.get('email_address') or data.get('email')
+        app_password = data.get('app_password')
+        imap_server = data.get('imap_server')
+        smtp_server = data.get('smtp_server')
+        smtp_port = data.get('smtp_port')
+
+        from ..services.email_service import email_service
+        updated_mb, msg = email_service.update_mailbox_credentials(
+            mailbox_id=mailbox_id,
+            institution_id=inst_id,
+            email_address=email_address,
+            app_password=app_password,
+            imap_server=imap_server,
+            smtp_server=smtp_server,
+            smtp_port=smtp_port
+        )
+
+        if not updated_mb:
+            status_code = 404 if 'not found' in msg.lower() else 403
+            return jsonify({'success': False, 'error': msg}), status_code
+
+        return jsonify({
+            'success': True,
+            'message': msg,
+            'mailbox': updated_mb
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': f"Failed to update mailbox credentials: {e}"}), 500
+
 @admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>', methods=['DELETE'])
 @require_role('admin')
 def delete_admin_mailbox(current_user, mailbox_id):

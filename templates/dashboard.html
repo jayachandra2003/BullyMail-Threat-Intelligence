@@ -1108,6 +1108,60 @@
                 </div>
             </div>
 
+            <!-- Edit Mailbox Credentials Modal -->
+            <div class="modal fade" id="editMailboxModal" tabindex="-1" aria-labelledby="editMailboxModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-3">
+                        <div class="modal-header border-0 pb-1">
+                            <h5 class="modal-title font-mono text-primary-soc d-flex align-items-center gap-2" id="editMailboxModalLabel">
+                                <i class="fas fa-key text-accent"></i> Edit Mailbox Credentials & Settings
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body pt-2">
+                            <form id="editMailboxForm" onsubmit="handleSaveEditMailbox(event)">
+                                <input type="hidden" id="editMailboxId">
+                                <div class="mb-3">
+                                    <label class="intake-field-label">GMAIL / USERNAME ADDRESS</label>
+                                    <input type="email" class="form-control soc-input font-mono" id="inputEditEmailAddress" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">NEW 16-CHARACTER APP PASSWORD</label>
+                                    <input type="password" class="form-control soc-input font-mono" id="inputEditAppPassword" placeholder="Enter new Gmail App Password (leave blank to keep current)">
+                                    <div class="form-text text-muted small mt-1">Leave blank if you do not wish to change the stored App Password. Primary passwords are rejected.</div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-7">
+                                        <label class="intake-field-label">IMAP SERVER HOST</label>
+                                        <input type="text" class="form-control soc-input font-mono" id="inputEditImapServer" required>
+                                    </div>
+                                    <div class="col-5">
+                                        <label class="intake-field-label">IMAP PORT</label>
+                                        <input type="number" class="form-control soc-input font-mono" id="inputEditImapPort" value="993" required>
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-7">
+                                        <label class="intake-field-label">SMTP SERVER HOST</label>
+                                        <input type="text" class="form-control soc-input font-mono" id="inputEditSmtpServer" required>
+                                    </div>
+                                    <div class="col-5">
+                                        <label class="intake-field-label">SMTP PORT</label>
+                                        <input type="number" class="form-control soc-input font-mono" id="inputEditSmtpPort" value="587" required>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-end gap-2 mt-4">
+                                    <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn-soc-primary btn-sm font-mono" id="btnSaveEditMailbox">
+                                        <i class="fas fa-save me-1"></i> Save Changes
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Mailbox Details / Activity Log Modal -->
             <div class="modal fade" id="mailboxDetailsModal" tabindex="-1" aria-labelledby="mailboxDetailsModalLabel" aria-hidden="true">
                 <div class="modal-dialog modal-dialog-centered modal-lg">
