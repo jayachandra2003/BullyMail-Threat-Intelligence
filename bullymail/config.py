@@ -23,6 +23,70 @@ def _resolve_secret_key():
         return None  # Enforced in production startup validation
     return secrets.token_hex(32)
 
+def _parse_database_config():
+    """
+    Parses database configuration from DATABASE_URL, DB_URL, MYSQL_URL, or individual environment variables.
+    Supports MySQL, PostgreSQL, and local SQLite with strict validation.
+    """
+    db_url = os.environ.get('DATABASE_URL') or os.environ.get('DB_URL') or os.environ.get('MYSQL_URL')
+    explicit_type = os.environ.get('DB_TYPE', '').strip().lower()
+    raw_host = os.environ.get('DB_HOST') or os.environ.get('MYSQL_HOST') or os.environ.get('MYSQLHOST')
+    raw_port = os.environ.get('DB_PORT') or os.environ.get('MYSQL_PORT') or os.environ.get('MYSQLPORT')
+    raw_user = os.environ.get('DB_USER') or os.environ.get('MYSQL_USER') or os.environ.get('MYSQLUSER')
+    raw_pass = os.environ.get('DB_PASSWORD') or os.environ.get('MYSQL_PASSWORD') or os.environ.get('MYSQLPASSWORD')
+    raw_name = os.environ.get('DB_NAME') or os.environ.get('MYSQL_DATABASE') or os.environ.get('MYSQLDATABASE')
+
+    if db_url and db_url.strip():
+        from urllib.parse import urlparse, unquote
+        parsed = urlparse(db_url.strip())
+        scheme = (parsed.scheme or '').lower()
+
+        if 'mysql' in scheme:
+            db_type = 'mysql'
+            default_port = 3306
+        elif 'postgres' in scheme or 'psycopg' in scheme:
+            db_type = 'postgres'
+            default_port = 5432
+        elif 'sqlite' in scheme:
+            db_type = 'sqlite'
+            default_port = None
+        else:
+            db_type = scheme or 'mysql'
+            default_port = 3306
+
+        db_host = parsed.hostname or raw_host or 'localhost'
+        db_port = parsed.port or (int(raw_port) if raw_port else default_port)
+        db_user = unquote(parsed.username) if parsed.username else (raw_user or 'root')
+        db_pass = unquote(parsed.password) if parsed.password else (raw_pass or '')
+        db_name = parsed.path.lstrip('/') if parsed.path else (raw_name or 'bullymail_db')
+    else:
+        db_type = explicit_type
+        if not db_type:
+            if os.environ.get('MYSQL_HOST') or os.environ.get('MYSQLHOST') or os.environ.get('MYSQL_DATABASE'):
+                db_type = 'mysql'
+            elif raw_host and raw_host.strip().lower() not in ('localhost', '127.0.0.1', ''):
+                db_type = 'mysql'
+            else:
+                db_type = 'sqlite'
+
+        db_host = raw_host or 'localhost'
+        db_port = int(raw_port) if raw_port else 3306
+        db_user = raw_user or 'root'
+        db_pass = raw_pass or ''
+        db_name = raw_name or 'bullymail_db'
+
+    return {
+        'DB_TYPE': db_type,
+        'DB_HOST': db_host,
+        'DB_PORT': db_port if db_port else 3306,
+        'DB_USER': db_user,
+        'DB_PASSWORD': db_pass,
+        'DB_NAME': db_name,
+        'DATABASE_URL': db_url
+    }
+
+_db_cfg = _parse_database_config()
+
 class Config:
     """Base Configuration for BullyMail V2"""
     SECRET_KEY = _resolve_secret_key()
@@ -38,12 +102,13 @@ class Config:
     ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@bullymail.local')
     
     # Database Settings
-    DB_TYPE = os.environ.get('DB_TYPE', 'sqlite').lower()
-    DB_HOST = os.environ.get('DB_HOST', 'localhost')
-    DB_PORT = int(os.environ.get('DB_PORT', 3306))
-    DB_USER = os.environ.get('DB_USER', 'root')
-    DB_PASSWORD = os.environ.get('DB_PASSWORD', '')
-    DB_NAME = os.environ.get('DB_NAME', 'bullymail_db')
+    DATABASE_URL = _db_cfg['DATABASE_URL']
+    DB_TYPE = _db_cfg['DB_TYPE']
+    DB_HOST = _db_cfg['DB_HOST']
+    DB_PORT = _db_cfg['DB_PORT']
+    DB_USER = _db_cfg['DB_USER']
+    DB_PASSWORD = _db_cfg['DB_PASSWORD']
+    DB_NAME = _db_cfg['DB_NAME']
     
     # SQLite Path (Fallback or Primary)
     SQLITE_DB_PATH = os.environ.get('SQLITE_DB_PATH', str(BASE_DIR / 'bullymail.db'))
