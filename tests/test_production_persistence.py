@@ -122,3 +122,58 @@ def test_all_required_tables_exist_and_login_flow_operational(app):
             assert trend_resp.status_code == 200
             data = trend_resp.get_json()
             assert data.get('success') is True
+
+def test_postgres_schema_creation_and_migration_no_mysql_sql(monkeypatch):
+    """
+    Verifies that when DB_TYPE is 'postgres', setup_database() and apply_migrations()
+    execute PostgreSQL-compatible SQL exclusively without any MySQL-specific syntax
+    (e.g., AUTO_INCREMENT, INSERT IGNORE, SHOW COLUMNS, ENGINE=InnoDB, MODIFY COLUMN).
+    """
+    executed_sqls = []
+
+    class DummyPostgresCursor:
+        def execute(self, sql, params=None):
+            executed_sqls.append(str(sql))
+
+        def fetchall(self):
+            return []
+
+        def fetchone(self):
+            return None
+
+        def close(self):
+            pass
+
+    class DummyPostgresConn:
+        def cursor(self, *args, **kwargs):
+            return DummyPostgresCursor()
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setenv('DB_TYPE', 'postgres')
+    from bullymail.database import schema
+    monkeypatch.setattr(connection, 'get_engine_type', lambda: 'postgres')
+    monkeypatch.setattr(schema, 'get_engine_type', lambda: 'postgres')
+    monkeypatch.setattr(connection, 'get_connection', lambda: DummyPostgresConn())
+
+    # Run setup_database which also calls apply_migrations
+    schema.setup_database()
+
+    assert len(executed_sqls) > 0, "No SQL statements were executed during setup_database()"
+
+    full_sql_dump = "\n".join(executed_sqls)
+
+    # Assert no MySQL-specific keywords exist in any SQL sent to PostgreSQL
+    assert "AUTO_INCREMENT" not in full_sql_dump, "AUTO_INCREMENT was incorrectly sent to PostgreSQL!"
+    assert "INSERT IGNORE" not in full_sql_dump, "INSERT IGNORE was incorrectly sent to PostgreSQL!"
+    assert "SHOW COLUMNS" not in full_sql_dump, "SHOW COLUMNS was incorrectly sent to PostgreSQL!"
+    assert "ENGINE=InnoDB" not in full_sql_dump, "ENGINE=InnoDB was incorrectly sent to PostgreSQL!"
+    assert "DEFAULT CHARSET" not in full_sql_dump, "DEFAULT CHARSET was incorrectly sent to PostgreSQL!"
+    assert "MODIFY COLUMN" not in full_sql_dump, "MODIFY COLUMN was incorrectly sent to PostgreSQL!"

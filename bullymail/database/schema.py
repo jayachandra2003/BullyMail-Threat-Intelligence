@@ -68,9 +68,14 @@ def apply_migrations(cursor, engine):
     # -------------------------------------------------------------------------
     user_cols = _get_existing_columns(cursor, 'users', engine)
     if user_cols:
-        if engine != 'sqlite' and 'password' in user_cols:
+        if engine == 'mysql' and 'password' in user_cols:
             try:
                 cursor.execute("ALTER TABLE users MODIFY COLUMN password VARCHAR(255) NULL")
+            except Exception:
+                pass
+        elif engine == 'postgres' and 'password' in user_cols:
+            try:
+                cursor.execute("ALTER TABLE users ALTER COLUMN password TYPE VARCHAR(255), ALTER COLUMN password DROP NOT NULL")
             except Exception:
                 pass
 
@@ -157,7 +162,7 @@ def apply_migrations(cursor, engine):
             'social_eng_confidence': "FLOAT DEFAULT 0.0",
             'social_eng_techniques': 'TEXT DEFAULT "[]"',
             'attachments_count': "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0",
-            'malware_detected': "INTEGER DEFAULT 0" if engine == 'sqlite' else "TINYINT(1) DEFAULT 0",
+            'malware_detected': "INTEGER DEFAULT 0" if engine == 'sqlite' else ("INT DEFAULT 0" if engine == 'postgres' else "TINYINT(1) DEFAULT 0"),
             'malicious_attachments_count': "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0",
             'attachment_risk_level': "VARCHAR(20) DEFAULT 'LOW'",
             'attachment_findings': 'TEXT DEFAULT "[]"',
@@ -237,7 +242,7 @@ def apply_migrations(cursor, engine):
             cursor.execute(f"ALTER TABLE email_config ADD COLUMN uid_validity {col_type}")
 
         if 'mailbox_initialized' not in config_cols:
-            col_type = "INTEGER DEFAULT 0" if engine == 'sqlite' else "TINYINT(1) DEFAULT 0"
+            col_type = "INTEGER DEFAULT 0" if engine == 'sqlite' else ("INT DEFAULT 0" if engine == 'postgres' else "TINYINT(1) DEFAULT 0")
             cursor.execute(f"ALTER TABLE email_config ADD COLUMN mailbox_initialized {col_type}")
 
         # Idempotently migrate existing mailboxes that already ingested messages
@@ -292,6 +297,27 @@ def apply_migrations(cursor, engine):
                 analysis_id INTEGER NOT NULL,
                 institution_id INTEGER NOT NULL,
                 admin_id INTEGER NOT NULL,
+                admin_username VARCHAR(50) NOT NULL,
+                action VARCHAR(30) NOT NULL,
+                original_sender VARCHAR(255) NULL,
+                original_recipient VARCHAR(255) NULL,
+                warning_recipient VARCHAR(255) NULL,
+                warning_subject VARCHAR(255) NULL,
+                delivery_status VARCHAR(30) DEFAULT 'SUCCESS',
+                reason TEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (analysis_id) REFERENCES analyzed_emails (id) ON DELETE CASCADE,
+                FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE,
+                FOREIGN KEY (admin_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+    elif engine == 'postgres':
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS incident_audit_log (
+                id SERIAL PRIMARY KEY,
+                analysis_id INT NOT NULL,
+                institution_id INT NOT NULL,
+                admin_id INT NOT NULL,
                 admin_username VARCHAR(50) NOT NULL,
                 action VARCHAR(30) NOT NULL,
                 original_sender VARCHAR(255) NULL,
