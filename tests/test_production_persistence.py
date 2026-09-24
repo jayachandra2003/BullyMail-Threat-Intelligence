@@ -256,3 +256,50 @@ def test_postgres_migration_failure_transaction_recovery(monkeypatch):
 
     mock_conn.commit()
     assert mock_conn.committed is True
+
+def test_postgres_sync_lease_and_telemetry_datetime_queries(monkeypatch):
+    """
+    Verifies that when DB_TYPE is 'postgres', acquire_sync_lease, update_sync_telemetry,
+    and get_stale_recovery_query generate valid PostgreSQL datetime expressions instead of
+    datetime('now') or DATE_ADD / DATE_SUB.
+    """
+    executed_sqls = []
+
+    class DummyCursor:
+        def execute(self, sql, params=None):
+            executed_sqls.append(str(sql))
+
+        def rowcount(self):
+            return 1
+
+    monkeypatch.setattr(connection, 'get_engine_type', lambda: 'postgres')
+
+    # 1. Test acquire_sync_lease on PostgreSQL
+    from bullymail.services.email_service import EmailService
+    email_service = EmailService()
+
+    monkeypatch.setattr('bullymail.services.email_service.execute_query', lambda sql, params=None: (executed_sqls.append(str(sql)) or 1))
+    email_service.acquire_sync_lease(mailbox_id=1, institution_id=1)
+
+    assert len(executed_sqls) > 0
+    lease_sql = executed_sqls[-1]
+    assert "datetime('now'" not in lease_sql, "datetime('now') was incorrectly generated for PostgreSQL!"
+    assert "DATE_ADD" not in lease_sql, "DATE_ADD was incorrectly generated for PostgreSQL!"
+    assert "CURRENT_TIMESTAMP + INTERVAL '2 minutes'" in lease_sql
+
+    # 2. Test update_telemetry on PostgreSQL
+    from bullymail.worker.processor import MailboxProcessor
+    monkeypatch.setattr('bullymail.worker.processor.execute_query', lambda sql, params=None: (executed_sqls.append(str(sql)) or 1))
+    MailboxProcessor.update_telemetry(config_id=1, sync_status='OK', lease_id='test-lease-id')
+
+    telemetry_sql = executed_sqls[-1]
+    assert "datetime('now'" not in telemetry_sql
+    assert "DATE_ADD" not in telemetry_sql
+    assert "CURRENT_TIMESTAMP + INTERVAL '2 minutes'" in telemetry_sql
+
+    # 3. Test get_stale_recovery_query on PostgreSQL
+    from bullymail.models.ingested_message import IngestedMessageModel
+    stale_query, params = IngestedMessageModel.get_stale_recovery_query(engine_type='postgres', institution_id=1)
+    assert "DATE_SUB" not in stale_query
+    assert "datetime('now'" not in stale_query
+    assert "CURRENT_TIMESTAMP - (INTERVAL '1 minute' *" in stale_query

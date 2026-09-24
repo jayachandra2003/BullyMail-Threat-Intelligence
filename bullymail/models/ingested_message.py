@@ -138,6 +138,17 @@ class IngestedMessageModel:
                            SET processing_status = 'DISCOVERED', error_message = %s, updated_at = CURRENT_TIMESTAMP 
                            WHERE processing_status = 'PROCESSING' AND attempt_count < 3 AND updated_at < %s'''
                 params = (stale_msg, cutoff)
+        elif engine_type == 'postgres':
+            if institution_id is not None:
+                query = '''UPDATE ingested_messages
+                           SET processing_status = 'DISCOVERED', error_message = %s, updated_at = CURRENT_TIMESTAMP
+                           WHERE processing_status = 'PROCESSING' AND attempt_count < 3 AND updated_at < CURRENT_TIMESTAMP - (INTERVAL '1 minute' * %s) AND institution_id = %s'''
+                params = (stale_msg, timeout_minutes, institution_id)
+            else:
+                query = '''UPDATE ingested_messages
+                           SET processing_status = 'DISCOVERED', error_message = %s, updated_at = CURRENT_TIMESTAMP
+                           WHERE processing_status = 'PROCESSING' AND attempt_count < 3 AND updated_at < CURRENT_TIMESTAMP - (INTERVAL '1 minute' * %s)'''
+                params = (stale_msg, timeout_minutes)
         else:
             # MySQL engine query using DATE_SUB(NOW(), INTERVAL %s MINUTE)
             if institution_id is not None:

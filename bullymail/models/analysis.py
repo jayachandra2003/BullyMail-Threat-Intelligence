@@ -11,12 +11,15 @@ class AnalysisModel:
         try:
             from ..database.connection import get_engine_type
             engine = get_engine_type()
-            if engine == 'mysql':
+            if engine == 'postgres':
+                rows = fetch_all("SELECT column_name FROM information_schema.columns WHERE table_name = 'analyzed_emails'")
+                return {r['column_name'] for r in rows if isinstance(r, dict) and 'column_name' in r} if rows else set()
+            elif engine == 'mysql':
                 rows = fetch_all("DESCRIBE analyzed_emails")
-                return {r['Field'] for r in rows} if rows else set()
+                return {r['Field'] for r in rows if isinstance(r, dict) and 'Field' in r} if rows else set()
             else:
                 rows = fetch_all("PRAGMA table_info(analyzed_emails)")
-                return {r['name'] for r in rows} if rows else set()
+                return {r['name'] for r in rows if isinstance(r, dict) and 'name' in r} if rows else set()
         except Exception:
             return set()
 

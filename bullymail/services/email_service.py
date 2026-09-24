@@ -108,7 +108,12 @@ class EmailService:
         try:
             from ..database.connection import get_engine_type
             engine = get_engine_type()
-            now_sql = "NOW()" if engine == 'mysql' else "datetime('now')"
+            if engine == 'postgres':
+                now_sql = "CURRENT_TIMESTAMP"
+            elif engine == 'mysql':
+                now_sql = "NOW()"
+            else:
+                now_sql = "datetime('now')"
             execute_query(
                 f"""UPDATE email_config
                    SET sync_status = 'OK', sync_lease_id = NULL, sync_lease_expires_at = NULL
@@ -238,7 +243,15 @@ class EmailService:
         lease_id = str(uuid.uuid4())
         engine = get_engine_type()
 
-        if engine == 'mysql':
+        if engine == 'postgres':
+            sql = """UPDATE email_config
+                     SET sync_status = 'SYNCING',
+                         sync_lease_id = %s,
+                         sync_lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '2 minutes',
+                         last_synced_at = CURRENT_TIMESTAMP
+                     WHERE id = %s AND institution_id = %s
+                       AND (sync_status NOT IN ('SYNCING') OR sync_lease_expires_at < CURRENT_TIMESTAMP)"""
+        elif engine == 'mysql':
             sql = """UPDATE email_config
                      SET sync_status = 'SYNCING',
                          sync_lease_id = %s,
