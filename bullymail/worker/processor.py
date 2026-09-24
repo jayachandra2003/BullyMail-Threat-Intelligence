@@ -102,7 +102,12 @@ class MailboxProcessor:
         if lease_id:
             from ..database.connection import get_engine_type
             engine = get_engine_type()
-            lease_expire_sql = "DATE_ADD(NOW(), INTERVAL 2 MINUTE)" if engine == 'mysql' else "datetime('now', '+2 minutes')"
+            if engine == 'postgres':
+                lease_expire_sql = "CURRENT_TIMESTAMP + INTERVAL '2 minutes'"
+            elif engine == 'mysql':
+                lease_expire_sql = "DATE_ADD(NOW(), INTERVAL 2 MINUTE)"
+            else:
+                lease_expire_sql = "datetime('now', '+2 minutes')"
 
             if increment_count:
                 sql = f'''UPDATE email_config 

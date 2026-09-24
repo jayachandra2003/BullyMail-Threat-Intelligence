@@ -53,14 +53,14 @@ def test_restart_safe_idempotent_schema_initialization(app):
     with app.app_context():
         # Setup DB first time
         assert setup_database() is True
-        
+
         # Verify default institution exists
         inst = fetch_one("SELECT * FROM institutions WHERE id = 1")
         assert inst is not None
 
         # Re-run setup_database simulating service restart
         assert setup_database() is True
-        
+
         # Verify institution still exists
         inst_after = fetch_one("SELECT * FROM institutions WHERE id = 1")
         assert inst_after is not None
@@ -89,3 +89,217 @@ def test_mailbox_and_analyzed_email_persistence_contract(app):
         assert email_record is not None
         assert email_record['email_subject'] == 'Threat Test'
         assert email_record['overall_risk_level'] == 'CRITICAL'
+
+def test_all_required_tables_exist_and_login_flow_operational(app):
+    """Verifies that all 10 required database tables are created and endpoints (/login, /api/threat-trend) operate cleanly."""
+    with app.app_context():
+        setup_database()
+
+        # Verify existence of all 10 required production tables
+        required_tables = [
+            'institutions', 'users', 'email_verification_tokens', 'password_reset_tokens',
+            'analyzed_emails', 'incident_audit_log', 'model_history', 'dataset_history',
+            'email_config', 'ingested_messages'
+        ]
+
+        for table in required_tables:
+            res = fetch_one(f"SELECT COUNT(*) as cnt FROM {table}")
+            assert res is not None, f"Table '{table}' is missing or unreadable"
+
+        # Verify admin user lookup and login API endpoint
+        with app.test_client() as client:
+            resp = client.get('/login')
+            assert resp.status_code == 200
+
+            # Test threat-trend API endpoint
+            with client.session_transaction() as sess:
+                sess['user_id'] = 1
+                sess['role'] = 'admin'
+                sess['username'] = 'admin'
+                sess['institution_id'] = 1
+
+            trend_resp = client.get('/api/threat-trend')
+            assert trend_resp.status_code == 200
+            data = trend_resp.get_json()
+            assert data.get('success') is True
+
+def test_postgres_schema_creation_and_migration_no_mysql_sql(monkeypatch):
+    """
+    Verifies that when DB_TYPE is 'postgres', setup_database() and apply_migrations()
+    execute PostgreSQL-compatible SQL exclusively without any MySQL-specific syntax
+    (e.g., AUTO_INCREMENT, INSERT IGNORE, SHOW COLUMNS, ENGINE=InnoDB, MODIFY COLUMN).
+    """
+    executed_sqls = []
+
+    class DummyPostgresCursor:
+        def execute(self, sql, params=None):
+            executed_sqls.append(str(sql))
+
+        def fetchall(self):
+            return []
+
+        def fetchone(self):
+            return None
+
+        def close(self):
+            pass
+
+    class DummyPostgresConn:
+        def cursor(self, *args, **kwargs):
+            return DummyPostgresCursor()
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setenv('DB_TYPE', 'postgres')
+    from bullymail.database import schema
+    monkeypatch.setattr(connection, 'get_engine_type', lambda: 'postgres')
+    monkeypatch.setattr(schema, 'get_engine_type', lambda: 'postgres')
+    monkeypatch.setattr(connection, 'get_connection', lambda: DummyPostgresConn())
+
+    # Run setup_database which also calls apply_migrations
+    schema.setup_database()
+
+    assert len(executed_sqls) > 0, "No SQL statements were executed during setup_database()"
+
+    full_sql_dump = "\n".join(executed_sqls)
+
+    # Assert no MySQL-specific keywords exist in any SQL sent to PostgreSQL
+    assert "AUTO_INCREMENT" not in full_sql_dump, "AUTO_INCREMENT was incorrectly sent to PostgreSQL!"
+    assert "INSERT IGNORE" not in full_sql_dump, "INSERT IGNORE was incorrectly sent to PostgreSQL!"
+    assert "SHOW COLUMNS" not in full_sql_dump, "SHOW COLUMNS was incorrectly sent to PostgreSQL!"
+    assert "ENGINE=InnoDB" not in full_sql_dump, "ENGINE=InnoDB was incorrectly sent to PostgreSQL!"
+    assert "DEFAULT CHARSET" not in full_sql_dump, "DEFAULT CHARSET was incorrectly sent to PostgreSQL!"
+    assert "MODIFY COLUMN" not in full_sql_dump, "MODIFY COLUMN was incorrectly sent to PostgreSQL!"
+
+def test_postgres_migration_failure_transaction_recovery(monkeypatch):
+    """
+    Verifies that if an individual PostgreSQL migration query fails, _safe_execute uses
+    SAVEPOINT / ROLLBACK TO SAVEPOINT to protect the transaction state, allowing subsequent
+    queries and final conn.commit() to succeed without InFailedSqlTransaction.
+    """
+    executed_sqls = []
+
+    class MockPostgresTransactionCursor:
+        def __init__(self):
+            self.in_savepoint = False
+            self.aborted = False
+
+        def execute(self, sql, params=None):
+            sql_str = str(sql).strip()
+            executed_sqls.append(sql_str)
+
+            if "SAVEPOINT migration_sp" in sql_str:
+                self.in_savepoint = True
+                return
+            elif "ROLLBACK TO SAVEPOINT migration_sp" in sql_str:
+                self.in_savepoint = False
+                self.aborted = False
+                return
+            elif "RELEASE SAVEPOINT migration_sp" in sql_str:
+                self.in_savepoint = False
+                return
+
+            if self.aborted:
+                raise Exception("InFailedSqlTransaction: current transaction is aborted, commands ignored until end of transaction block")
+
+            # Simulate failure on a specific optional statement
+            if "simulated_broken_migration_query" in sql_str:
+                if not self.in_savepoint:
+                    self.aborted = True
+                raise Exception("Simulated DB exception on optional migration")
+
+        def fetchall(self):
+            return []
+
+        def fetchone(self):
+            return None
+
+        def close(self):
+            pass
+
+    class MockPostgresTransactionConn:
+        def __init__(self):
+            self.cursor_obj = MockPostgresTransactionCursor()
+            self.committed = False
+
+        def cursor(self, *args, **kwargs):
+            return self.cursor_obj
+
+        def commit(self):
+            if self.cursor_obj.aborted:
+                raise Exception("InFailedSqlTransaction: commit failed due to aborted transaction")
+            self.committed = True
+
+        def rollback(self):
+            self.cursor_obj.aborted = False
+
+        def close(self):
+            pass
+
+    from bullymail.database import schema
+    mock_conn = MockPostgresTransactionConn()
+
+    # Test _safe_execute directly
+    res_fail = schema._safe_execute(mock_conn.cursor_obj, 'postgres', "SELECT * FROM simulated_broken_migration_query")
+    assert res_fail is False
+
+    # Verify transaction was NOT aborted due to savepoint rollback
+    res_success = schema._safe_execute(mock_conn.cursor_obj, 'postgres', "SELECT 1")
+    assert res_success is True
+
+    mock_conn.commit()
+    assert mock_conn.committed is True
+
+def test_postgres_sync_lease_and_telemetry_datetime_queries(monkeypatch):
+    """
+    Verifies that when DB_TYPE is 'postgres', acquire_sync_lease, update_sync_telemetry,
+    and get_stale_recovery_query generate valid PostgreSQL datetime expressions instead of
+    datetime('now') or DATE_ADD / DATE_SUB.
+    """
+    executed_sqls = []
+
+    class DummyCursor:
+        def execute(self, sql, params=None):
+            executed_sqls.append(str(sql))
+
+        def rowcount(self):
+            return 1
+
+    monkeypatch.setattr(connection, 'get_engine_type', lambda: 'postgres')
+
+    # 1. Test acquire_sync_lease on PostgreSQL
+    from bullymail.services.email_service import EmailService
+    email_service = EmailService()
+
+    monkeypatch.setattr('bullymail.services.email_service.execute_query', lambda sql, params=None: (executed_sqls.append(str(sql)) or 1))
+    email_service.acquire_sync_lease(mailbox_id=1, institution_id=1)
+
+    assert len(executed_sqls) > 0
+    lease_sql = executed_sqls[-1]
+    assert "datetime('now'" not in lease_sql, "datetime('now') was incorrectly generated for PostgreSQL!"
+    assert "DATE_ADD" not in lease_sql, "DATE_ADD was incorrectly generated for PostgreSQL!"
+    assert "CURRENT_TIMESTAMP + INTERVAL '2 minutes'" in lease_sql
+
+    # 2. Test update_telemetry on PostgreSQL
+    from bullymail.worker.processor import MailboxProcessor
+    monkeypatch.setattr('bullymail.worker.processor.execute_query', lambda sql, params=None: (executed_sqls.append(str(sql)) or 1))
+    MailboxProcessor.update_telemetry(config_id=1, sync_status='OK', lease_id='test-lease-id')
+
+    telemetry_sql = executed_sqls[-1]
+    assert "datetime('now'" not in telemetry_sql
+    assert "DATE_ADD" not in telemetry_sql
+    assert "CURRENT_TIMESTAMP + INTERVAL '2 minutes'" in telemetry_sql
+
+    # 3. Test get_stale_recovery_query on PostgreSQL
+    from bullymail.models.ingested_message import IngestedMessageModel
+    stale_query, params = IngestedMessageModel.get_stale_recovery_query(engine_type='postgres', institution_id=1)
+    assert "DATE_SUB" not in stale_query
+    assert "datetime('now'" not in stale_query
+    assert "CURRENT_TIMESTAMP - (INTERVAL '1 minute' *" in stale_query
