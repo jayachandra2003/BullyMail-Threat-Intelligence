@@ -84,7 +84,10 @@ class CryptoService:
         fernet = cls._get_fernet()
         try:
             decrypted_bytes = fernet.decrypt(ciphertext.encode('utf-8'))
-            return decrypted_bytes.decode('utf-8')
+            decrypted_str = decrypted_bytes.decode('utf-8').strip()
+            if (decrypted_str.startswith('"') and decrypted_str.endswith('"')) or (decrypted_str.startswith("'") and decrypted_str.endswith("'")):
+                decrypted_str = decrypted_str[1:-1].strip()
+            return decrypted_str
         except (InvalidToken, Exception) as err:
             raise ValueError(f"Decryption failed: Invalid master key or corrupted ciphertext. ({type(err).__name__})")
 

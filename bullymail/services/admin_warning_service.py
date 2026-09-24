@@ -34,59 +34,72 @@ class AdminWarningService:
     @classmethod
     def get_smtp_config(cls, institution_id: int = None) -> dict:
         """
-        Resolves active SMTP configuration from Config, environment, or active database mailbox.
+        Resolves active SMTP configuration from active database mailbox first, then Config/environment fallback.
         Never returns or logs sensitive passwords outside internal smtplib usage.
         """
-        host = getattr(Config, 'SMTP_HOST', 'smtp.gmail.com')
-        port = getattr(Config, 'SMTP_PORT', 587)
-        username = getattr(Config, 'SMTP_USERNAME', '')
-        password = getattr(Config, 'SMTP_PASSWORD', '')
-        use_tls = getattr(Config, 'SMTP_USE_TLS', True)
-        from_email = getattr(Config, 'SMTP_FROM_EMAIL', username or '')
-        from_name = getattr(Config, 'SMTP_FROM_NAME', 'BullyMail Administration')
+        username = ""
+        password = ""
+        host = "smtp.gmail.com"
+        port = 587
+        use_tls = True
+        from_email = ""
+        from_name = "BullyMail Administration"
+        credential_source = "environment_fallback"
+
+        # 1. Query active connected institutional mailbox from database FIRST
+        inst_id = institution_id
+        if inst_id is None:
+            try:
+                from flask import session, g
+                inst_id = (getattr(g, 'current_user', {}) or {}).get('institution_id') or session.get('institution_id') or 1
+            except Exception:
+                inst_id = 1
 
         try:
-            from flask import current_app
-            if current_app and current_app.config:
-                host = current_app.config.get('SMTP_HOST') or current_app.config.get('EMAIL_SMTP_SERVER') or host
-                port = int(current_app.config.get('SMTP_PORT') or current_app.config.get('EMAIL_SMTP_PORT') or port)
-                username = current_app.config.get('SMTP_USERNAME') or current_app.config.get('EMAIL_ADDRESS') or username
-                password = current_app.config.get('SMTP_PASSWORD') or current_app.config.get('EMAIL_APP_PASSWORD') or password
-                use_tls = current_app.config.get('SMTP_USE_TLS', use_tls)
-                from_email = current_app.config.get('SMTP_FROM_EMAIL') or username or from_email
-                from_name = current_app.config.get('SMTP_FROM_NAME') or from_name
-        except Exception:
-            pass
+            from .email_service import EmailService
+            email_svc = EmailService()
+            mb_addr, mb_pw, mb_smtp, mb_port, _ = email_svc._get_credentials(institution_id=inst_id)
+            if mb_addr and mb_pw:
+                username = mb_addr
+                password = mb_pw
+                host = mb_smtp or 'smtp.gmail.com'
+                port = int(mb_port or 587)
+                from_email = mb_addr
+                credential_source = "connected_mailbox"
+        except Exception as e:
+            logger.debug(f"Active mailbox SMTP resolution notice: {e}")
 
-        # Fallback to configured active mailbox in database if dedicated SMTP credentials are not explicitly set
+        # 2. Fallback to Config / environment variables only if active mailbox credentials were not found in database
         if not (username and password):
+            host = getattr(Config, 'SMTP_HOST', 'smtp.gmail.com')
+            port = getattr(Config, 'SMTP_PORT', 587)
+            username = getattr(Config, 'SMTP_USERNAME', '')
+            password = getattr(Config, 'SMTP_PASSWORD', '')
+            use_tls = getattr(Config, 'SMTP_USE_TLS', True)
+            from_email = getattr(Config, 'SMTP_FROM_EMAIL', username or '')
+            from_name = getattr(Config, 'SMTP_FROM_NAME', 'BullyMail Administration')
+
             try:
-                from .email_service import EmailService
-                email_service = EmailService()
-                inst_id = institution_id
-                if inst_id is None:
-                    try:
-                        from flask import session, g
-                        inst_id = (getattr(g, 'current_user', {}) or {}).get('institution_id') or session.get('institution_id') or 1
-                    except Exception:
-                        inst_id = 1
-                mailboxes = email_service.get_mailboxes_for_institution(inst_id)
-                active_mb = next((m for m in mailboxes if m.get('status') == 'active'), None)
-                if not active_mb and mailboxes:
-                    active_mb = mailboxes[0]
-                if active_mb:
-                    mb_addr, mb_pw, mb_smtp, mb_port, _ = email_service._get_credentials(
-                        institution_id=active_mb.get('institution_id'),
-                        mailbox_id=active_mb.get('id')
-                    )
-                    if mb_addr and mb_pw:
-                        username = mb_addr
-                        password = mb_pw
-                        host = mb_smtp or 'smtp.gmail.com'
-                        port = int(mb_port or 587)
-                        from_email = mb_addr
-            except Exception as e:
-                logger.debug(f"Active mailbox SMTP resolution fallback notice: {e}")
+                from flask import current_app
+                if current_app and current_app.config:
+                    host = current_app.config.get('SMTP_HOST') or current_app.config.get('EMAIL_SMTP_SERVER') or host
+                    port = int(current_app.config.get('SMTP_PORT') or current_app.config.get('EMAIL_SMTP_PORT') or port)
+                    username = current_app.config.get('SMTP_USERNAME') or current_app.config.get('EMAIL_ADDRESS') or username
+                    raw_pw = current_app.config.get('SMTP_PASSWORD') or current_app.config.get('EMAIL_APP_PASSWORD') or password
+                    if raw_pw:
+                        try:
+                            from .crypto_service import CryptoService
+                            if CryptoService.is_encrypted(raw_pw):
+                                password = CryptoService.decrypt(raw_pw)
+                            else:
+                                password = raw_pw
+                        except Exception:
+                            password = raw_pw
+                    use_tls = current_app.config.get('SMTP_USE_TLS', use_tls)
+                    from_email = current_app.config.get('SMTP_FROM_EMAIL') or username or from_email
+                    from_name = current_app.config.get('SMTP_FROM_NAME') or from_name
+            except Exception:
+                pass
 
         if not from_email or '@bullymail.local' in from_email or '@' not in from_email:
             from_email = username or 'admin@bullymail.local'
@@ -98,7 +111,8 @@ class AdminWarningService:
             'password': (password or '').strip(),
             'use_tls': bool(use_tls),
             'from_email': (from_email or '').strip(),
-            'from_name': (from_name or '').strip()
+            'from_name': (from_name or '').strip(),
+            'credential_source': credential_source
         }
 
     @classmethod
@@ -167,13 +181,18 @@ class AdminWarningService:
 
         # Gmail SMTP requires From header to match authenticated username
         auth_user = cfg['username']
+        auth_pw = cfg['password']
         sender_email = auth_user if ('gmail.com' in cfg['host'].lower() or not cfg['from_email']) else cfg['from_email']
         sender_name = cfg['from_name'] or 'BullyMail Administration'
+        sender_matches_username = (sender_email.lower() == auth_user.lower())
 
         logger.info(
             f"[SMTP WARN] Dispatching advisory warning | Host: {cfg['host']}:{cfg['port']} | "
             f"Auth User: {auth_user[:3]}***@{auth_user.split('@')[-1] if '@' in auth_user else 'local'} | "
+            f"Source: {cfg.get('credential_source', 'unknown')} | Credential Present: {bool(auth_pw)} | "
+            f"Credential Length: {len(auth_pw)} | WhiteSpace: {any(c.isspace() for c in auth_pw)} | "
             f"From: {sender_email[:3]}***@{sender_email.split('@')[-1] if '@' in sender_email else 'local'} | "
+            f"SenderMatchesUsername: {sender_matches_username} | "
             f"To: {clean_recipient[:3]}***@{clean_recipient.split('@')[-1] if '@' in clean_recipient else 'local'}"
         )
 
@@ -225,8 +244,8 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helv
                 if cfg['use_tls']:
                     server.starttls(context=context)
 
-            if auth_user and cfg['password']:
-                server.login(auth_user, cfg['password'])
+            if auth_user and auth_pw:
+                server.login(auth_user, auth_pw)
 
             refused = server.sendmail(sender_email, [clean_recipient], msg.as_string())
             server.quit()
@@ -242,7 +261,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helv
 
         except smtplib.SMTPAuthenticationError as e:
             logger.error(f"[SMTP WARN] SMTP Authentication Failed for user {auth_user[:3]}***: {e.smtp_code} {e.smtp_error}")
-            return False, f"SMTP Authentication Failed (Code {e.smtp_code}): Check your Gmail App Password or SMTP credentials."
+            return False, "Gmail SMTP authentication failed. Verify the connected mailbox App Password/credentials."
 
         except smtplib.SMTPRecipientsRefused as e:
             logger.error(f"[SMTP WARN] Recipient email refused by server: {e}")

@@ -1,4 +1,4 @@
-﻿import json
+import json
 import pytest
 from bullymail.models.analysis import AnalysisModel
 from bullymail.models.user import UserModel
@@ -188,7 +188,7 @@ def test_03_admin_sends_warning_to_original_sender(client, test_setup_incidents,
     aid = test_setup_incidents['analysis_id_1']
     sent_emails = []
 
-    def mock_send(recipient_email, subject=None, body=None):
+    def mock_send(recipient_email, subject=None, body=None, **kwargs):
         sent_emails.append({
             'recipient': recipient_email,
             'subject': subject,
@@ -348,3 +348,117 @@ def test_09_credentials_never_exposed_in_any_warning_endpoint(client, test_setup
     assert 'EMAIL_APP_PASSWORD' not in resp_str
     assert 'password_hash' not in resp_str
     assert 'encrypted_app_password' not in resp_str
+
+def test_10_smtp_config_prioritizes_active_db_mailbox_over_env_vars(app, monkeypatch):
+    """TEST 10: get_smtp_config prioritizes active DB mailbox decrypted credentials over environment variables."""
+    from bullymail.services.crypto_service import CryptoService
+    from bullymail.services.email_service import EmailService
+
+    with app.app_context():
+        # Set stale environment variables
+        monkeypatch.setattr('bullymail.config.Config.SMTP_USERNAME', 'stale_env_user@domain.com')
+        monkeypatch.setattr('bullymail.config.Config.SMTP_PASSWORD', 'stale_env_pass_123')
+
+        # Configure an active mailbox in DB for institution 1
+        email_svc = EmailService()
+        email_svc.configure_mailbox(
+            institution_id=1,
+            email_address="active_db_mailbox@gmail.com",
+            app_password="decrypted_db_app_pass_456"
+        )
+
+        cfg = admin_warning_service.get_smtp_config(institution_id=1)
+        assert cfg['username'] == "active_db_mailbox@gmail.com"
+        assert cfg['password'] == "decrypted_db_app_pass_456"
+        assert cfg['credential_source'] == "connected_mailbox"
+        assert cfg['from_email'] == "active_db_mailbox@gmail.com"
+
+def test_11_crypto_service_decrypt_strips_quotes_and_whitespace():
+    """TEST 11: CryptoService.decrypt strips leading/trailing whitespace and surrounding quotes."""
+    from bullymail.services.crypto_service import CryptoService
+
+    token_quoted = CryptoService.encrypt('"  my_secret_app_pass  "')
+    decrypted = CryptoService.decrypt(token_quoted)
+    assert decrypted == "my_secret_app_pass"
+
+    token_single_quoted = CryptoService.encrypt("'  another_secret_pass  '")
+    decrypted_single = CryptoService.decrypt(token_single_quoted)
+    assert decrypted_single == "another_secret_pass"
+
+def test_12_smtp_authentication_error_handling_and_message(monkeypatch):
+    """TEST 12: send_warning_email catches SMTPAuthenticationError and returns truthful error message."""
+    import smtplib
+
+    def mock_login(*args, **kwargs):
+        raise smtplib.SMTPAuthenticationError(535, b'5.7.8 Username and Password not accepted')
+
+    monkeypatch.setattr('smtplib.SMTP.login', mock_login)
+    monkeypatch.setattr('smtplib.SMTP.starttls', lambda *args, **kwargs: None)
+    monkeypatch.setattr('smtplib.SMTP.connect', lambda *args, **kwargs: (220, b'Ready'))
+
+    from bullymail.services.admin_warning_service import AdminWarningService
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda institution_id=None: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'admin_test@gmail.com',
+        'password': 'test_app_password',
+        'use_tls': True,
+        'from_email': 'admin_test@gmail.com',
+        'from_name': 'BullyMail Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = admin_warning_service.send_warning_email(
+        recipient_email="target_user@domain.com",
+        subject="Test Warning",
+        body="Test Body",
+        institution_id=1
+    )
+
+    assert ok is False
+    assert "Gmail SMTP authentication failed. Verify the connected mailbox App Password/credentials." in msg
+
+def test_13_gmail_sender_matches_authenticated_username(monkeypatch):
+    """TEST 13: For Gmail host, From header / envelope sender matches authenticated username strictly."""
+    import smtplib
+
+    sent_data = {}
+
+    class MockSMTP:
+        def __init__(self, host, port, timeout=15):
+            pass
+        def starttls(self, context=None):
+            pass
+        def login(self, user, password):
+            sent_data['logged_in_user'] = user
+        def sendmail(self, from_addr, to_addrs, msg_str):
+            sent_data['from_addr'] = from_addr
+            sent_data['to_addrs'] = to_addrs
+            sent_data['msg_str'] = msg_str
+            return {}
+        def quit(self):
+            pass
+
+    monkeypatch.setattr('smtplib.SMTP', MockSMTP)
+    from bullymail.services.admin_warning_service import AdminWarningService
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda institution_id=None: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'authenticated_gmail_user@gmail.com',
+        'password': 'valid_app_password',
+        'use_tls': True,
+        'from_email': 'unmatched_sender@bullymail.local',
+        'from_name': 'BullyMail Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = admin_warning_service.send_warning_email(
+        recipient_email="target_user@domain.com",
+        subject="Test Warning",
+        body="Test Body",
+        institution_id=1
+    )
+
+    assert ok is True
+    assert sent_data['logged_in_user'] == 'authenticated_gmail_user@gmail.com'
+    assert sent_data['from_addr'] == 'authenticated_gmail_user@gmail.com'
