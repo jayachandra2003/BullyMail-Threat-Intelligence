@@ -116,11 +116,14 @@ def signup():
                         else:
                             email_sent, email_message = bool(email_result), ""
 
+                        import logging
+                        auth_logger = logging.getLogger("bullymail.auth")
+                        masked_email = clean_email[:3] + "***@" + clean_email.split('@')[-1] if '@' in clean_email else "***"
+                        auth_logger.info(f"[REGISTRATION EMAIL] Re-attempting verification dispatch for existing pending user recipient={masked_email}")
+
                         if not email_sent:
-                            import logging
-                            masked_email = clean_email[:3] + "***@" + clean_email.split('@')[-1] if '@' in clean_email else "***"
-                            logging.getLogger("bullymail.auth").error(
-                                f"Verification email resend failed for {masked_email}: {email_message}"
+                            auth_logger.error(
+                                f"[REGISTRATION EMAIL] [FINAL_RESULT] FAILED for {masked_email}: {email_message}"
                             )
                             auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
                             fail_msg = "Your account was created, but we could not send the verification email. Please try again."
@@ -128,13 +131,14 @@ def signup():
                                 return jsonify({'success': False, 'error': fail_msg, 'status': 'PENDING_EMAIL_VERIFICATION'}), 500
                             return render_template('signup.html', error=fail_msg), 500
 
+                        auth_logger.info(f"[REGISTRATION EMAIL] [FINAL_RESULT] SUCCESS: re-sent to {masked_email}")
                         auth_rate_limiter.record_success(client_ip, clean_email, action='signup')
                         if request.is_json:
                             return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_VERIFICATION'})
                         return render_template('signup.html', success=success_msg)
                     except Exception as ex:
                         import logging
-                        logging.getLogger("bullymail.auth").error(f"Error during verification resend: {ex}")
+                        logging.getLogger("bullymail.auth").error(f"[REGISTRATION EMAIL] Error during verification resend: {ex}")
 
             # Simulate work to prevent timing enumeration for fully active or admin-pending accounts
             UserModel.hash_password(password)
@@ -157,6 +161,11 @@ def signup():
 
             # Generate single-use verification token
             raw_token = AuthTokenService.generate_email_verification_token(user_id)
+            import logging
+            auth_logger = logging.getLogger("bullymail.auth")
+            masked_email = clean_email[:3] + "***@" + clean_email.split('@')[-1] if '@' in clean_email else "***"
+            auth_logger.info(f"[REGISTRATION EMAIL] New account created (user_id={user_id}). Dispatching verification email to recipient={masked_email}")
+
             email_result = auth_email_service.send_verification_email(clean_email, raw_token, username)
             if isinstance(email_result, tuple):
                 email_sent, email_message = email_result
@@ -164,11 +173,8 @@ def signup():
                 email_sent, email_message = bool(email_result), ""
 
             if not email_sent:
-                # Log email failure server-side (safe error without leaking credentials to client)
-                import logging
-                masked_email = clean_email[:3] + "***@" + clean_email.split('@')[-1] if '@' in clean_email else "***"
-                logging.getLogger("bullymail.auth").error(
-                    f"Verification email delivery failed for {masked_email}: {email_message}"
+                auth_logger.error(
+                    f"[REGISTRATION EMAIL] [FINAL_RESULT] FAILED for {masked_email}: {email_message}"
                 )
                 auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
                 fail_msg = "Your account was created, but we could not send the verification email. Please try again."
@@ -176,6 +182,7 @@ def signup():
                     return jsonify({'success': False, 'error': fail_msg, 'status': 'PENDING_EMAIL_VERIFICATION'}), 500
                 return render_template('signup.html', error=fail_msg), 500
 
+            auth_logger.info(f"[REGISTRATION EMAIL] [FINAL_RESULT] SUCCESS for {masked_email}")
             auth_rate_limiter.record_success(client_ip, clean_email, action='signup')
 
             if request.is_json:
@@ -313,17 +320,27 @@ def resend_verification():
         return render_template('login.html', error=err_msg), 429
 
     user = UserModel.get_by_email(clean_email)
+    import logging
+    auth_logger = logging.getLogger("bullymail.auth")
+    masked_email = clean_email[:3] + "***@" + clean_email.split('@')[-1] if '@' in clean_email else "***"
+
     if user and user.get('status') == 'PENDING_EMAIL_VERIFICATION':
         try:
+            auth_logger.info(f"[REGISTRATION EMAIL] Resend verification requested for recipient={masked_email}")
             raw_token = AuthTokenService.generate_email_verification_token(user['id'])
-            auth_email_service.send_verification_email(clean_email, raw_token, user.get('username') or 'User')
-            auth_rate_limiter.record_success(client_ip, clean_email, action='resend_verification')
+            is_sent, status_msg = auth_email_service.send_verification_email(clean_email, raw_token, user.get('username') or 'User')
+            if is_sent:
+                auth_logger.info(f"[REGISTRATION EMAIL] [FINAL_RESULT] SUCCESS: verification re-sent to {masked_email}")
+                auth_rate_limiter.record_success(client_ip, clean_email, action='resend_verification')
+            else:
+                auth_logger.error(f"[REGISTRATION EMAIL] [FINAL_RESULT] FAILED: verification resend failed for {masked_email}: {status_msg}")
+                auth_rate_limiter.record_failure(client_ip, clean_email, action='resend_verification')
         except Exception as e:
-            import logging
-            logging.getLogger("bullymail.auth").error(f"Resend verification error: {e}")
+            auth_logger.error(f"[REGISTRATION EMAIL] Resend verification exception for {masked_email}: {e}")
             auth_rate_limiter.record_failure(client_ip, clean_email, action='resend_verification')
     else:
         # Simulate work to prevent timing enumeration
+        auth_logger.info(f"[REGISTRATION EMAIL] Resend verification requested for non-pending or unrecognised recipient={masked_email} (anti-enumeration simulated)")
         UserModel.hash_password("dummy_password_for_timing")
         auth_rate_limiter.record_failure(client_ip, clean_email, action='resend_verification')
 

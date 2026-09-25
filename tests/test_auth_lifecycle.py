@@ -497,3 +497,163 @@ def test_email_service_send_email_port_fallback(monkeypatch):
     success, msg = svc.send_email(to_email='recipient@example.com', subject='Test', body='Fallback test')
     assert success is True
     assert attempts == [('smtp_587', 587), ('smtp_ssl_465', 465)]
+
+
+def test_email_service_db_decryption_failure_fallback_to_env(monkeypatch):
+    """Verify that when database mailbox password decryption fails, EmailService falls back to environment configuration."""
+    from bullymail.services.email_service import EmailService
+    from bullymail.services.crypto_service import CryptoService
+
+    svc = EmailService()
+
+    # Simulate database returning a row with corrupt/incompatible ciphertext
+    dummy_row = {
+        'email_address': 'alexa169691@gmail.com',
+        'encrypted_password': 'corrupt_encrypted_payload',
+        'smtp_server': 'smtp.gmail.com',
+        'smtp_port': 587,
+        'imap_server': 'imap.gmail.com'
+    }
+    monkeypatch.setattr('bullymail.services.email_service.fetch_one', lambda query, params=(): dummy_row)
+    monkeypatch.setattr(CryptoService, 'decrypt', lambda val: (_ for _ in ()).throw(ValueError("Invalid master key")))
+
+    # Set environment / Config fallback
+    monkeypatch.setattr(Config, 'SMTP_USERNAME', 'env_fallback@gmail.com')
+    monkeypatch.setattr(Config, 'SMTP_PASSWORD', 'super_secret_env_pw')
+    monkeypatch.setattr(Config, 'SMTP_HOST', 'smtp.gmail.com')
+    monkeypatch.setattr(Config, 'SMTP_PORT', 587)
+
+    email_addr, app_pw, smtp_host, smtp_p, imap_host = svc._get_credentials()
+    assert email_addr == 'env_fallback@gmail.com'
+    assert app_pw == 'super_secret_env_pw'
+    assert smtp_host == 'smtp.gmail.com'
+    assert smtp_p == 587
+
+
+def test_email_service_send_email_auth_failure_no_secret_leak(monkeypatch):
+    """Verify SMTPAuthenticationError is safely handled without leaking passwords."""
+    from bullymail.services.email_service import EmailService
+    import smtplib
+
+    svc = EmailService()
+    secret_pw = "super_confidential_app_password"
+    monkeypatch.setattr(svc, '_get_credentials', lambda **kw: ('test@gmail.com', secret_pw, 'smtp.gmail.com', 587, 'imap.gmail.com'))
+
+    class FailingAuthSMTP:
+        def __init__(self, host, port, timeout=None):
+            pass
+        def starttls(self, context=None):
+            pass
+        def login(self, user, pw):
+            raise smtplib.SMTPAuthenticationError(535, b'5.7.8 Username and Password not accepted')
+
+    monkeypatch.setattr(smtplib, 'SMTP', FailingAuthSMTP)
+
+    success, msg = svc.send_email(to_email='target@example.com', subject='Test', body='Body')
+    assert success is False
+    assert "SMTP authentication failed" in msg
+    assert secret_pw not in msg
+
+
+def test_email_service_send_email_recipient_refusal(monkeypatch):
+    """Verify SMTPRecipientsRefused returns a clear failure and does not leak secrets."""
+    from bullymail.services.email_service import EmailService
+    import smtplib
+
+    svc = EmailService()
+    monkeypatch.setattr(svc, '_get_credentials', lambda **kw: ('test@gmail.com', 'mypassword', 'smtp.gmail.com', 587, 'imap.gmail.com'))
+
+    class RefusingSMTP:
+        def __init__(self, host, port, timeout=None):
+            pass
+        def starttls(self, context=None):
+            pass
+        def login(self, user, pw):
+            pass
+        def sendmail(self, from_addr, to_addrs, msg_str):
+            raise smtplib.SMTPRecipientsRefused({'target@example.com': (550, b'5.1.1 User unknown')})
+        def quit(self):
+            pass
+
+    monkeypatch.setattr(smtplib, 'SMTP', RefusingSMTP)
+
+    success, msg = svc.send_email(to_email='target@example.com', subject='Test', body='Body')
+    assert success is False
+    assert "refused" in msg.lower()
+
+
+def test_email_service_structured_logging(monkeypatch, caplog):
+    """Verify [REGISTRATION EMAIL] structured logging stages and credential masking."""
+    import logging
+    from bullymail.services.email_service import EmailService
+    import smtplib
+
+    svc = EmailService()
+    secret_pw = "my_top_secret_app_pw"
+    monkeypatch.setattr(svc, '_get_credentials', lambda **kw: ('operator@gmail.com', secret_pw, 'smtp.gmail.com', 587, 'imap.gmail.com'))
+
+    class WorkingSMTP:
+        def __init__(self, host, port, timeout=None):
+            pass
+        def starttls(self, context=None):
+            pass
+        def login(self, user, pw):
+            pass
+        def sendmail(self, from_addr, to_addrs, msg_str):
+            return {}
+        def quit(self):
+            pass
+
+    monkeypatch.setattr(smtplib, 'SMTP', WorkingSMTP)
+
+    with caplog.at_level(logging.INFO):
+        success, msg = svc.send_email(
+            to_email='recipient_target@example.com',
+            subject='Registration Test',
+            body='Body',
+            log_prefix='[REGISTRATION EMAIL]'
+        )
+
+    assert success is True
+    log_text = caplog.text
+
+    # Verify structured stages
+    assert "[REGISTRATION EMAIL] [CONFIG]" in log_text
+    assert "[REGISTRATION EMAIL] [CONNECTION_STAGE]" in log_text
+    assert "[REGISTRATION EMAIL] [TLS_STAGE]" in log_text
+    assert "[REGISTRATION EMAIL] [AUTH_STAGE]" in log_text
+    assert "[REGISTRATION EMAIL] [SEND_STAGE]" in log_text
+    assert "[REGISTRATION EMAIL] [FINAL_RESULT] SUCCESS" in log_text
+
+    # Verify masking
+    assert "rec***@example.com" in log_text
+    assert "ope***@gmail.com" in log_text
+
+    # Verify zero secrets leaked
+    assert secret_pw not in log_text
+
+
+def test_signup_preserves_account_when_email_fails(client, monkeypatch):
+    """Verify that when registration email delivery fails, the account record is safely preserved in DB."""
+    from bullymail.services.auth_email_service import auth_email_service
+
+    monkeypatch.setattr(auth_email_service, 'send_verification_email', lambda to, tok, uname: (False, "Could not connect to SMTP server"))
+
+    unique_email = f"failed_email_{secrets.token_hex(4)}@bullymail.local"
+    res = client.post('/signup', json={
+        'username': f"user_{secrets.token_hex(4)}",
+        'email': unique_email,
+        'password': 'Secure_Password_2026!',
+        'confirm_password': 'Secure_Password_2026!'
+    })
+
+    assert res.status_code == 500
+    data = res.get_json()
+    assert data['success'] is False
+    assert "Your account was created, but we could not send the verification email" in data['error']
+    assert data['status'] == 'PENDING_EMAIL_VERIFICATION'
+
+    # Verify the user actually exists in the database
+    user = UserModel.get_by_email(unique_email)
+    assert user is not None
+    assert user['status'] == 'PENDING_EMAIL_VERIFICATION'
