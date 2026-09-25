@@ -398,12 +398,22 @@ def send_admin_warning(current_user, analysis_id):
     body_to_send = (custom_body or preview['warning_body']).strip()
 
     # Dispatch outbound warning email via SMTP service
-    send_ok, send_msg = admin_warning_service.send_warning_email(
-        target_recipient,
-        subject_to_send,
-        body_to_send,
-        institution_id=inst_id
-    )
+    mb_id = record.get('email_config_id')
+    if mb_id is not None:
+        send_ok, send_msg = admin_warning_service.send_warning_email(
+            target_recipient,
+            subject_to_send,
+            body_to_send,
+            institution_id=inst_id,
+            mailbox_id=mb_id
+        )
+    else:
+        send_ok, send_msg = admin_warning_service.send_warning_email(
+            target_recipient,
+            subject_to_send,
+            body_to_send,
+            institution_id=inst_id
+        )
 
     if not send_ok:
         # Failed transmission: do NOT mark incident as WARNING_SENT

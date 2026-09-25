@@ -59,11 +59,21 @@ class EmailService:
                     "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE id = %s AND institution_id = %s",
                     (mailbox_id, inst_id)
                 )
+                if not row:
+                    row = fetch_one(
+                        "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE id = %s",
+                        (mailbox_id,)
+                    )
             else:
                 row = fetch_one(
-                    "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE institution_id = %s AND status = 'active' ORDER BY id DESC LIMIT 1",
+                    "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE institution_id = %s AND (LOWER(status) = 'active' OR status IS NULL) ORDER BY id DESC LIMIT 1",
                     (inst_id,)
                 )
+                if not row:
+                    row = fetch_one(
+                        "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE institution_id = %s ORDER BY id DESC LIMIT 1",
+                        (inst_id,)
+                    )
             if row and row.get('email_address') and row.get('encrypted_app_password'):
                 email_addr = row['email_address']
                 enc_pw = row['encrypted_app_password']

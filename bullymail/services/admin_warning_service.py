@@ -32,7 +32,7 @@ class AdminWarningService:
     )
 
     @classmethod
-    def get_smtp_config(cls, institution_id: int = None) -> dict:
+    def get_smtp_config(cls, institution_id: int = None, mailbox_id: int = None) -> dict:
         """
         Resolves active SMTP configuration from active database mailbox first, then Config/environment fallback.
         Never returns or logs sensitive passwords outside internal smtplib usage.
@@ -58,7 +58,7 @@ class AdminWarningService:
         try:
             from .email_service import EmailService
             email_svc = EmailService()
-            mb_addr, mb_pw, mb_smtp, mb_port, _ = email_svc._get_credentials(institution_id=inst_id)
+            mb_addr, mb_pw, mb_smtp, mb_port, _ = email_svc._get_credentials(institution_id=inst_id, mailbox_id=mailbox_id)
             if mb_addr and mb_pw:
                 username = mb_addr
                 password = mb_pw
@@ -116,9 +116,9 @@ class AdminWarningService:
         }
 
     @classmethod
-    def is_smtp_configured(cls, institution_id: int = None) -> bool:
+    def is_smtp_configured(cls, institution_id: int = None, mailbox_id: int = None) -> bool:
         """Checks if minimum SMTP credentials and host are configured."""
-        cfg = cls.get_smtp_config(institution_id=institution_id)
+        cfg = cls.get_smtp_config(institution_id=institution_id, mailbox_id=mailbox_id)
         return bool(cfg['host'] and (cfg['username'] or cfg['from_email']) and cfg['password'])
 
     @classmethod
@@ -138,7 +138,8 @@ class AdminWarningService:
         Constructs warning preview data for administrative review and confirmation modal.
         """
         inst_id = analysis_record.get('institution_id')
-        cfg = cls.get_smtp_config(institution_id=inst_id)
+        mb_id = analysis_record.get('email_config_id')
+        cfg = cls.get_smtp_config(institution_id=inst_id, mailbox_id=mb_id)
         raw_from = analysis_record.get('email_from', '')
         target_recipient = cls.extract_clean_email(raw_from)
 
@@ -155,12 +156,12 @@ class AdminWarningService:
             'warning_from_name': cfg['from_name'],
             'warning_subject': cls.DEFAULT_WARNING_SUBJECT,
             'warning_body': cls.DEFAULT_WARNING_TEMPLATE,
-            'is_smtp_configured': cls.is_smtp_configured(institution_id=inst_id),
+            'is_smtp_configured': cls.is_smtp_configured(institution_id=inst_id, mailbox_id=mb_id),
             'incident_status': analysis_record.get('incident_status', 'PENDING_REVIEW')
         }
 
     @classmethod
-    def send_warning_email(cls, recipient_email: str, subject: str = None, body: str = None, institution_id: int = None) -> tuple[bool, str]:
+    def send_warning_email(cls, recipient_email: str, subject: str = None, body: str = None, institution_id: int = None, mailbox_id: int = None) -> tuple[bool, str]:
         """
         Transmits warning email to the original sender over secure TLS.
         Returns:
@@ -171,7 +172,10 @@ class AdminWarningService:
             logger.warning(f"[SMTP WARN] Warning email send rejected: Invalid recipient email address '{recipient_email}'")
             return False, "Invalid recipient email address for warning dispatch."
 
-        cfg = cls.get_smtp_config(institution_id=institution_id)
+        if mailbox_id is not None:
+            cfg = cls.get_smtp_config(institution_id=institution_id, mailbox_id=mailbox_id)
+        else:
+            cfg = cls.get_smtp_config(institution_id=institution_id)
         if not cfg['host'] or not cfg['password'] or not (cfg['username'] or cfg['from_email']):
             logger.error("[SMTP WARN] Warning email send failed: SMTP server credentials are not configured in environment or active mailbox.")
             return False, "SMTP server credentials are not configured. Please configure SMTP_HOST, SMTP_USERNAME, and SMTP_PASSWORD or connect an active institutional mailbox."
