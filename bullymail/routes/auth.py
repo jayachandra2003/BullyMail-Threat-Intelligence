@@ -163,6 +163,12 @@ def signup():
                 requested_institution_domain=requested_inst_domain or None
             )
 
+            # Ensure user_id was retrieved
+            if not user_id:
+                existing = UserModel.get_by_email(clean_email) or UserModel.get_by_username(username)
+                if existing:
+                    user_id = existing.get('id')
+
             # Generate single-use verification token
             raw_token = AuthTokenService.generate_email_verification_token(user_id)
             verify_url = auth_email_service.get_verification_url(raw_token)
@@ -196,7 +202,9 @@ def signup():
             if request.is_json:
                 return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_VERIFICATION'})
             return render_template('signup.html', success=success_msg)
-        except Exception:
+        except Exception as ex:
+            import logging
+            logging.getLogger("bullymail.auth").error(f"[SIGNUP ERROR] Account creation exception for {clean_email}: {ex}", exc_info=True)
             auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
             err_msg = "An error occurred during account creation. Please try again."
             if request.is_json:

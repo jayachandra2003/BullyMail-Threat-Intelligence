@@ -185,6 +185,40 @@ def execute_query(query, params=None):
             if query.strip().upper().startswith(('UPDATE', 'DELETE')):
                 return cursor.rowcount
             return cursor.lastrowid
+        elif engine == 'postgres':
+            cursor = _get_cursor(conn, engine)
+            stripped = query.strip()
+            if stripped.upper().startswith(('UPDATE', 'DELETE')):
+                cursor.execute(query, params or ())
+                count = cursor.rowcount
+                cursor.close()
+                return count
+            elif stripped.upper().startswith('INSERT'):
+                if 'RETURNING' not in stripped.upper():
+                    try:
+                        cursor.execute(f"{stripped} RETURNING id", params or ())
+                        row = cursor.fetchone()
+                        cursor.close()
+                        if row:
+                            return row.get('id') if isinstance(row, dict) else row[0]
+                        return None
+                    except Exception:
+                        conn.rollback()
+                        cursor = _get_cursor(conn, engine)
+                        cursor.execute(query, params or ())
+                        cursor.close()
+                        return None
+                else:
+                    cursor.execute(query, params or ())
+                    row = cursor.fetchone()
+                    cursor.close()
+                    if row:
+                        return row.get('id') if isinstance(row, dict) else row[0]
+                    return None
+            else:
+                cursor.execute(query, params or ())
+                cursor.close()
+                return None
         else:
             cursor = _get_cursor(conn, engine)
             cursor.execute(query, params or ())
