@@ -204,6 +204,7 @@ class UserModel:
                 raise ValueError(msg)
 
         hashed = cls.hash_password(password)
+        user_id = None
         try:
             user_id = execute_query(
                 "INSERT INTO users "
@@ -212,12 +213,34 @@ class UserModel:
                 (username, hashed, hashed, role, clean_email, status, institution_id, requested_institution_name, requested_institution_domain)
             )
         except Exception:
-            user_id = execute_query(
-                "INSERT INTO users "
-                "(username, password_hash, role, email, status, institution_id, requested_institution_name, requested_institution_domain) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                (username, hashed, role, clean_email, status, institution_id, requested_institution_name, requested_institution_domain)
-            )
+            try:
+                user_id = execute_query(
+                    "INSERT INTO users "
+                    "(username, password_hash, role, email, status, institution_id, requested_institution_name, requested_institution_domain) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                    (username, hashed, role, clean_email, status, institution_id, requested_institution_name, requested_institution_domain)
+                )
+            except Exception:
+                try:
+                    user_id = execute_query(
+                        "INSERT INTO users "
+                        "(username, password, password_hash, role, email, status, institution_id) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                        (username, hashed, hashed, role, clean_email, status, institution_id)
+                    )
+                except Exception:
+                    user_id = execute_query(
+                        "INSERT INTO users "
+                        "(username, password_hash, role, email, status, institution_id) "
+                        "VALUES (%s, %s, %s, %s, %s, %s)",
+                        (username, hashed, role, clean_email, status, institution_id)
+                    )
+
+        if not user_id:
+            fetched = cls.get_by_email(clean_email) if clean_email else cls.get_by_username(username)
+            if fetched and fetched.get('id'):
+                user_id = fetched['id']
+
         return user_id
 
     @classmethod

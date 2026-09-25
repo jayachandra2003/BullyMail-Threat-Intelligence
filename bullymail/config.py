@@ -142,6 +142,11 @@ class Config:
     SMTP_FROM_EMAIL = os.environ.get('SMTP_FROM_EMAIL', SMTP_USERNAME or EMAIL_ADDRESS or 'admin@bullymail.local')
     SMTP_FROM_NAME = os.environ.get('SMTP_FROM_NAME', 'BullyMail Administration')
 
+    # HTTP Transactional Email API (Alternative for cloud environments blocking outbound SMTP e.g. Render Free Tier)
+    RESEND_API_KEY = os.environ.get('RESEND_API_KEY', None)
+    RESEND_FROM_EMAIL = os.environ.get('RESEND_FROM_EMAIL', None)
+
+
     # Master Key for Fernet Credential Encryption (AES-128-CBC + HMAC-SHA256)
     BULLYMAIL_MASTER_KEY = os.environ.get('BULLYMAIL_MASTER_KEY', None)
 

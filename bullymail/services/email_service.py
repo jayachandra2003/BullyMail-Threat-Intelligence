@@ -1,16 +1,22 @@
 import os
 import ssl
 import email
+import socket
+import html
+import logging
 import imaplib
 import smtplib
 import datetime
 from email.header import decode_header
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.utils import parseaddr, formatdate, make_msgid
 from ..config import Config
 from ..database.connection import execute_query, fetch_one, fetch_all
 
 from .crypto_service import CryptoService
+
+logger = logging.getLogger("bullymail.email_service")
 
 class EmailService:
     """Secure IMAP / SMTP Email Integration Service (Tenant Scoped & Fernet Encrypted)"""
@@ -48,23 +54,24 @@ class EmailService:
 
         return self._get_credentials(institution_id=institution_id)
 
-    def _get_credentials(self, institution_id=1, mailbox_id=None):
+    def _get_credentials(self, institution_id=None, mailbox_id=None):
         """Resolves active email credentials dynamically from database for target institution or Config."""
-        inst_id = institution_id if institution_id is not None else 1
+        inst_id = institution_id
 
         # Check database first for institution-scoped configuration
         try:
             if mailbox_id is not None:
-                row = fetch_one(
-                    "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE id = %s AND institution_id = %s",
-                    (mailbox_id, inst_id)
-                )
-                if not row:
+                if inst_id is not None:
+                    row = fetch_one(
+                        "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE id = %s AND institution_id = %s",
+                        (mailbox_id, inst_id)
+                    )
+                else:
                     row = fetch_one(
                         "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE id = %s",
                         (mailbox_id,)
                     )
-            else:
+            elif inst_id is not None:
                 row = fetch_one(
                     "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE institution_id = %s AND (LOWER(status) = 'active' OR status IS NULL) ORDER BY id DESC LIMIT 1",
                     (inst_id,)
@@ -74,6 +81,21 @@ class EmailService:
                         "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE institution_id = %s ORDER BY id DESC LIMIT 1",
                         (inst_id,)
                     )
+            else:
+                # System-wide resolution (e.g. Auth emails, unassigned registration verification):
+                # Try institution 1 first, then any active connected mailbox in the database
+                row = fetch_one(
+                    "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE institution_id = 1 AND (LOWER(status) = 'active' OR status IS NULL) ORDER BY id DESC LIMIT 1"
+                )
+                if not row:
+                    row = fetch_one(
+                        "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config WHERE (LOWER(status) = 'active' OR status IS NULL) ORDER BY id DESC LIMIT 1"
+                    )
+                if not row:
+                    row = fetch_one(
+                        "SELECT email_address, encrypted_app_password, imap_server, smtp_server, smtp_port FROM email_config ORDER BY id DESC LIMIT 1"
+                    )
+
             if row and row.get('email_address') and row.get('encrypted_app_password'):
                 email_addr = row['email_address']
                 enc_pw = row['encrypted_app_password']
@@ -81,39 +103,51 @@ class EmailService:
                     dec_pw = CryptoService.decrypt(enc_pw)
                 except Exception:
                     dec_pw = ""
-                imap_host = row.get('imap_server') or self.imap_server
-                smtp_host = row.get('smtp_server') or self.smtp_server
-                smtp_p = row.get('smtp_port') or self.smtp_port
-                return email_addr.strip(), dec_pw.strip(), smtp_host, int(smtp_p), imap_host
+                if dec_pw:
+                    imap_host = row.get('imap_server') or self.imap_server
+                    smtp_host = row.get('smtp_server') or self.smtp_server
+                    smtp_p = row.get('smtp_port') or self.smtp_port
+                    return email_addr.strip(), dec_pw.strip(), smtp_host, int(smtp_p), imap_host
+                else:
+                    logger.warning("[SMTP_CREDENTIALS] Database mailbox password decryption failed; proceeding to environment fallback.")
         except Exception:
             pass
 
         # Fallback to in-memory / Flask current_app config / Config
-        email_addr = self._email
-        app_pw = self._password
-        smtp_host = self.smtp_server
-        smtp_p = self.smtp_port
-        imap_host = self.imap_server
+        email_addr = getattr(Config, 'SMTP_USERNAME', '') or getattr(Config, 'EMAIL_ADDRESS', '') or self._email
+        app_pw = getattr(Config, 'SMTP_PASSWORD', '') or getattr(Config, 'EMAIL_APP_PASSWORD', '') or self._password
+        smtp_host = getattr(Config, 'SMTP_HOST', '') or getattr(Config, 'EMAIL_SMTP_SERVER', '') or self.smtp_server
+        smtp_p = getattr(Config, 'SMTP_PORT', '') or getattr(Config, 'EMAIL_SMTP_PORT', '') or self.smtp_port
+        imap_host = getattr(Config, 'EMAIL_IMAP_SERVER', '') or self.imap_server
 
         try:
             from flask import current_app
             if current_app and current_app.config:
-                email_addr = current_app.config.get('EMAIL_ADDRESS') or email_addr or getattr(Config, 'EMAIL_ADDRESS', '')
-                raw_pw = current_app.config.get('EMAIL_APP_PASSWORD') or app_pw or getattr(Config, 'EMAIL_APP_PASSWORD', '')
-                if CryptoService.is_encrypted(raw_pw):
-                    try:
-                        app_pw = CryptoService.decrypt(raw_pw)
-                    except Exception:
+                email_addr = (
+                    current_app.config.get('SMTP_USERNAME')
+                    or current_app.config.get('EMAIL_ADDRESS')
+                    or email_addr
+                )
+                raw_pw = (
+                    current_app.config.get('SMTP_PASSWORD')
+                    or current_app.config.get('EMAIL_APP_PASSWORD')
+                    or app_pw
+                )
+                if raw_pw:
+                    if CryptoService.is_encrypted(raw_pw):
+                        try:
+                            app_pw = CryptoService.decrypt(raw_pw)
+                        except Exception:
+                            app_pw = raw_pw
+                    else:
                         app_pw = raw_pw
-                else:
-                    app_pw = raw_pw
-                smtp_host = current_app.config.get('EMAIL_SMTP_SERVER') or smtp_host
-                smtp_p = current_app.config.get('EMAIL_SMTP_PORT') or smtp_p
+                smtp_host = current_app.config.get('SMTP_HOST') or current_app.config.get('EMAIL_SMTP_SERVER') or smtp_host
+                smtp_p = current_app.config.get('SMTP_PORT') or current_app.config.get('EMAIL_SMTP_PORT') or smtp_p
                 imap_host = current_app.config.get('EMAIL_IMAP_SERVER') or imap_host
         except Exception:
             pass
 
-        return (email_addr or '').strip(), (app_pw or '').strip(), smtp_host, int(smtp_p), imap_host
+        return (email_addr or '').strip(), (app_pw or '').strip(), smtp_host, int(smtp_p or 587), imap_host
 
     def get_mailboxes_for_institution(self, institution_id):
         """Returns all email configurations assigned strictly to institution_id."""
@@ -498,27 +532,207 @@ class EmailService:
             'images': images
         }
 
-    def send_email(self, to_email, subject, body):
-        """Sends an alert or notification email over TLS."""
-        email_addr, app_pw, smtp_host, smtp_p, _ = self._get_credentials()
+    def send_email(self, to_email, subject, body, html_body=None, institution_id=None, mailbox_id=None, timeout=10, log_prefix="[REGISTRATION EMAIL]"):
+        """
+        Sends an alert or notification email over secure TLS/SSL with bounded timeout and automatic fallback.
+        Supports both port 587 (STARTTLS) and port 465 (SSL).
+        Complies strictly with RFC 5322 (Date, Message-ID, MIME-Version, From headers).
+        """
+        import time
+
+        clean_to = to_email.strip() if isinstance(to_email, str) else ''
+        if not clean_to or '@' not in clean_to:
+            logger.warning(f"{log_prefix} [CONFIG] Invalid recipient address rejected: '{to_email}'")
+            return False, f"Invalid recipient email address: '{to_email}'"
+
+        email_addr, app_pw, smtp_host, smtp_p, _ = self._get_credentials(institution_id=institution_id, mailbox_id=mailbox_id)
+        from_email = None
+        from_name = "BullyMail Security"
+
+        # Fallback to AdminWarningService SMTP configuration if credentials remain empty
         if not email_addr or not app_pw:
+            try:
+                from .admin_warning_service import AdminWarningService
+                cfg = AdminWarningService.get_smtp_config(institution_id=institution_id, mailbox_id=mailbox_id)
+                if cfg.get('username') and cfg.get('password'):
+                    email_addr = cfg['username']
+                    app_pw = cfg['password']
+                    smtp_host = cfg.get('host') or smtp_host
+                    smtp_p = int(cfg.get('port') or smtp_p or 587)
+                    from_email = cfg.get('from_email')
+                    from_name = cfg.get('from_name') or from_name
+            except Exception:
+                pass
+
+        # Check if HTTP-based transactional email API is configured (e.g. Resend for Render Free Tier)
+        resend_key = os.environ.get('RESEND_API_KEY') or getattr(Config, 'RESEND_API_KEY', None)
+        if resend_key and resend_key.strip():
+            try:
+                import urllib.request
+                import json
+                logger.info(f"{log_prefix} [HTTP_API] Dispatching via Resend API (HTTPS port 443)")
+                from_addr = from_email or os.environ.get('RESEND_FROM_EMAIL') or getattr(Config, 'RESEND_FROM_EMAIL', None) or 'BullyMail Security <onboarding@resend.dev>'
+                payload = {
+                    'from': from_addr,
+                    'to': [clean_to],
+                    'subject': subject,
+                    'html': html_body or (body or '').replace('\n', '<br>'),
+                    'text': body or ''
+                }
+                req = urllib.request.Request(
+                    'https://api.resend.com/emails',
+                    data=json.dumps(payload).encode('utf-8'),
+                    headers={
+                        'Authorization': f'Bearer {resend_key.strip()}',
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'BullyMail-Security/2.0'
+                    }
+                )
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    if resp.status in (200, 201):
+                        masked_recip = f"{clean_to[:3]}***@{clean_to.split('@')[-1]}" if ('@' in clean_to and len(clean_to) > 3) else '***'
+                        logger.info(f"{log_prefix} [FINAL_RESULT] SUCCESS: email delivered via Resend API to {masked_recip}")
+                        return True, "Email sent successfully via Resend API."
+            except Exception as ex:
+                logger.error(f"{log_prefix} [HTTP_API] FAILED via Resend API: {ex}")
+                # Continue to SMTP fallback
+
+        if not email_addr or not app_pw:
+            logger.error(f"{log_prefix} [CONFIG] FAILED: Email integration is not configured in database or environment.")
             return False, "Email integration is not configured."
-        try:
-            msg = MIMEMultipart()
-            msg['From'] = email_addr
-            msg['To'] = to_email
-            msg['Subject'] = subject
-            msg.attach(MIMEText(body, 'plain'))
-            
-            context = ssl.create_default_context()
-            server = smtplib.SMTP(smtp_host, smtp_p)
-            server.starttls(context=context)
-            server.login(email_addr, app_pw)
-            server.sendmail(email_addr, to_email, msg.as_string())
-            server.quit()
-            return True, "Email sent successfully."
-        except Exception as e:
-            return False, f"Failed to send email: {str(e)}"
+
+        # Align sender_email with authenticated username for Gmail SMTP
+        auth_user = email_addr
+        auth_pw = app_pw
+        sender_email = auth_user if ('gmail.com' in (smtp_host or '').lower() or not from_email) else from_email
+
+        masked_user = f"{auth_user[:3]}***@{auth_user.split('@')[-1]}" if ('@' in auth_user and len(auth_user) > 3) else '***'
+        masked_to = f"{clean_to[:3]}***@{clean_to.split('@')[-1]}" if ('@' in clean_to and len(clean_to) > 3) else '***'
+
+        # Construct RFC 5322 compliant multipart message
+        msg = MIMEMultipart('alternative')
+        msg['From'] = f"{from_name} <{sender_email}>"
+        msg['To'] = clean_to
+        msg['Subject'] = subject
+        msg['Date'] = email.utils.formatdate(localtime=True)
+        domain_part = sender_email.split('@')[-1] if '@' in sender_email else 'gmail.com'
+        msg['Message-ID'] = email.utils.make_msgid(domain=domain_part)
+        msg['MIME-Version'] = '1.0'
+
+        text_part = MIMEText(body or '', 'plain', 'utf-8')
+        msg.attach(text_part)
+
+        if html_body:
+            html_part = MIMEText(html_body, 'html', 'utf-8')
+            msg.attach(html_part)
+        else:
+            # Generate clean HTML wrapper from plain text
+            escaped_body = html.escape(body or '').replace('\n', '<br>')
+            simple_html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1e293b; margin: 0; padding: 20px; background-color: #f8fafc;">
+<div style="max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 28px;">
+<div style="font-size: 16px; font-weight: 600; color: #0f172a; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin-bottom: 20px;">BullyMail Security Platform</div>
+<div style="font-size: 14px; color: #334155; line-height: 1.6;">{escaped_body}</div>
+<div style="margin-top: 28px; padding-top: 14px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b;">BullyMail Threat Intelligence Platform • Automated Security Governance</div>
+</div>
+</body>
+</html>"""
+            html_part = MIMEText(simple_html, 'html', 'utf-8')
+            msg.attach(html_part)
+
+        primary_port = int(smtp_p or 587)
+        logger.info(f"{log_prefix} [CONFIG] recipient={masked_to} sender={masked_user} host={smtp_host} port={primary_port}")
+
+        # Port fallback strategy: if configured port fails, attempt alternative TLS/SSL port
+        ports_to_try = [primary_port]
+        fallback_port = 465 if primary_port == 587 else (587 if primary_port == 465 else None)
+        if fallback_port and fallback_port not in ports_to_try:
+            ports_to_try.append(fallback_port)
+
+        last_error = None
+        for port in ports_to_try:
+            try:
+                context = ssl.create_default_context()
+                server = None
+                mode_str = 'SSL' if port == 465 else 'STARTTLS'
+
+                # Stage 1: Connection Stage
+                t_conn = time.time()
+                logger.info(f"{log_prefix} [CONNECTION_STAGE] host={smtp_host} port={port} mode={mode_str} timeout={timeout}s")
+                if port == 465:
+                    server = smtplib.SMTP_SSL(smtp_host, port, timeout=timeout, context=context)
+                else:
+                    server = smtplib.SMTP(smtp_host, port, timeout=timeout)
+                conn_ms = round((time.time() - t_conn) * 1000, 2)
+                logger.info(f"{log_prefix} [CONNECTION_STAGE] connected successfully host={smtp_host} port={port} elapsed={conn_ms}ms")
+
+                # Stage 2: TLS Stage
+                t_tls = time.time()
+                logger.info(f"{log_prefix} [TLS_STAGE] initiating handshake on port {port} mode={mode_str}")
+                if port != 465:
+                    server.starttls(context=context)
+                tls_ms = round((time.time() - t_tls) * 1000, 2)
+                logger.info(f"{log_prefix} [TLS_STAGE] TLS established successfully elapsed={tls_ms}ms")
+
+                # Stage 3: Authentication Stage
+                t_auth = time.time()
+                logger.info(f"{log_prefix} [AUTH_STAGE] authenticating sender={masked_user} host={smtp_host}:{port}")
+                server.login(auth_user, auth_pw)
+                auth_ms = round((time.time() - t_auth) * 1000, 2)
+                logger.info(f"{log_prefix} [AUTH_STAGE] authentication successful elapsed={auth_ms}ms")
+
+                # Stage 4: Send Stage
+                t_send = time.time()
+                logger.info(f"{log_prefix} [SEND_STAGE] transmitting email to recipient={masked_to}")
+                refused = server.sendmail(sender_email, [clean_to], msg.as_string())
+                send_ms = round((time.time() - t_send) * 1000, 2)
+
+                try:
+                    server.quit()
+                except Exception:
+                    pass
+
+                if refused and clean_to in refused:
+                    err_code, err_msg_bytes = refused[clean_to]
+                    err_str = err_msg_bytes.decode('utf-8', errors='ignore') if isinstance(err_msg_bytes, bytes) else str(err_msg_bytes)
+                    logger.error(f"{log_prefix} [SEND_STAGE] REFUSED for recipient={masked_to} on port {port}: Code {err_code} - {err_str}")
+                    logger.error(f"{log_prefix} [FINAL_RESULT] FAILED: recipient refused by mail server")
+                    return False, f"Recipient refused by mail server (Code {err_code}): {err_str}"
+
+                logger.info(f"{log_prefix} [SEND_STAGE] sendmail accepted elapsed={send_ms}ms")
+                logger.info(f"{log_prefix} [FINAL_RESULT] SUCCESS: verification email delivered to {masked_to} via {smtp_host}:{port}")
+                return True, "Email sent successfully."
+
+            except smtplib.SMTPAuthenticationError as e:
+                logger.error(f"{log_prefix} [AUTH_STAGE] FAILED for sender={masked_user} on port {port}: {e.smtp_code} {e.smtp_error}")
+                logger.error(f"{log_prefix} [FINAL_RESULT] FAILED: SMTP authentication rejected credentials")
+                return False, "SMTP authentication failed. Verify the mailbox credentials."
+
+            except smtplib.SMTPRecipientsRefused as e:
+                logger.error(f"{log_prefix} [SEND_STAGE] REFUSED for recipient={masked_to} on port {port}: {e}")
+                logger.error(f"{log_prefix} [FINAL_RESULT] FAILED: recipient address was refused")
+                return False, "Recipient address was refused by target mail server."
+
+            except (smtplib.SMTPConnectError, socket.error, TimeoutError, OSError) as e:
+                safe_err = str(e)
+                if auth_pw and auth_pw in safe_err:
+                    safe_err = safe_err.replace(auth_pw, '********')
+                logger.warning(f"{log_prefix} [CONNECTION_STAGE] FAILED on {smtp_host}:{port} timeout={timeout}s: {safe_err}")
+                last_error = f"Connection to {smtp_host}:{port} failed: {safe_err}"
+                continue
+
+            except Exception as e:
+                safe_err = str(e)
+                if auth_pw and auth_pw in safe_err:
+                    safe_err = safe_err.replace(auth_pw, '********')
+                logger.error(f"{log_prefix} [FINAL_RESULT] FAILED on {smtp_host}:{port}: {safe_err}")
+                last_error = f"Failed to send email: {safe_err}"
+                continue
+
+        logger.error(f"{log_prefix} [FINAL_RESULT] FAILED: all ports exhausted ({last_error})")
+        return False, last_error or "Failed to deliver email through all configured SMTP ports."
 
 # Singleton EmailService instance for application export
 email_service = EmailService()
