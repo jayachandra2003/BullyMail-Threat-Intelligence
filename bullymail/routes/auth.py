@@ -99,7 +99,44 @@ def signup():
         )
 
         if existing_user_email or existing_user_name:
-            # Simulate work to prevent timing enumeration
+            # Check if this email already exists and is in PENDING_EMAIL_VERIFICATION status.
+            # If so, the user is re-registering or retrying after not receiving/verifying the initial email.
+            # Re-dispatch a fresh single-use verification token to their inbox so they can activate access.
+            if existing_user_email and existing_user_email.get('status') == 'PENDING_EMAIL_VERIFICATION':
+                # Allow re-verification if username matches or if requested username is not claimed by another user
+                if not existing_user_name or existing_user_name.get('id') == existing_user_email.get('id'):
+                    try:
+                        UserModel.set_password(existing_user_email['id'], password)
+                        raw_token = AuthTokenService.generate_email_verification_token(existing_user_email['id'])
+                        email_result = auth_email_service.send_verification_email(
+                            clean_email, raw_token, existing_user_email.get('username') or username
+                        )
+                        if isinstance(email_result, tuple):
+                            email_sent, email_message = email_result
+                        else:
+                            email_sent, email_message = bool(email_result), ""
+
+                        if not email_sent:
+                            import logging
+                            masked_email = clean_email[:3] + "***@" + clean_email.split('@')[-1] if '@' in clean_email else "***"
+                            logging.getLogger("bullymail.auth").error(
+                                f"Verification email resend failed for {masked_email}: {email_message}"
+                            )
+                            auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
+                            fail_msg = "Your account was created, but we could not send the verification email. Please try again."
+                            if request.is_json:
+                                return jsonify({'success': False, 'error': fail_msg, 'status': 'PENDING_EMAIL_VERIFICATION'}), 500
+                            return render_template('signup.html', error=fail_msg), 500
+
+                        auth_rate_limiter.record_success(client_ip, clean_email, action='signup')
+                        if request.is_json:
+                            return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_VERIFICATION'})
+                        return render_template('signup.html', success=success_msg)
+                    except Exception as ex:
+                        import logging
+                        logging.getLogger("bullymail.auth").error(f"Error during verification resend: {ex}")
+
+            # Simulate work to prevent timing enumeration for fully active or admin-pending accounts
             UserModel.hash_password(password)
             auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
             if request.is_json:
@@ -240,6 +277,59 @@ def verify_email():
     if request.is_json:
         return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_ADMIN_APPROVAL'})
     return render_template('login.html', success=success_msg)
+
+@auth_bp.route('/resend-verification', methods=['GET', 'POST'])
+def resend_verification():
+    """
+    Allows operators with unverified accounts to re-request their email verification link.
+    Maintains strict anti-enumeration uniformity.
+    """
+    if request.method == 'GET':
+        return render_template('login.html', info="Enter your email to request a new verification link.")
+
+    client_ip = _get_client_ip()
+    if request.is_json:
+        data = request.get_json() or {}
+        email = data.get('email') or ''
+    else:
+        email = request.form.get('email') or ''
+
+    clean_email = UserModel.normalize_email(email)
+    generic_msg = (
+        "If an account pending verification exists for this email address, "
+        "a new verification link has been dispatched to your inbox."
+    )
+
+    if not clean_email or '@' not in clean_email:
+        if request.is_json:
+            return jsonify({'success': False, 'error': 'A valid email address is required.'}), 400
+        return render_template('login.html', error='A valid email address is required.'), 400
+
+    is_locked, retry_after = auth_rate_limiter.is_locked(client_ip, clean_email, action='resend_verification')
+    if is_locked:
+        err_msg = "Too many verification requests. Please wait before retrying."
+        if request.is_json:
+            return jsonify({'success': False, 'error': err_msg}), 429
+        return render_template('login.html', error=err_msg), 429
+
+    user = UserModel.get_by_email(clean_email)
+    if user and user.get('status') == 'PENDING_EMAIL_VERIFICATION':
+        try:
+            raw_token = AuthTokenService.generate_email_verification_token(user['id'])
+            auth_email_service.send_verification_email(clean_email, raw_token, user.get('username') or 'User')
+            auth_rate_limiter.record_success(client_ip, clean_email, action='resend_verification')
+        except Exception as e:
+            import logging
+            logging.getLogger("bullymail.auth").error(f"Resend verification error: {e}")
+            auth_rate_limiter.record_failure(client_ip, clean_email, action='resend_verification')
+    else:
+        # Simulate work to prevent timing enumeration
+        UserModel.hash_password("dummy_password_for_timing")
+        auth_rate_limiter.record_failure(client_ip, clean_email, action='resend_verification')
+
+    if request.is_json:
+        return jsonify({'success': True, 'message': generic_msg})
+    return render_template('login.html', success=generic_msg)
 
 # =========================================================================
 # 3. LOGIN & AUTHENTICATION
