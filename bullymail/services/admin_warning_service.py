@@ -241,18 +241,58 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helv
 
             context = ssl.create_default_context()
 
-            if cfg['port'] == 465:
-                server = smtplib.SMTP_SSL(cfg['host'], cfg['port'], timeout=15, context=context)
-            else:
-                server = smtplib.SMTP(cfg['host'], cfg['port'], timeout=15)
-                if cfg['use_tls']:
-                    server.starttls(context=context)
+            primary_port = cfg['port']
+            ports_to_try = [primary_port]
+            if primary_port == 587 and 465 not in ports_to_try:
+                ports_to_try.append(465)
+            elif primary_port == 465 and 587 not in ports_to_try:
+                ports_to_try.append(587)
+
+            server = None
+            last_connect_err = None
+            successful_port = None
+
+            for attempt_port in ports_to_try:
+                try:
+                    logger.info(f"[SMTP WARN] Connecting to SMTP server {cfg['host']}:{attempt_port}...")
+                    if attempt_port == 465:
+                        server = smtplib.SMTP_SSL(cfg['host'], attempt_port, timeout=15, context=context)
+                        logger.info(f"[SMTP WARN] Connected to {cfg['host']}:{attempt_port} via SSL/TLS.")
+                    else:
+                        server = smtplib.SMTP(cfg['host'], attempt_port, timeout=15)
+                        logger.info(f"[SMTP WARN] Connected to {cfg['host']}:{attempt_port}.")
+                        if cfg['use_tls']:
+                            logger.info(f"[SMTP WARN] Initiating STARTTLS on {cfg['host']}:{attempt_port}...")
+                            server.starttls(context=context)
+                            logger.info(f"[SMTP WARN] STARTTLS completed on {cfg['host']}:{attempt_port}.")
+                    successful_port = attempt_port
+                    break
+                except (smtplib.SMTPConnectError, socket.error, TimeoutError, OSError) as e:
+                    err_msg = str(e)
+                    if auth_pw and auth_pw in err_msg:
+                        err_msg = err_msg.replace(auth_pw, '********')
+                    if cfg.get('password') and cfg['password'] in err_msg:
+                        err_msg = err_msg.replace(cfg['password'], '********')
+                    logger.warning(f"[SMTP WARN] SMTP Connection Failed to {cfg['host']}:{attempt_port}: {err_msg}")
+                    last_connect_err = err_msg
+                    server = None
+
+            if server is None:
+                logger.error(f"[SMTP WARN] Could not connect to SMTP server {cfg['host']} on ports {ports_to_try}: {last_connect_err}")
+                return False, f"Could not connect to SMTP server ({cfg['host']}:{primary_port}). Network or firewall error."
 
             if auth_user and auth_pw:
+                logger.info(f"[SMTP WARN] Authenticating user {auth_user[:3]}***@{auth_user.split('@')[-1] if '@' in auth_user else 'local'} on {cfg['host']}:{successful_port}...")
                 server.login(auth_user, auth_pw)
+                logger.info(f"[SMTP WARN] SMTP authentication successful on {cfg['host']}:{successful_port}.")
 
+            logger.info(f"[SMTP WARN] Transmitting warning message via sendmail on {cfg['host']}:{successful_port}...")
             refused = server.sendmail(sender_email, [clean_recipient], msg.as_string())
-            server.quit()
+
+            try:
+                server.quit()
+            except Exception:
+                pass
 
             if refused and clean_recipient in refused:
                 err_code, err_msg_bytes = refused[clean_recipient]
@@ -271,20 +311,20 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helv
             logger.error(f"[SMTP WARN] Recipient email refused by server: {e}")
             return False, "Recipient address was refused by target mail server."
 
-        except (smtplib.SMTPConnectError, socket.error, TimeoutError) as e:
-            logger.error(f"[SMTP WARN] SMTP Connection Failed to {cfg['host']}:{cfg['port']}: {e}")
-            return False, f"Could not connect to SMTP server ({cfg['host']}:{cfg['port']}). Network or firewall error."
-
         except smtplib.SMTPException as e:
             err_str = str(e)
-            if cfg['password'] and cfg['password'] in err_str:
+            if auth_pw and auth_pw in err_str:
+                err_str = err_str.replace(auth_pw, '********')
+            if cfg.get('password') and cfg['password'] in err_str:
                 err_str = err_str.replace(cfg['password'], '********')
             logger.error(f"[SMTP WARN] SMTP Protocol Exception: {err_str}")
             return False, f"SMTP Protocol Error: {err_str}"
 
         except Exception as e:
             err_str = str(e)
-            if cfg['password'] and cfg['password'] in err_str:
+            if auth_pw and auth_pw in err_str:
+                err_str = err_str.replace(auth_pw, '********')
+            if cfg.get('password') and cfg['password'] in err_str:
                 err_str = err_str.replace(cfg['password'], '********')
             logger.error(f"[SMTP WARN] Unexpected Exception during warning email dispatch: {err_str}")
             return False, f"Failed to dispatch warning email: {err_str}"
