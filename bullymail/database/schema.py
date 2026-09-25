@@ -1107,15 +1107,37 @@ def setup_database():
             print(" Set ADMIN_PASSWORD in .env to specify a permanent custom password.")
             print("==================================================================")
 
+    # Ensure default primary institution exists for single-tenant / default admin setup
+    try:
+        default_inst = fetch_one("SELECT id FROM institutions ORDER BY id ASC LIMIT 1")
+        if not default_inst:
+            execute_query(
+                "INSERT INTO institutions (name, domain, status) VALUES (%s, %s, %s)",
+                ('BullyMail Primary Institution', 'bullymail.local', 'ACTIVE')
+            )
+            default_inst = fetch_one("SELECT id FROM institutions ORDER BY id ASC LIMIT 1")
+        default_inst_id = default_inst['id'] if (default_inst and isinstance(default_inst, dict) and 'id' in default_inst) else 1
+    except Exception:
+        default_inst_id = 1
+
     from ..models.user import UserModel
     admin_user = fetch_one("SELECT * FROM users WHERE role = 'admin' LIMIT 1")
     if not admin_user:
         hashed_pw = UserModel.hash_password(admin_password)
         execute_query(
-            "INSERT INTO users (username, password_hash, role, email, status) VALUES (%s, %s, %s, %s, %s)",
-            (admin_username, hashed_pw, 'admin', admin_email, 'ACTIVE')
+            "INSERT INTO users (username, password_hash, role, email, status, institution_id) VALUES (%s, %s, %s, %s, %s, %s)",
+            (admin_username, hashed_pw, 'admin', admin_email, 'ACTIVE', default_inst_id)
         )
     else:
+        # Auto-heal any admin user records where institution_id is NULL or 0
+        try:
+            execute_query(
+                "UPDATE users SET institution_id = %s WHERE role = 'admin' AND (institution_id IS NULL OR institution_id = 0)",
+                (default_inst_id,)
+            )
+        except Exception:
+            pass
+
         # Admin user exists: synchronize credentials if environment parameters differ
         sql_parts = []
         update_params = []

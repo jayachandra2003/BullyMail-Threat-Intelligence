@@ -527,4 +527,38 @@ def test_institution_scoped_mailbox_update_endpoint(client, setup_tenants):
     assert data['success'] is True
     assert data['mailbox']['email_address'] == 'inst_route_updated@alpha.com'
 
+def test_admin_user_without_institution_id_fallback_or_controlled_error(client, setup_tenants):
+    """TEST: Admin user session with institution_id=None falls back cleanly without crashing with 400 error."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = 100
+        sess['username'] = 'admin_alpha'
+        sess['role'] = 'admin'
+        sess['institution_id'] = None
 
+    alpha_mb_id = setup_tenants['mb_alpha_id']
+    # When institution_id is None, it defaults to 10 or 1, allowing safe processing or clean 404/200 instead of 400 'not assigned to institution'
+    res = client.put(f'/api/admin/mailboxes/{alpha_mb_id}', json={'email_address': 'updated_fallback@alpha.com'})
+    assert res.status_code in (200, 404)
+    assert res.get_json().get('error') != 'Authenticated user is not assigned to an institution.'
+
+def test_admin_auto_heal_institution_id_in_schema(app):
+    """TEST: Database schema setup auto-heals admin user records with NULL institution_id."""
+    from bullymail.database.connection import execute_query, fetch_one
+    from bullymail.database.schema import setup_database
+
+    with app.app_context():
+        # Create an admin user with institution_id = NULL
+        execute_query("DELETE FROM users WHERE username = 'test_unassigned_admin'")
+        execute_query(
+            "INSERT INTO users (username, password_hash, role, email, status, institution_id) VALUES (%s, %s, %s, %s, %s, NULL)",
+            ('test_unassigned_admin', 'hash', 'admin', 'unassigned@admin.test', 'ACTIVE')
+        )
+
+        # Run setup_database auto-healing
+        setup_database()
+
+        # Verify institution_id is no longer NULL
+        user = fetch_one("SELECT institution_id FROM users WHERE username = 'test_unassigned_admin'")
+        assert user is not None
+        assert user['institution_id'] is not None
+        assert user['institution_id'] >= 1
