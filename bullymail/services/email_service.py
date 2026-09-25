@@ -564,6 +564,39 @@ class EmailService:
             except Exception:
                 pass
 
+        # Check if HTTP-based transactional email API is configured (e.g. Resend for Render Free Tier)
+        resend_key = os.environ.get('RESEND_API_KEY') or getattr(Config, 'RESEND_API_KEY', None)
+        if resend_key and resend_key.strip():
+            try:
+                import urllib.request
+                import json
+                logger.info(f"{log_prefix} [HTTP_API] Dispatching via Resend API (HTTPS port 443)")
+                from_addr = from_email or os.environ.get('RESEND_FROM_EMAIL') or getattr(Config, 'RESEND_FROM_EMAIL', None) or 'BullyMail Security <onboarding@resend.dev>'
+                payload = {
+                    'from': from_addr,
+                    'to': [clean_to],
+                    'subject': subject,
+                    'html': html_body or (body or '').replace('\n', '<br>'),
+                    'text': body or ''
+                }
+                req = urllib.request.Request(
+                    'https://api.resend.com/emails',
+                    data=json.dumps(payload).encode('utf-8'),
+                    headers={
+                        'Authorization': f'Bearer {resend_key.strip()}',
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'BullyMail-Security/2.0'
+                    }
+                )
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    if resp.status in (200, 201):
+                        masked_recip = f"{clean_to[:3]}***@{clean_to.split('@')[-1]}" if ('@' in clean_to and len(clean_to) > 3) else '***'
+                        logger.info(f"{log_prefix} [FINAL_RESULT] SUCCESS: email delivered via Resend API to {masked_recip}")
+                        return True, "Email sent successfully via Resend API."
+            except Exception as ex:
+                logger.error(f"{log_prefix} [HTTP_API] FAILED via Resend API: {ex}")
+                # Continue to SMTP fallback
+
         if not email_addr or not app_pw:
             logger.error(f"{log_prefix} [CONFIG] FAILED: Email integration is not configured in database or environment.")
             return False, "Email integration is not configured."

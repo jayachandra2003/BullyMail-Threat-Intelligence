@@ -108,6 +108,7 @@ def signup():
                     try:
                         UserModel.set_password(existing_user_email['id'], password)
                         raw_token = AuthTokenService.generate_email_verification_token(existing_user_email['id'])
+                        verify_url = auth_email_service.get_verification_url(raw_token)
                         email_result = auth_email_service.send_verification_email(
                             clean_email, raw_token, existing_user_email.get('username') or username
                         )
@@ -125,11 +126,14 @@ def signup():
                             auth_logger.error(
                                 f"[REGISTRATION EMAIL] [FINAL_RESULT] FAILED for {masked_email}: {email_message}"
                             )
+                            auth_logger.info(
+                                f"[REGISTRATION EMAIL] [ACTIVATION_LINK] User {masked_email} activation URL: {verify_url}"
+                            )
                             auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
                             fail_msg = "Your account was created, but we could not send the verification email. Please try again."
                             if request.is_json:
-                                return jsonify({'success': False, 'error': fail_msg, 'status': 'PENDING_EMAIL_VERIFICATION'}), 500
-                            return render_template('signup.html', error=fail_msg), 500
+                                return jsonify({'success': False, 'error': fail_msg, 'status': 'PENDING_EMAIL_VERIFICATION', 'verification_url': verify_url}), 500
+                            return render_template('signup.html', error=fail_msg, verification_link=verify_url), 500
 
                         auth_logger.info(f"[REGISTRATION EMAIL] [FINAL_RESULT] SUCCESS: re-sent to {masked_email}")
                         auth_rate_limiter.record_success(client_ip, clean_email, action='signup')
@@ -161,6 +165,7 @@ def signup():
 
             # Generate single-use verification token
             raw_token = AuthTokenService.generate_email_verification_token(user_id)
+            verify_url = auth_email_service.get_verification_url(raw_token)
             import logging
             auth_logger = logging.getLogger("bullymail.auth")
             masked_email = clean_email[:3] + "***@" + clean_email.split('@')[-1] if '@' in clean_email else "***"
@@ -176,11 +181,14 @@ def signup():
                 auth_logger.error(
                     f"[REGISTRATION EMAIL] [FINAL_RESULT] FAILED for {masked_email}: {email_message}"
                 )
+                auth_logger.info(
+                    f"[REGISTRATION EMAIL] [ACTIVATION_LINK] User {masked_email} activation URL: {verify_url}"
+                )
                 auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
                 fail_msg = "Your account was created, but we could not send the verification email. Please try again."
                 if request.is_json:
-                    return jsonify({'success': False, 'error': fail_msg, 'status': 'PENDING_EMAIL_VERIFICATION'}), 500
-                return render_template('signup.html', error=fail_msg), 500
+                    return jsonify({'success': False, 'error': fail_msg, 'status': 'PENDING_EMAIL_VERIFICATION', 'verification_url': verify_url}), 500
+                return render_template('signup.html', error=fail_msg, verification_link=verify_url), 500
 
             auth_logger.info(f"[REGISTRATION EMAIL] [FINAL_RESULT] SUCCESS for {masked_email}")
             auth_rate_limiter.record_success(client_ip, clean_email, action='signup')
@@ -328,12 +336,14 @@ def resend_verification():
         try:
             auth_logger.info(f"[REGISTRATION EMAIL] Resend verification requested for recipient={masked_email}")
             raw_token = AuthTokenService.generate_email_verification_token(user['id'])
+            verify_url = auth_email_service.get_verification_url(raw_token)
             is_sent, status_msg = auth_email_service.send_verification_email(clean_email, raw_token, user.get('username') or 'User')
             if is_sent:
                 auth_logger.info(f"[REGISTRATION EMAIL] [FINAL_RESULT] SUCCESS: verification re-sent to {masked_email}")
                 auth_rate_limiter.record_success(client_ip, clean_email, action='resend_verification')
             else:
                 auth_logger.error(f"[REGISTRATION EMAIL] [FINAL_RESULT] FAILED: verification resend failed for {masked_email}: {status_msg}")
+                auth_logger.info(f"[REGISTRATION EMAIL] [ACTIVATION_LINK] User {masked_email} activation URL: {verify_url}")
                 auth_rate_limiter.record_failure(client_ip, clean_email, action='resend_verification')
         except Exception as e:
             auth_logger.error(f"[REGISTRATION EMAIL] Resend verification exception for {masked_email}: {e}")

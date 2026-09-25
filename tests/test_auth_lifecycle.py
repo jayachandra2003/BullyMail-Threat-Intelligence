@@ -657,3 +657,90 @@ def test_signup_preserves_account_when_email_fails(client, monkeypatch):
     user = UserModel.get_by_email(unique_email)
     assert user is not None
     assert user['status'] == 'PENDING_EMAIL_VERIFICATION'
+
+
+def test_signup_provides_direct_activation_link_when_email_fails(client, monkeypatch):
+    """Verify that when registration email delivery fails, the UI and API provide direct activation URL."""
+    from bullymail.services.auth_email_service import auth_email_service
+
+    monkeypatch.setattr(auth_email_service, 'send_verification_email', lambda to, tok, uname: (False, "Network is unreachable"))
+
+    # Test HTML signup
+    uname = f"cloud_user_{secrets.token_hex(4)}"
+    email = f"{uname}@bullymail.local"
+    pw = "CloudPass_2026!Key"
+
+    html_res = client.post('/signup', data={
+        'username': uname,
+        'email': email,
+        'password': pw,
+        'confirm_password': pw
+    })
+
+    assert html_res.status_code == 500
+    html_text = html_res.get_data(as_text=True)
+    assert "Direct Account Activation" in html_text
+    assert "Verify Email & Activate Account" in html_text
+    assert "/verify-email?token=" in html_text
+
+    # Extract token and verify user can activate successfully
+    import re
+    match = re.search(r'href="([^"]+/verify-email\?token=[^"]+)"', html_text)
+    assert match is not None
+    activation_url = match.group(1)
+
+    # Convert absolute URL or path for test client
+    from urllib.parse import urlparse
+    parsed = urlparse(activation_url)
+    rel_path = parsed.path + ('?' + parsed.query if parsed.query else '')
+
+    # Follow activation URL
+    activate_res = client.get(rel_path)
+    assert activate_res.status_code == 200
+
+    # User has verified their email and progresses to admin approval / active
+    activated_user = UserModel.get_by_email(email)
+    assert activated_user is not None
+    assert activated_user['status'] in ('PENDING_ADMIN_APPROVAL', 'ACTIVE')
+
+
+def test_email_service_resend_api_dispatch(monkeypatch):
+    """Verify that when RESEND_API_KEY is configured, EmailService dispatches via HTTPS Resend API."""
+    import urllib.request
+    import json
+    from bullymail.services.email_service import EmailService
+
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_key_12345")
+    monkeypatch.setenv("RESEND_FROM_EMAIL", "BullyMail Security <onboarding@resend.dev>")
+
+    captured_req = {}
+
+    class MockResponse:
+        status = 200
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    def mock_urlopen(req, timeout=None):
+        captured_req['url'] = req.full_url
+        captured_req['headers'] = dict(req.headers)
+        captured_req['data'] = json.loads(req.data.decode('utf-8'))
+        return MockResponse()
+
+    monkeypatch.setattr(urllib.request, 'urlopen', mock_urlopen)
+
+    svc = EmailService()
+    success, msg = svc.send_email(
+        to_email="operator@target.com",
+        subject="Resend Test Subject",
+        body="Plain body",
+        html_body="<p>HTML body</p>"
+    )
+
+    assert success is True
+    assert "Resend API" in msg
+    assert captured_req['url'] == 'https://api.resend.com/emails'
+    assert 'Bearer re_test_key_12345' in captured_req['headers']['Authorization']
+    assert captured_req['data']['to'] == ['operator@target.com']
+    assert captured_req['data']['subject'] == 'Resend Test Subject'
