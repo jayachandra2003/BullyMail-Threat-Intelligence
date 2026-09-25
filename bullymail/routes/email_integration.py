@@ -108,6 +108,41 @@ def get_institution_mailboxes(current_user, inst_id):
         })
     return jsonify({'success': True, 'institution_id': target_id, 'mailboxes': sanitized})
 
+@email_bp.route('/api/institutions/<int:inst_id>/mailboxes/<int:mailbox_id>', methods=['PUT', 'PATCH'])
+@require_role('admin')
+def update_institution_mailbox_credentials(current_user, inst_id, mailbox_id):
+    target_id, err_resp = _resolve_target_institution_id(current_user, inst_id, strict_403=True)
+    if err_resp:
+        msg, code = err_resp
+        return jsonify({'success': False, 'error': msg}), code
+
+    data = request.get_json() or {}
+    email_address = data.get('email_address') or data.get('email')
+    app_password = data.get('app_password')
+    imap_server = data.get('imap_server')
+    smtp_server = data.get('smtp_server')
+    smtp_port = data.get('smtp_port')
+
+    updated_mb, msg = email_service.update_mailbox_credentials(
+        mailbox_id=mailbox_id,
+        institution_id=target_id,
+        email_address=email_address,
+        app_password=app_password,
+        imap_server=imap_server,
+        smtp_server=smtp_server,
+        smtp_port=smtp_port
+    )
+
+    if not updated_mb:
+        status_code = 404 if 'not found' in msg.lower() else 403
+        return jsonify({'success': False, 'error': msg}), status_code
+
+    return jsonify({
+        'success': True,
+        'message': msg,
+        'mailbox': updated_mb
+    })
+
 @email_bp.route('/api/mailboxes', methods=['GET'])
 @require_role('admin', 'analyst')
 def get_mailboxes(current_user):

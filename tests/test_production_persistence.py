@@ -85,7 +85,7 @@ def test_mailbox_and_analyzed_email_persistence_contract(app):
             ) VALUES (1, %s, 'Threat Test', 'attacker@external.com', 'Violent message', 'CRITICAL', 0.95, 1, 'PENDING_REVIEW')
         ''', (mb_id,))
 
-        email_record = fetch_one("SELECT * FROM analyzed_emails WHERE email_config_id = %s", (mb_id,))
+        email_record = fetch_one("SELECT * FROM analyzed_emails WHERE email_config_id = %s ORDER BY id DESC", (mb_id,))
         assert email_record is not None
         assert email_record['email_subject'] == 'Threat Test'
         assert email_record['overall_risk_level'] == 'CRITICAL'
@@ -303,3 +303,122 @@ def test_postgres_sync_lease_and_telemetry_datetime_queries(monkeypatch):
     assert "DATE_SUB" not in stale_query
     assert "datetime('now'" not in stale_query
     assert "CURRENT_TIMESTAMP - (INTERVAL '1 minute' *" in stale_query
+
+def test_dashboard_ingestion_counter_accuracy(app):
+    """
+    Verifies that dashboard counters (mailbox-level and workspace-level) accurately compute
+    total ingested emails from ingested_messages and analyzed_emails and update as new emails arrive.
+    """
+    with app.app_context():
+        from bullymail.services.email_service import EmailService
+        from bullymail.models.institution import InstitutionModel
+        from bullymail.models.analysis import AnalysisModel
+        from bullymail.database.connection import execute_query
+
+        email_service = EmailService()
+        mb = email_service.configure_mailbox(1, 'counter_test@school.edu', 'secret_pass_123')
+        mb_id = mb['id']
+
+        # Initial check: count should be 0
+        mb_fetched = email_service.get_mailbox_by_id(mb_id, 1)
+        assert mb_fetched['total_ingested_count'] == 0
+
+        stats_initial = InstitutionModel.get_stats(1)
+        initial_total_emails = stats_initial['total_emails']
+
+        # Insert 3 ingested_messages records for this mailbox
+        for i in range(1, 4):
+            execute_query("""
+                INSERT INTO ingested_messages (
+                    institution_id, email_config_id, message_id_hash, imap_uid, processing_status, attempt_count
+                ) VALUES (1, %s, %s, %s, 'PROCESSED', 1)
+            """, (mb_id, f"hash_{i}_{mb_id}", i))
+
+        # Verify mailbox level count is now 3
+        mb_updated = email_service.get_mailbox_by_id(mb_id, 1)
+        assert mb_updated['total_ingested_count'] == 3
+
+        # Verify workspace stats count has increased by 3
+        stats_updated = InstitutionModel.get_stats(1)
+        assert stats_updated['total_emails'] >= initial_total_emails + 3
+
+        # Ingest 2 more messages and verify count increments to 5
+        for i in range(4, 6):
+            execute_query("""
+                INSERT INTO ingested_messages (
+                    institution_id, email_config_id, message_id_hash, imap_uid, processing_status, attempt_count
+                ) VALUES (1, %s, %s, %s, 'PROCESSED', 1)
+            """, (mb_id, f"hash_{i}_{mb_id}", i))
+
+        mb_final = email_service.get_mailbox_by_id(mb_id, 1)
+        assert mb_final['total_ingested_count'] == 5
+
+def test_send_warning_action_end_to_end(app, monkeypatch):
+    """
+    Verifies that the Send Warning action:
+    1. Successfully dispatches warning email when SMTP succeeds (mocked transport) and updates incident status to WARNING_SENT.
+    2. Truthfully returns failure and leaves status as PENDING_REVIEW when SMTP transmission fails.
+    3. Handles missing recipient address properly.
+    """
+    with app.app_context():
+        from bullymail.models.analysis import AnalysisModel
+        from bullymail.services.admin_warning_service import admin_warning_service
+        from bullymail.database.connection import fetch_one
+
+        # 1. Create test analyzed_emails record with a valid sender
+        analysis_id = AnalysisModel.save_analysis({
+            'email_from': 'attacker_sender@external.com',
+            'email_to': 'victim@school.edu',
+            'email_subject': 'Cyberbullying Subject',
+            'bullying_analysis': {'is_bullying': True, 'rule_based_matches': ['threat']},
+            'overall_risk_level': 'HIGH',
+            'evidence': []
+        }, institution_id=1)
+
+        # Verify initial status is PENDING_REVIEW
+        rec = AnalysisModel.get_by_id(analysis_id, institution_id=1, role='admin')
+        assert rec['incident_status'] == 'PENDING_REVIEW'
+
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess['user_id'] = 1
+                sess['role'] = 'admin'
+                sess['username'] = 'admin'
+                sess['institution_id'] = 1
+
+            # Case A: Simulated SMTP Transmission Failure
+            monkeypatch.setattr(admin_warning_service, 'send_warning_email', lambda recipient_email, subject=None, body=None, institution_id=None: (False, "Simulated SMTP connection timeout"))
+
+            fail_resp = client.post(f'/api/admin/analysis/{analysis_id}/warning', json={})
+            assert fail_resp.status_code == 500
+            fail_data = fail_resp.get_json()
+            assert fail_data['success'] is False
+            assert "Simulated SMTP connection timeout" in fail_data['error']
+
+            # Verify incident status is STILL PENDING_REVIEW after failed delivery
+            rec_after_fail = AnalysisModel.get_by_id(analysis_id, institution_id=1, role='admin')
+            assert rec_after_fail['incident_status'] == 'PENDING_REVIEW'
+
+            # Verify failed audit trail was recorded
+            audit_fail = fetch_one("SELECT * FROM incident_audit_log WHERE analysis_id = %s AND action = 'WARNING_ATTEMPT_FAILED' ORDER BY id DESC LIMIT 1", (analysis_id,))
+            assert audit_fail is not None
+            assert audit_fail['delivery_status'] == 'FAILED'
+
+            # Case B: Successful SMTP Transmission
+            monkeypatch.setattr(admin_warning_service, 'send_warning_email', lambda recipient_email, subject=None, body=None, institution_id=None: (True, "Warning email sent successfully."))
+
+            success_resp = client.post(f'/api/admin/analysis/{analysis_id}/warning', json={})
+            assert success_resp.status_code == 200
+            success_data = success_resp.get_json()
+            assert success_data['success'] is True
+            assert success_data['status'] == 'WARNING_SENT'
+
+            # Verify incident status is NOW WARNING_SENT
+            rec_after_success = AnalysisModel.get_by_id(analysis_id, institution_id=1, role='admin')
+            assert rec_after_success['incident_status'] == 'WARNING_SENT'
+
+            # Verify successful audit trail was recorded
+            audit_success = fetch_one("SELECT * FROM incident_audit_log WHERE analysis_id = %s AND action = 'WARNING_SENT' ORDER BY id DESC LIMIT 1", (analysis_id,))
+            assert audit_success is not None
+            assert audit_success['delivery_status'] == 'SUCCESS'
+            assert audit_success['warning_recipient'] == 'attacker_sender@external.com'

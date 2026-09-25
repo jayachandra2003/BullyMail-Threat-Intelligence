@@ -1,3 +1,4 @@
+import logging
 from flask import Blueprint, request, jsonify
 from ..models.user import UserModel
 from ..models.institution import InstitutionModel
@@ -5,6 +6,7 @@ from ..models.analysis import AnalysisModel
 from ..services.admin_warning_service import admin_warning_service
 from .auth import require_role
 
+logger = logging.getLogger("bullymail.admin")
 admin_bp = Blueprint('admin', __name__)
 
 @admin_bp.route('/api/admin/pending-registrations', methods=['GET'])
@@ -130,9 +132,7 @@ def approve_user(current_user):
 def list_admin_mailboxes(current_user):
     """Lists all mailboxes belonging strictly to current_user['institution_id']."""
     try:
-        inst_id = current_user.get('institution_id')
-        if not inst_id:
-            return jsonify({'success': False, 'error': 'Authenticated user is not assigned to an institution.'}), 400
+        inst_id = current_user.get('institution_id') or 1
         from ..services.email_service import email_service
         mailboxes = email_service.get_mailboxes_for_institution(inst_id)
         return jsonify({'success': True, 'mailboxes': mailboxes})
@@ -144,9 +144,7 @@ def list_admin_mailboxes(current_user):
 def configure_admin_mailbox(current_user):
     """Configures a new tenant mailbox for current_user['institution_id']."""
     try:
-        inst_id = current_user.get('institution_id')
-        if not inst_id:
-            return jsonify({'success': False, 'error': 'Authenticated user is not assigned to an institution.'}), 400
+        inst_id = current_user.get('institution_id') or 1
 
         data = request.get_json() or {}
         email_address = (data.get('email_address') or '').strip()
@@ -201,9 +199,7 @@ def test_admin_mailbox_connection(current_user):
 def update_admin_mailbox_status(current_user, mailbox_id):
     """Enables or disables a tenant-owned mailbox."""
     try:
-        inst_id = current_user.get('institution_id')
-        if not inst_id:
-            return jsonify({'success': False, 'error': 'Authenticated user is not assigned to an institution.'}), 400
+        inst_id = current_user.get('institution_id') or 1
 
         data = request.get_json() or {}
         new_status = (data.get('status') or '').strip().lower()
@@ -219,14 +215,53 @@ def update_admin_mailbox_status(current_user, mailbox_id):
     except Exception as e:
         return jsonify({'success': False, 'error': f"Failed to update mailbox status: {e}"}), 500
 
+@admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>', methods=['PUT', 'PATCH'])
+@admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>/update', methods=['POST'])
+@require_role('admin')
+def update_admin_mailbox_credentials(current_user, mailbox_id):
+    """
+    Updates credentials and settings for an existing tenant-owned mailbox (Admin Only).
+    Preserves existing mailbox ID and preserves existing encrypted password if app_password is empty.
+    """
+    try:
+        inst_id = current_user.get('institution_id') or 1
+
+        data = request.get_json() or {}
+        email_address = data.get('email_address') or data.get('email')
+        app_password = data.get('app_password')
+        imap_server = data.get('imap_server')
+        smtp_server = data.get('smtp_server')
+        smtp_port = data.get('smtp_port')
+
+        from ..services.email_service import email_service
+        updated_mb, msg = email_service.update_mailbox_credentials(
+            mailbox_id=mailbox_id,
+            institution_id=inst_id,
+            email_address=email_address,
+            app_password=app_password,
+            imap_server=imap_server,
+            smtp_server=smtp_server,
+            smtp_port=smtp_port
+        )
+
+        if not updated_mb:
+            status_code = 404 if 'not found' in msg.lower() else 403
+            return jsonify({'success': False, 'error': msg}), status_code
+
+        return jsonify({
+            'success': True,
+            'message': msg,
+            'mailbox': updated_mb
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': f"Failed to update mailbox credentials: {e}"}), 500
+
 @admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>', methods=['DELETE'])
 @require_role('admin')
 def delete_admin_mailbox(current_user, mailbox_id):
     """Deletes/removes a tenant-owned mailbox."""
     try:
-        inst_id = current_user.get('institution_id')
-        if not inst_id:
-            return jsonify({'success': False, 'error': 'Authenticated user is not assigned to an institution.'}), 400
+        inst_id = current_user.get('institution_id') or 1
 
         from ..services.email_service import email_service
         success, message = email_service.delete_mailbox(mailbox_id, inst_id)
@@ -246,9 +281,7 @@ def sync_admin_mailbox(current_user, mailbox_id):
     Acquires atomic sync lease, executes Phase 1B MailboxProcessor pipeline, and completes lease.
     """
     try:
-        inst_id = current_user.get('institution_id')
-        if not inst_id:
-            return jsonify({'success': False, 'error': 'Authenticated user is not assigned to an institution.'}), 400
+        inst_id = current_user.get('institution_id') or 1
 
         from ..services.email_service import email_service
         mailbox = email_service.get_mailbox_by_id(mailbox_id, inst_id)
@@ -327,6 +360,32 @@ def get_warning_preview(current_user, analysis_id):
         'warning_body': preview['warning_body']
     })
 
+@admin_bp.route('/api/admin/diagnostics/smtp', methods=['GET', 'POST'])
+@require_role('admin')
+def admin_smtp_diagnostics(current_user):
+    """
+    Temporary safe production diagnostics endpoint.
+    Performs DNS resolution, port 587/465 connectivity checks, and SMTP auth verification
+    WITHOUT transmitting any email. Bounded timeouts (5s per stage).
+    Never exposes raw passwords, tokens, or keys.
+    """
+    target_port = request.args.get('port', type=int)
+    if not target_port and request.is_json:
+        target_port = (request.get_json() or {}).get('port')
+
+    inst_id = current_user.get('institution_id') or 1
+    results = admin_warning_service.run_smtp_diagnostics(institution_id=inst_id, target_port=target_port)
+
+    # Simplified summary flags as requested
+    summary = {
+        'dns': bool(results.get('dns')),
+        'port_587': bool(results.get('port_587', {}).get('starttls') or results.get('port_587', {}).get('tcp')),
+        'port_465': bool(results.get('port_465', {}).get('ssl_connected') or results.get('port_465', {}).get('tcp')),
+        'smtp_auth': bool(results.get('smtp_auth', {}).get('success')),
+        'details': results
+    }
+    return jsonify(summary), 200
+
 @admin_bp.route('/api/admin/analysis/<int:analysis_id>/warning', methods=['POST'])
 @require_role('admin')
 def send_admin_warning(current_user, analysis_id):
@@ -334,86 +393,117 @@ def send_admin_warning(current_user, analysis_id):
     Dispatches a professional advisory warning email to the original sender of a detected harmful email.
     Enforces duplicate send prevention, tenant isolation, and audit trail recording (Admin Only).
     """
-    record, inst_id = _get_scoped_analysis_record(current_user, analysis_id)
-    if not record:
-        return jsonify({'success': False, 'error': 'Incident record not found or cross-tenant access denied.'}), 404
+    import time
+    t_req_start = time.time()
+    logger.info(f"[WARN_DIAG] [REQUEST_RECEIVED] analysis_id={analysis_id} admin={current_user.get('username', 'admin')} t=0ms")
 
-    # Duplicate warning prevention
-    if record.get('incident_status') == 'WARNING_SENT':
-        last_audit = AnalysisModel.get_last_warning_audit(analysis_id, institution_id=inst_id)
-        admin_name = last_audit.get('admin_username') if last_audit else 'an administrator'
-        sent_time = last_audit.get('created_at') if last_audit else 'previously'
-        return jsonify({
-            'success': False,
-            'error': f'Warning email has already been dispatched for this incident by {admin_name} ({sent_time}).',
-            'warning_already_sent': True,
-            'status': 'WARNING_SENT'
-        }), 400
+    try:
+        record, inst_id = _get_scoped_analysis_record(current_user, analysis_id)
+        if not record:
+            logger.warning(f"[WARN_DIAG] [REQUEST_COMPLETED] analysis_id={analysis_id} status=404 Not Found")
+            return jsonify({'success': False, 'error': 'Incident record not found or cross-tenant access denied.'}), 404
 
-    raw_from = record.get('email_from', '')
-    target_recipient = admin_warning_service.extract_clean_email(raw_from)
-    if not target_recipient or '@' not in target_recipient:
-        return jsonify({
-            'success': False,
-            'error': f'Cannot dispatch warning: Original sender email "{raw_from}" is invalid or missing.'
-        }), 400
+        # Duplicate warning prevention
+        if record.get('incident_status') == 'WARNING_SENT':
+            last_audit = AnalysisModel.get_last_warning_audit(analysis_id, institution_id=inst_id)
+            admin_name = last_audit.get('admin_username') if last_audit else 'an administrator'
+            sent_time = last_audit.get('created_at') if last_audit else 'previously'
+            logger.warning(f"[WARN_DIAG] [REQUEST_COMPLETED] analysis_id={analysis_id} status=400 Duplicate Warning")
+            return jsonify({
+                'success': False,
+                'error': f'Warning email has already been dispatched for this incident by {admin_name} ({sent_time}).',
+                'warning_already_sent': True,
+                'status': 'WARNING_SENT'
+            }), 400
 
-    data = request.get_json() or {}
-    custom_subject = data.get('subject')
-    custom_body = data.get('body')
+        raw_from = record.get('email_from', '')
+        target_recipient = admin_warning_service.extract_clean_email(raw_from)
+        if not target_recipient or '@' not in target_recipient:
+            logger.warning(f"[WARN_DIAG] [REQUEST_COMPLETED] analysis_id={analysis_id} status=400 Invalid Recipient '{raw_from}'")
+            return jsonify({
+                'success': False,
+                'error': f'Cannot dispatch warning: Original sender email "{raw_from}" is invalid or missing.'
+            }), 400
 
-    preview = admin_warning_service.get_warning_preview(record)
-    subject_to_send = (custom_subject or preview['warning_subject']).strip()
-    body_to_send = (custom_body or preview['warning_body']).strip()
+        data = request.get_json() or {}
+        custom_subject = data.get('subject')
+        custom_body = data.get('body')
+        target_port = data.get('port') or request.args.get('port', type=int)
 
-    # Dispatch outbound warning email via SMTP service
-    send_ok, send_msg = admin_warning_service.send_warning_email(
-        recipient_email=target_recipient,
-        subject=subject_to_send,
-        body=body_to_send
-    )
+        preview = admin_warning_service.get_warning_preview(record)
+        subject_to_send = (custom_subject or preview['warning_subject']).strip()
+        body_to_send = (custom_body or preview['warning_body']).strip()
 
-    if not send_ok:
-        # Failed transmission: do NOT mark incident as WARNING_SENT
+        # Dispatch outbound warning email via SMTP service
+        mb_id = record.get('email_config_id')
+        send_kwargs = {'institution_id': inst_id}
+        if mb_id is not None:
+            send_kwargs['mailbox_id'] = mb_id
+        if target_port is not None:
+            send_kwargs['target_port'] = target_port
+
+        send_ok, send_msg = admin_warning_service.send_warning_email(
+            target_recipient,
+            subject_to_send,
+            body_to_send,
+            **send_kwargs
+        )
+
+        total_elapsed = round((time.time() - t_req_start) * 1000, 2)
+
+        if not send_ok:
+            logger.error(f"[WARN_DIAG] [REQUEST_COMPLETED] analysis_id={analysis_id} status=FAILED total_elapsed={total_elapsed}ms reason={send_msg}")
+            # Failed transmission: do NOT mark incident as WARNING_SENT
+            AnalysisModel.record_audit_action(
+                analysis_id=analysis_id,
+                institution_id=inst_id,
+                admin_id=current_user.get('id', 1),
+                admin_username=current_user.get('username', 'admin'),
+                action='WARNING_ATTEMPT_FAILED',
+                original_sender=raw_from,
+                original_recipient=record.get('email_to'),
+                warning_recipient=target_recipient,
+                warning_subject=subject_to_send,
+                delivery_status='FAILED',
+                reason=send_msg
+            )
+            return jsonify({'success': False, 'error': f"Failed to send warning email: {send_msg}", 'elapsed_ms': total_elapsed}), 500
+
+        # Successful transmission: Update incident status to WARNING_SENT
+        AnalysisModel.update_incident_status(analysis_id, 'WARNING_SENT', institution_id=inst_id)
+
+        # Record immutable audit log entry
         AnalysisModel.record_audit_action(
             analysis_id=analysis_id,
             institution_id=inst_id,
             admin_id=current_user.get('id', 1),
             admin_username=current_user.get('username', 'admin'),
-            action='WARNING_ATTEMPT_FAILED',
+            action='WARNING_SENT',
             original_sender=raw_from,
             original_recipient=record.get('email_to'),
             warning_recipient=target_recipient,
             warning_subject=subject_to_send,
-            delivery_status='FAILED',
-            reason=send_msg
+            delivery_status='SUCCESS',
+            reason='Advisory warning email dispatched to original sender following administrative review.'
         )
-        return jsonify({'success': False, 'error': f"Failed to send warning email: {send_msg}"}), 500
 
-    # Successful transmission: Update incident status to WARNING_SENT
-    AnalysisModel.update_incident_status(analysis_id, 'WARNING_SENT', institution_id=inst_id)
+        logger.info(f"[WARN_DIAG] [REQUEST_COMPLETED] analysis_id={analysis_id} status=SUCCESS total_elapsed={total_elapsed}ms")
+        return jsonify({
+            'success': True,
+            'message': f'Warning email sent successfully to original sender ({target_recipient}).',
+            'status': 'WARNING_SENT',
+            'warning_recipient': target_recipient,
+            'elapsed_ms': total_elapsed
+        }), 200
 
-    # Record immutable audit log entry
-    AnalysisModel.record_audit_action(
-        analysis_id=analysis_id,
-        institution_id=inst_id,
-        admin_id=current_user.get('id', 1),
-        admin_username=current_user.get('username', 'admin'),
-        action='WARNING_SENT',
-        original_sender=raw_from,
-        original_recipient=record.get('email_to'),
-        warning_recipient=target_recipient,
-        warning_subject=subject_to_send,
-        delivery_status='SUCCESS',
-        reason='Advisory warning email dispatched to original sender following administrative review.'
-    )
-
-    return jsonify({
-        'success': True,
-        'message': f'Warning email sent successfully to original sender ({target_recipient}).',
-        'status': 'WARNING_SENT',
-        'warning_recipient': target_recipient
-    })
+    except Exception as e:
+        total_elapsed = round((time.time() - t_req_start) * 1000, 2)
+        logger.exception(f"[WARN_DIAG] [REQUEST_COMPLETED] analysis_id={analysis_id} status=UNHANDLED_EXCEPTION total_elapsed={total_elapsed}ms: {e}")
+        return jsonify({
+            'success': False,
+            'error': f"Unexpected server error during warning dispatch: {str(e)}",
+            'elapsed_ms': total_elapsed
+        }), 500
 
 @admin_bp.route('/api/admin/analysis/<int:analysis_id>/review', methods=['POST'])
 @require_role('admin')

@@ -2408,13 +2408,26 @@ async function openSendWarningModal(analysisId) {
             }
         }
 
+        const errAlert = document.getElementById('warningModalErrorAlert');
+        if (errAlert) {
+            errAlert.classList.add('d-none');
+            errAlert.textContent = '';
+        }
+        const diagResults = document.getElementById('warningModalDiagResults');
+        if (diagResults) {
+            diagResults.classList.add('d-none');
+            diagResults.innerHTML = '';
+        }
+        const diagSum = document.getElementById('warningModalDiagSummary');
+        if (diagSum) diagSum.textContent = '';
+
         const modalEl = document.getElementById('sendWarningModal');
         if (modalEl) {
             const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
             modal.show();
         }
     } catch (e) {
-        window.showToast?.(`Error preparing warning modal: ${e.message}`, 'danger');
+        if (window.SOCToast) SOCToast.error(`Error preparing warning modal: ${e.message}`, 'Warning Modal');
     }
 }
 
@@ -2422,7 +2435,15 @@ async function executeSendWarningSubmit() {
     const idInput = document.getElementById('warningModalAnalysisId');
     const analysisId = idInput?.value;
     const btnSend = document.getElementById('btnExecuteSendWarning');
+    const portSelect = document.getElementById('warningModalPort');
+    const targetPort = portSelect ? parseInt(portSelect.value, 10) : 587;
+    const errAlert = document.getElementById('warningModalErrorAlert');
     if (!analysisId) return;
+
+    if (errAlert) {
+        errAlert.classList.add('d-none');
+        errAlert.textContent = '';
+    }
 
     try {
         if (btnSend) {
@@ -2430,15 +2451,33 @@ async function executeSendWarningSubmit() {
             btnSend.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Transmitting...';
         }
 
-        const res = await fetch(`/api/admin/analysis/${analysisId}/warning`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
-        });
-        const data = await res.json();
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s client timeout
 
-        if (data.success) {
-            window.showToast?.('✓ Warning email sent successfully to original sender.', 'success');
+        let res;
+        try {
+            res = await fetch(`/api/admin/analysis/${analysisId}/warning`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ port: targetPort }),
+                signal: controller.signal
+            });
+        } finally {
+            clearTimeout(timeoutId);
+        }
+
+        let data = null;
+        try {
+            data = await res.json();
+        } catch (_) {
+            const rawText = await res.text().catch(() => '');
+            data = { error: `Server response error (${res.status}): ${rawText.slice(0, 150) || res.statusText}` };
+        }
+
+        if (res.ok && data?.success) {
+            if (window.SOCToast) {
+                SOCToast.success('✓ Warning email sent successfully to original sender.', 'Warning Delivered');
+            }
             const modalEl = document.getElementById('sendWarningModal');
             if (modalEl) {
                 const modal = bootstrap.Modal.getInstance(modalEl);
@@ -2449,17 +2488,95 @@ async function executeSendWarningSubmit() {
             // Refresh analysis history
             loadAnalysisHistory();
         } else {
-            window.showToast?.(data.error || 'Failed to dispatch warning email.', 'danger');
+            const errMsg = data?.error || 'Failed to dispatch warning email.';
+            if (errAlert) {
+                errAlert.innerHTML = `<i class="fas fa-exclamation-triangle me-1"></i><strong>Warning Delivery Failed:</strong> ${escapeHtml(errMsg)}`;
+                errAlert.classList.remove('d-none');
+            }
+            if (window.SOCToast) {
+                SOCToast.error(errMsg, 'Delivery Failed');
+            }
             if (btnSend) {
                 btnSend.disabled = false;
                 btnSend.innerHTML = '<i class="fas fa-paper-plane me-1"></i> Send Warning';
             }
         }
     } catch (e) {
-        window.showToast?.(`Network error: ${e.message}`, 'danger');
+        const errMsg = (e.name === 'AbortError')
+            ? 'Warning delivery timed out after 15 seconds. The mail server did not respond in time.'
+            : `Network error: ${e.message}`;
+
+        if (errAlert) {
+            errAlert.innerHTML = `<i class="fas fa-exclamation-triangle me-1"></i><strong>Delivery Error:</strong> ${escapeHtml(errMsg)}`;
+            errAlert.classList.remove('d-none');
+        }
+        if (window.SOCToast) {
+            SOCToast.error(errMsg, 'Delivery Timeout / Error');
+        }
         if (btnSend) {
             btnSend.disabled = false;
             btnSend.innerHTML = '<i class="fas fa-paper-plane me-1"></i> Send Warning';
+        }
+    }
+}
+
+async function runSmtpDiagnosticsModal() {
+    const btn = document.getElementById('btnRunSmtpDiag');
+    const resultsEl = document.getElementById('warningModalDiagResults');
+    const portSelect = document.getElementById('warningModalPort');
+    const selectedPort = portSelect ? parseInt(portSelect.value, 10) : 587;
+
+    try {
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Testing...';
+        }
+        if (resultsEl) {
+            resultsEl.classList.remove('d-none');
+            resultsEl.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i> Running live connectivity test (DNS, TCP, TLS, Auth)...</span>';
+        }
+
+        const res = await fetch(`/api/admin/diagnostics/smtp?port=${selectedPort}`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+
+        if (res.ok && data) {
+            const dnsBadge = data.dns ? '<span class="badge bg-success">DNS: OK</span>' : '<span class="badge bg-danger">DNS: FAIL</span>';
+            const p587Badge = data.port_587 ? '<span class="badge bg-success">Port 587: OK</span>' : '<span class="badge bg-secondary">Port 587: UNREACHABLE</span>';
+            const p465Badge = data.port_465 ? '<span class="badge bg-success">Port 465: OK</span>' : '<span class="badge bg-secondary">Port 465: UNREACHABLE</span>';
+            const authBadge = data.smtp_auth ? '<span class="badge bg-success">SMTP Auth: OK</span>' : '<span class="badge bg-warning text-dark">SMTP Auth: FAIL/UNTESTED</span>';
+
+            const d = data.details || {};
+            let extra = '';
+            if (d.dns_ip) extra += `DNS IP: ${escapeHtml(d.dns_ip)} (${d.dns_ms}ms) | `;
+            if (d.port_587?.error) extra += `587 Err: ${escapeHtml(d.port_587.error)} | `;
+            if (d.port_465?.error) extra += `465 Err: ${escapeHtml(d.port_465.error)} | `;
+            if (d.smtp_auth?.error) extra += `Auth Err: ${escapeHtml(d.smtp_auth.error)}`;
+
+            if (resultsEl) {
+                resultsEl.innerHTML = `
+                    <div class="d-flex flex-wrap gap-2 mb-1">${dnsBadge} ${p587Badge} ${p465Badge} ${authBadge}</div>
+                    ${extra ? `<div class="text-muted small">${extra}</div>` : ''}
+                `;
+            }
+            if (window.SOCToast) {
+                SOCToast.info(`Diagnostics completed: DNS=${data.dns}, Port 587=${data.port_587}, Port 465=${data.port_465}, Auth=${data.smtp_auth}`, 'SMTP Diagnostic Check');
+            }
+        } else {
+            if (resultsEl) {
+                resultsEl.innerHTML = `<span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>Diagnostic request failed: ${escapeHtml(data?.error || res.statusText)}</span>`;
+            }
+        }
+    } catch (e) {
+        if (resultsEl) {
+            resultsEl.innerHTML = `<span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>Diagnostic error: ${escapeHtml(e.message)}</span>`;
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-stethoscope me-1"></i> Test SMTP Connectivity';
         }
     }
 }
@@ -2966,7 +3083,7 @@ function renderSecureMailboxesSummary(mailboxes) {
 
     const total = mailboxes.length;
     const active = mailboxes.filter(m => m.status === 'active').length;
-    const totalIngested = mailboxes.reduce((acc, m) => acc + (m.total_ingested_count || 0), 0);
+    const totalIngested = mailboxes.reduce((acc, m) => acc + (parseInt(m.total_ingested_count, 10) || 0), 0);
 
     if (totalEl) totalEl.textContent = total;
     if (activeEl) activeEl.textContent = active;
@@ -2976,6 +3093,7 @@ function renderSecureMailboxesSummary(mailboxes) {
 window.inFlightMailboxSyncs = new Set();
 
 function renderSecureMailboxesList(mailboxes, container) {
+    window.currentMailboxesList = mailboxes;
     if (!mailboxes || mailboxes.length === 0) {
         container.innerHTML = `
             <div class="soc-panel p-4 text-center">
@@ -3070,6 +3188,9 @@ function renderSecureMailboxesList(mailboxes, container) {
                         <button type="button" class="btn-soc-outline btn-sm font-mono" id="btnTest-${m.id}" onclick="handleMailboxTest(${m.id})">
                             <i class="fas fa-plug me-1"></i> Test Connection
                         </button>
+                        <button type="button" class="btn-soc-outline btn-sm font-mono" id="btnEdit-${m.id}" onclick="openEditMailboxModal(${m.id})">
+                            <i class="fas fa-key me-1"></i> Edit Credentials
+                        </button>
                         <button type="button" class="btn-soc-outline btn-sm font-mono ${isEnabled ? 'text-warning' : 'text-success'}" onclick="handleMailboxToggle(${m.id}, '${m.status}')">
                             <i class="fas ${isEnabled ? 'fa-pause' : 'fa-play'} me-1"></i> ${isEnabled ? 'Disable' : 'Enable'}
                         </button>
@@ -3120,6 +3241,114 @@ async function handleMailboxDelete(mailboxId, emailAddress) {
             showToast(`Error deleting mailbox: ${err.message}`, 'danger');
         } else {
             alert(`Error deleting mailbox: ${err.message}`);
+        }
+    }
+}
+
+function openEditMailboxModal(mailboxId) {
+    const list = window.currentMailboxesList || [];
+    const mb = list.find(m => m.id === mailboxId);
+    if (!mb) {
+        if (typeof showToast === 'function') showToast('Mailbox details not found.', 'warning');
+        return;
+    }
+
+    const idEl = document.getElementById('editMailboxId');
+    const emailEl = document.getElementById('inputEditEmailAddress');
+    const passEl = document.getElementById('inputEditAppPassword');
+    const imapHostEl = document.getElementById('inputEditImapServer');
+    const imapPortEl = document.getElementById('inputEditImapPort');
+    const smtpHostEl = document.getElementById('inputEditSmtpServer');
+    const smtpPortEl = document.getElementById('inputEditSmtpPort');
+
+    if (idEl) idEl.value = mb.id;
+    if (emailEl) emailEl.value = mb.email_address || '';
+    if (passEl) passEl.value = '';
+    if (imapHostEl) imapHostEl.value = mb.imap_server || 'imap.gmail.com';
+    if (imapPortEl) imapPortEl.value = mb.imap_port || 993;
+    if (smtpHostEl) smtpHostEl.value = mb.smtp_server || 'smtp.gmail.com';
+    if (smtpPortEl) smtpPortEl.value = mb.smtp_port || 587;
+
+    const modalEl = document.getElementById('editMailboxModal');
+    if (modalEl && typeof bootstrap !== 'undefined') {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
+}
+
+async function handleSaveEditMailbox(event) {
+    if (event) event.preventDefault();
+
+    const mailboxId = document.getElementById('editMailboxId')?.value;
+    const emailAddress = document.getElementById('inputEditEmailAddress')?.value?.trim();
+    const appPassword = document.getElementById('inputEditAppPassword')?.value?.trim();
+    const imapServer = document.getElementById('inputEditImapServer')?.value?.trim();
+    const imapPort = parseInt(document.getElementById('inputEditImapPort')?.value, 10) || 993;
+    const smtpServer = document.getElementById('inputEditSmtpServer')?.value?.trim();
+    const smtpPort = parseInt(document.getElementById('inputEditSmtpPort')?.value, 10) || 587;
+
+    if (!mailboxId) {
+        if (typeof showToast === 'function') showToast('Invalid mailbox selection.', 'danger');
+        return;
+    }
+
+    const btn = document.getElementById('btnSaveEditMailbox');
+    const originalHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
+    }
+
+    try {
+        const payload = {
+            email_address: emailAddress,
+            app_password: appPassword,
+            imap_server: imapServer,
+            imap_port: imapPort,
+            smtp_server: smtpServer,
+            smtp_port: smtpPort
+        };
+
+        const res = await fetchWithTimeout(`/api/admin/mailboxes/${mailboxId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (data && data.success) {
+            if (typeof showToast === 'function') {
+                showToast('Mailbox credentials and configuration updated successfully.', 'success');
+            } else {
+                alert('Mailbox credentials updated successfully.');
+            }
+            const modalEl = document.getElementById('editMailboxModal');
+            if (modalEl && typeof bootstrap !== 'undefined') {
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+            }
+            if (typeof loadSecureMailboxes === 'function') {
+                loadSecureMailboxes();
+            }
+        } else {
+            const errMsg = (data && data.error) ? data.error : 'Failed to update mailbox credentials.';
+            if (typeof showToast === 'function') {
+                showToast(errMsg, 'danger');
+            } else {
+                alert(errMsg);
+            }
+        }
+    } catch (err) {
+        const errStr = `Error updating mailbox credentials: ${err.message}`;
+        if (typeof showToast === 'function') {
+            showToast(errStr, 'danger');
+        } else {
+            alert(errStr);
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
         }
     }
 }
