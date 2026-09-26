@@ -16,13 +16,38 @@ def dashboard():
         session.clear()
         return redirect(url_for('auth.login'))
 
-    if user.get('institution_id') and not session.get('institution_name'):
+    from .auth import normalize_role
+    user_role = normalize_role(user.get('role'))
+    session['role'] = user_role
+    session['institution_id'] = user.get('institution_id')
+    session['username'] = user.get('username')
+    session['full_name'] = user.get('full_name') or user.get('username')
+
+    inst_name = None
+    if user.get('institution_id'):
         from ..models.institution import InstitutionModel
         inst = InstitutionModel.get_by_id(user['institution_id'])
         if inst:
-            session['institution_name'] = inst.get('name')
+            inst_name = inst.get('name')
+            session['institution_name'] = inst_name
+        else:
+            session.pop('institution_name', None)
+    else:
+        session.pop('institution_name', None)
 
-    return render_template('dashboard.html')
+    is_platform_owner = (user_role == 'platform_owner')
+    is_org_admin = (user_role == 'org_admin') or (user_role == 'admin' and user.get('institution_id'))
+    is_analyst = not is_platform_owner and not is_org_admin
+
+    return render_template(
+        'dashboard.html',
+        current_user=user,
+        current_role=user_role,
+        is_platform_owner=is_platform_owner,
+        is_org_admin=is_org_admin,
+        is_analyst=is_analyst,
+        institution_name=inst_name
+    )
 
 @main_bp.route('/login')
 def login():

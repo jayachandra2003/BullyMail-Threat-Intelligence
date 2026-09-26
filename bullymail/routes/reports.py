@@ -3,34 +3,13 @@ from flask import Blueprint, request, jsonify, session, send_file, Response
 from ..services.report_generator import ReportGenerator
 from ..models.analysis import AnalysisModel
 
-from .auth import get_current_user
+from .auth import get_current_user, resolve_tenant_id
 
 reports_bp = Blueprint('reports', __name__)
 
 def _resolve_tenant_inst_id(user, req_inst):
-    user_role = (user.get('role') or 'analyst').lower().strip()
-    user_inst = user.get('institution_id')
-
-    if user_role in ('platform_owner', 'super_admin'):
-        if req_inst:
-            try:
-                return int(req_inst), None
-            except (ValueError, TypeError):
-                return None, ("Invalid institution ID", 400)
-        return user_inst or 1, None
-
-    if not user_inst:
-        return None, ("Forbidden: Account is not associated with an approved organization", 403)
-
-    user_inst = int(user_inst)
-    if req_inst:
-        try:
-            if int(req_inst) != user_inst:
-                return None, ("Forbidden: Access to specified organization is denied", 403)
-        except (ValueError, TypeError):
-            return None, ("Invalid institution ID", 400)
-
-    return user_inst, None
+    """Delegates to canonical resolve_tenant_id for consistent tenant isolation."""
+    return resolve_tenant_id(user, req_inst, allow_global=True, strict_403=True)
 
 @reports_bp.route('/api/reports/download-csv', methods=['GET'])
 def download_csv():
@@ -40,7 +19,7 @@ def download_csv():
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
         
     try:
-        req_inst = request.args.get('institution_id')
+        req_inst = request.args.get('organization_id') or request.args.get('institution_id')
         inst_id, err = _resolve_tenant_inst_id(user, req_inst)
         if err:
             msg, code = err
@@ -66,7 +45,7 @@ def view_html_report(analysis_id):
         return "Unauthorized", 401
         
     try:
-        req_inst = request.args.get('institution_id')
+        req_inst = request.args.get('organization_id') or request.args.get('institution_id')
         inst_id, err = _resolve_tenant_inst_id(user, req_inst)
         if err:
             msg, code = err
@@ -90,7 +69,7 @@ def download_report(analysis_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
         
     try:
-        req_inst = request.args.get('institution_id')
+        req_inst = request.args.get('organization_id') or request.args.get('institution_id')
         inst_id, err = _resolve_tenant_inst_id(user, req_inst)
         if err:
             msg, code = err

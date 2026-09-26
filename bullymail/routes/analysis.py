@@ -5,58 +5,15 @@ from ..services.risk_engine import UnifiedRiskEngine
 from ..models.analysis import AnalysisModel
 from ..config import Config
 
-from .auth import get_current_user
-from .auth import get_current_user, require_role
-
 from ..models.institution import InstitutionModel
+from .auth import get_current_user, require_role, resolve_tenant_id
 
 analysis_bp = Blueprint('analysis', __name__)
 risk_engine = UnifiedRiskEngine()
 
-def _resolve_target_institution_id(current_user, requested_inst_id=None, strict_403=False):
-    """
-    Validates institution access for current user with strict tenant isolation.
-    - Platform Owner ('platform_owner' or global 'admin' without institution_id) can access any valid institution_id (or requests specific inst_id).
-    - Organization Admin ('org_admin') and Analysts ('analyst') are strictly locked to current_user['institution_id'].
-    - If user has no assigned institution_id and is not platform_owner: returns 403 Forbidden.
-    - If an explicit cross-tenant requested_inst_id is passed by a non-platform_owner:
-      - If strict_403 is True: returns 403 Forbidden.
-      - If strict_403 is False: safely ignores client tampering and enforces user's authentic institution_id.
-    - Never defaults or falls back to institution_id = 1 for non-platform_owners.
-    """
-    user_role = (current_user.get('role') or 'analyst').lower().strip()
-    user_inst_id = current_user.get('institution_id')
-    is_platform_level = (user_role in ('platform_owner', 'super_admin') or (user_role == 'admin' and not user_inst_id))
-
-    if is_platform_level:
-        if requested_inst_id is not None:
-            try:
-                target_id = int(requested_inst_id)
-                inst = InstitutionModel.get_by_id(target_id)
-                if not inst:
-                    return None, ("Institution not found", 404)
-                return target_id, None
-            except (ValueError, TypeError):
-                return None, ("Invalid institution ID", 400)
-        return user_inst_id or 1, None
-
-    # Org Admin, Analyst, Operator:
-    if not user_inst_id:
-        return None, ("Forbidden: Account is not associated with an approved organization", 403)
-
-    user_inst_id = int(user_inst_id)
-    if requested_inst_id is not None:
-        try:
-            req_id = int(requested_inst_id)
-            if req_id != user_inst_id:
-                if strict_403:
-                    return None, ("Forbidden: Access to specified organization is denied", 403)
-                # Safely ignore client tampering and enforce authentic tenant
-                return user_inst_id, None
-        except (ValueError, TypeError):
-            return None, ("Invalid institution ID", 400)
-
-    return user_inst_id, None
+def _resolve_target_institution_id(current_user, requested_inst_id=None, strict_403=True):
+    """Delegates to canonical resolve_tenant_id for consistent tenant isolation."""
+    return resolve_tenant_id(current_user, requested_inst_id, allow_global=True, strict_403=strict_403)
 
 @analysis_bp.route('/api/quick-demo-analyze', methods=['POST'])
 def quick_demo_analyze():
@@ -91,7 +48,7 @@ def analyze_email():
         email_from = request.form.get('email_from', '')
         email_to = request.form.get('email_to', '')
         engine = request.form.get('engine', 'normal').strip().lower()
-        req_inst_id = request.form.get('institution_id')
+        req_inst_id = request.form.get('organization_id') or request.form.get('institution_id')
         
         # Process uploaded files safely
         for file_key in request.files:
@@ -115,7 +72,7 @@ def analyze_email():
         email_from = data.get('email_from', '')
         email_to = data.get('email_to', '')
         engine = data.get('engine', 'normal').strip().lower()
-        req_inst_id = data.get('institution_id')
+        req_inst_id = data.get('organization_id') or data.get('institution_id')
 
     if not email_text and not attachments and not images:
         return jsonify({'success': False, 'error': 'Please provide email content or attachment to analyze'}), 400
@@ -241,7 +198,7 @@ def get_analysis_history():
     risk_filter = request.args.get('risk') or request.args.get('risk_level')
     status_filter = request.args.get('status') or request.args.get('incident_status') or request.args.get('admin_status')
     search = request.args.get('search')
-    req_inst = request.args.get('institution_id')
+    req_inst = request.args.get('organization_id') or request.args.get('institution_id')
     
     try:
         target_id, err_resp = _resolve_target_institution_id(user, req_inst)
@@ -258,7 +215,7 @@ def get_analysis_history():
             user_id=user.get('id'),
             role=user.get('role')
         )
-        return jsonify({'success': True, 'history': history})
+        return jsonify({'success': True, 'history': history, 'analyses': history})
     except Exception:
         return jsonify({'success': False, 'error': 'Failed to retrieve analysis history records.'}), 500
 
@@ -270,8 +227,8 @@ def get_analysis_details(analysis_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
         
     try:
-        req_inst = request.args.get('institution_id')
-        target_id, err_resp = _resolve_target_institution_id(user, req_inst)
+        req_inst = request.args.get('organization_id') or request.args.get('institution_id')
+        target_id, err_resp = _resolve_target_institution_id(user, req_inst, strict_403=True)
         if err_resp:
             msg, code = err_resp
             return jsonify({'success': False, 'error': msg}), code
@@ -302,8 +259,8 @@ def get_system_stats():
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
         
     try:
-        req_inst = request.args.get('institution_id')
-        target_id, err_resp = _resolve_target_institution_id(user, req_inst)
+        req_inst = request.args.get('organization_id') or request.args.get('institution_id')
+        target_id, err_resp = _resolve_target_institution_id(user, req_inst, strict_403=True)
         if err_resp:
             msg, code = err_resp
             return jsonify({'success': False, 'error': msg}), code
@@ -322,8 +279,8 @@ def get_threat_trend():
 
     try:
         range_window = request.args.get('range', '7d')
-        req_inst = request.args.get('institution_id')
-        target_id, err_resp = _resolve_target_institution_id(user, req_inst)
+        req_inst = request.args.get('organization_id') or request.args.get('institution_id')
+        target_id, err_resp = _resolve_target_institution_id(user, req_inst, strict_403=True)
         if err_resp:
             msg, code = err_resp
             return jsonify({'success': False, 'error': msg}), code
@@ -351,7 +308,12 @@ def delete_analysis_record(analysis_id):
         return jsonify({'success': False, 'error': 'Forbidden: Administrative privileges required to delete incident records.'}), 403
 
     try:
-        req_inst = request.args.get('institution_id') or (request.get_json(silent=True) or {}).get('institution_id')
+        req_inst = (
+            request.args.get('organization_id') or
+            request.args.get('institution_id') or
+            (request.get_json(silent=True) or {}).get('organization_id') or
+            (request.get_json(silent=True) or {}).get('institution_id')
+        )
         target_id, err_resp = _resolve_target_institution_id(user, req_inst, strict_403=True)
         if err_resp:
             msg, code = err_resp

@@ -14,12 +14,42 @@ function escapeHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    if (window.currentInstitutionId) {
-        window.activeInstitutionId = window.currentInstitutionId;
-    } else {
-        window.activeInstitutionId = 1;
+function isPlatformOwner() {
+    return Boolean(window.isPlatformOwnerUser || ['platform_owner', 'super_admin'].includes((window.currentUserRole || '').toLowerCase().trim()));
+}
+
+function isOrganizationAdmin() {
+    return Boolean(window.isOrgAdminUser || ['org_admin', 'organization_admin'].includes((window.currentUserRole || '').toLowerCase().trim()) || (window.currentUserRole === 'admin' && window.currentInstitutionId));
+}
+
+function isAnalyst() {
+    return !isPlatformOwner() && !isOrganizationAdmin();
+}
+
+function canManageTenant() {
+    return isPlatformOwner() || isOrganizationAdmin();
+}
+
+function isPlatformOwnerRole() {
+    return isPlatformOwner();
+}
+
+function isOrgAdminRole() {
+    return isOrganizationAdmin();
+}
+
+function getCurrentInstitutionId() {
+    if (isOrganizationAdmin()) {
+        return window.currentInstitutionId || null;
     }
+    if (isPlatformOwner()) {
+        return window.platformSelectedOrgId || null;
+    }
+    return window.currentInstitutionId || null;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    window.activeInstitutionId = getCurrentInstitutionId();
     window.cachedInstitutions = [];
     initNavigation();
     initSidebarToggle();
@@ -32,13 +62,11 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAnalysisHistory();
     loadModelStatus();
     loadAvailableDatasets();
-    const isPlatformOwner = ['platform_owner', 'super_admin'].includes((window.currentUserRole || '').toLowerCase());
-    const isOrgAdmin = ['org_admin', 'organization_admin', 'admin'].includes((window.currentUserRole || '').toLowerCase());
 
-    if (isPlatformOwner) {
+    if (isPlatformOwner()) {
         loadPendingRegistrations();
         loadPlatformOrganizations();
-    } else if (isOrgAdmin) {
+    } else if (isOrganizationAdmin()) {
         loadMembers();
         loadOrgSettings();
     }
@@ -58,17 +86,6 @@ document.addEventListener('DOMContentLoaded', () => {
 /* ==========================================================================
    1. Navigation & Layout Controls
    ========================================================================== */
-function isPlatformOwnerRole() {
-    return ['platform_owner', 'super_admin'].includes((window.currentUserRole || '').toLowerCase());
-}
-
-function isOrgAdminRole() {
-    return ['org_admin', 'organization_admin', 'admin'].includes((window.currentUserRole || '').toLowerCase());
-}
-
-function canManageTenant() {
-    return isPlatformOwnerRole() || isOrgAdminRole();
-}
 
 window.switchTab = function(targetTab) {
     const link = document.querySelector(`.nav-link-v2[data-tab="${targetTab}"], .nav-link-sub[data-tab="${targetTab}"]`);
@@ -293,7 +310,9 @@ window.recentAnalysisHistory = [];
 
 async function loadDashboardStats() {
     try {
-        const res = await fetch('/api/system-stats');
+        const instId = getCurrentInstitutionId();
+        const url = instId ? `/api/system-stats?institution_id=${encodeURIComponent(instId)}` : '/api/system-stats';
+        const res = await fetch(url);
         const data = await res.json();
         if (data.success) {
             const s = data.stats;
@@ -344,11 +363,14 @@ async function loadDashboardStats() {
             // Tenant Banner Real-Time Telemetry
             const tMembersEl = document.getElementById('tenantStatMembers');
             const tMailboxesEl = document.getElementById('tenantStatMailboxes');
-            if (isOrgAdminRole()) {
-                fetch('/api/members?limit=1').then(r => r.json()).then(d => {
-                    if (d.success && tMembersEl) tMembersEl.textContent = d.total || 0;
+            if (isOrganizationAdmin() || (isPlatformOwner() && window.platformSelectedOrgId)) {
+                const targetInst = getCurrentInstitutionId();
+                const mUrl = targetInst ? `/api/members?institution_id=${encodeURIComponent(targetInst)}&limit=1` : '/api/members?limit=1';
+                const mbUrl = targetInst ? `/api/institutions/${encodeURIComponent(targetInst)}/mailboxes` : '/api/mailboxes';
+                fetch(mUrl).then(r => r.json()).then(d => {
+                    if (d.success && tMembersEl) tMembersEl.textContent = d.pagination?.total || d.total || 0;
                 }).catch(() => {});
-                fetch('/api/mailboxes').then(r => r.json()).then(d => {
+                fetch(mbUrl).then(r => r.json()).then(d => {
                     if (d.success && tMailboxesEl) tMailboxesEl.textContent = (d.mailboxes || []).length;
                 }).catch(() => {});
             }
@@ -735,6 +757,42 @@ async function executeRejectOrgSubmit(forcedId) {
     }
 }
 
+async function confirmSuspendOrg(orgId, orgName) {
+    if (!confirm(`Are you sure you want to suspend organization '${orgName}'? All associated accounts will be immediately blocked from platform access.`)) {
+        return;
+    }
+    try {
+        const res = await fetch(`/api/admin/organizations/${orgId}/suspend`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            if (window.SOCToast) SOCToast.warning(data.message || 'Organization suspended.', 'Platform Administration');
+            loadPlatformOrganizations();
+        } else {
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to suspend organization.', 'Platform Error');
+        }
+    } catch (e) {
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Platform Error');
+    }
+}
+
+async function confirmActivateOrg(orgId, orgName) {
+    if (!confirm(`Are you sure you want to activate organization '${orgName}'?`)) {
+        return;
+    }
+    try {
+        const res = await fetch(`/api/admin/organizations/${orgId}/activate`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            if (window.SOCToast) SOCToast.success(data.message || 'Organization activated.', 'Platform Administration');
+            loadPlatformOrganizations();
+        } else {
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to activate organization.', 'Platform Error');
+        }
+    } catch (e) {
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Platform Error');
+    }
+}
+
 function applyPendingFilters() {
     const container = document.getElementById('pendingRegistrationsContainer');
     if (!container) return;
@@ -1036,9 +1094,10 @@ async function loadLiveThreatStream() {
     const container = document.getElementById('liveThreatStreamContainer');
     const countText = document.getElementById('liveStreamCountText');
     if (!container) return;
-
     try {
-        const res = await fetch('/api/analysis-history?limit=15');
+        const instId = getCurrentInstitutionId();
+        const url = instId ? `/api/analysis-history?limit=15&institution_id=${encodeURIComponent(instId)}` : '/api/analysis-history?limit=15';
+        const res = await fetch(url);
         const data = await res.json();
         if (data.success && data.history && data.history.length > 0) {
             window.recentAnalysisHistory = data.history;
@@ -1134,7 +1193,12 @@ async function loadThreatTrendData(range = '7d') {
         selectEl.value = range;
     }
     try {
-        const res = await fetch(`/api/threat-trend?range=${encodeURIComponent(range)}`);
+        const instId = getCurrentInstitutionId();
+        let url = `/api/threat-trend?range=${encodeURIComponent(range)}`;
+        if (instId) {
+            url += `&institution_id=${encodeURIComponent(instId)}`;
+        }
+        const res = await fetch(url);
         const data = await res.json();
         if (data.success) {
             window.currentThreatTrendData = data;
@@ -2458,6 +2522,8 @@ async function loadAnalysisHistory(filterRisk = undefined, filterStatus = undefi
         const params = new URLSearchParams();
         if (risk) params.append('risk', risk);
         if (status) params.append('status', status);
+        const currentInst = getCurrentInstitutionId();
+        if (currentInst) params.append('institution_id', currentInst);
 
         const url = params.toString() ? `/api/analysis-history?${params.toString()}` : '/api/analysis-history';
         const res = await fetch(url);
@@ -3010,25 +3076,58 @@ async function loadInstitutions() {
 }
 
 function renderInstitutionSelect(institutions) {
+    if (!isPlatformOwner()) {
+        const badge = document.getElementById('orgAdminStaticBadge');
+        if (badge && window.institutionName) {
+            badge.textContent = window.institutionName;
+        }
+        return;
+    }
     const sel = document.getElementById('socInstitutionSelect');
     if (!sel) return;
 
     if (!institutions || institutions.length === 0) {
-        sel.innerHTML = `<option value="1">BullyMail Demo Institution</option>`;
+        if (isPlatformOwner()) {
+            sel.innerHTML = `<option value="">Platform Command (Global Scope)</option>`;
+        } else {
+            sel.innerHTML = `<option value="${window.currentInstitutionId || ''}">${escapeHtml(window.institutionName || 'Organization Workspace')}</option>`;
+        }
         return;
     }
 
     let html = '';
+    if (isPlatformOwner()) {
+        const selGlobal = !window.platformSelectedOrgId ? 'selected' : '';
+        html += `<option value="" ${selGlobal}>Platform Command (Global Scope)</option>`;
+    }
     institutions.forEach(inst => {
-        const selected = (inst.id === window.activeInstitutionId) ? 'selected' : '';
+        const curId = getCurrentInstitutionId();
+        const selected = (inst.id === curId) ? 'selected' : '';
         html += `<option value="${inst.id}" ${selected}>${escapeHtml(inst.name)} (${escapeHtml(inst.code || 'INST')})</option>`;
     });
     sel.innerHTML = html;
 
-    if (!institutions.some(i => i.id === window.activeInstitutionId)) {
-        window.activeInstitutionId = institutions[0].id;
+    const currentId = getCurrentInstitutionId();
+    if (currentId) {
+        updateInstitutionBanner(currentId);
     }
-    updateInstitutionBanner(window.activeInstitutionId);
+}
+
+function updateInstitutionBanner(instId) {
+    const bannerNameEl = document.getElementById('tenantBannerName');
+    if (!bannerNameEl) return;
+    if (instId && window.cachedInstitutions && window.cachedInstitutions.length > 0) {
+        const found = window.cachedInstitutions.find(i => i.id === instId);
+        if (found) {
+            bannerNameEl.textContent = found.name;
+            return;
+        }
+    }
+    if (window.institutionName) {
+        bannerNameEl.textContent = window.institutionName;
+    } else if (isPlatformOwner()) {
+        bannerNameEl.textContent = instId ? `Organization #${instId}` : 'Platform Command (Global Scope)';
+    }
 }
 
 window.AUTO_SYNC_INTERVAL = 15; // 15 seconds fast auto-sync polling interval
@@ -3096,10 +3195,14 @@ async function performBackgroundAutoSync() {
         return;
     }
 
+    const instId = getCurrentInstitutionId();
+    if (!instId) {
+        return;
+    }
+
     window.isAutoSyncing = true;
     updateAutoSyncUI('syncing');
 
-    const instId = window.activeInstitutionId || 1;
     try {
         const res = await fetchWithTimeout(`/api/institutions/${instId}/sync-all`, { method: 'POST' }, 45000);
         const data = await res.json();
@@ -3155,22 +3258,30 @@ async function handleSyncAllMailboxes() {
 }
 
 function handleInstitutionChange(newId) {
-    const instId = parseInt(newId, 10);
-    if (!instId) return;
+    if (!isPlatformOwner()) {
+        return; // Guard: non-platform owners cannot switch workspaces
+    }
+    const instId = newId ? parseInt(newId, 10) : null;
+    window.platformSelectedOrgId = instId;
     window.activeInstitutionId = instId;
+    const instObj = (window.cachedInstitutions || []).find(i => i.id === instId);
+    updateWorkspaceInspectionBanner(instObj ? instObj.name : '');
     stopMailboxAutoSync();
     updateInstitutionBanner(instId);
     loadSecureMailboxes();
-    loadInstitutionEmails(instId);
+    if (instId) {
+        loadInstitutionEmails(instId);
+    }
 }
 
 async function loadSecureMailboxes(skipAutoSyncStart = false) {
     const listContainer = document.getElementById('connectedMailboxesList');
     if (!listContainer) return;
 
-    const instId = window.activeInstitutionId || 1;
+    const instId = getCurrentInstitutionId();
+    const url = instId ? `/api/institutions/${instId}/mailboxes` : `/api/mailboxes`;
     try {
-        const res = await fetchWithTimeout(`/api/institutions/${instId}/mailboxes`, {}, 15000);
+        const res = await fetchWithTimeout(url, {}, 15000);
         const data = await res.json();
 
         if (!data.success) {
@@ -3181,9 +3292,11 @@ async function loadSecureMailboxes(skipAutoSyncStart = false) {
         cachedMailboxes = data.mailboxes || [];
         renderSecureMailboxesSummary(cachedMailboxes);
         renderSecureMailboxesList(cachedMailboxes, listContainer);
-        loadInstitutionStats(instId);
+        if (instId) {
+            loadInstitutionStats(instId);
+        }
 
-        if (!skipAutoSyncStart) {
+        if (!skipAutoSyncStart && instId) {
             initMailboxAutoSync();
         }
     } catch (err) {
@@ -3192,7 +3305,8 @@ async function loadSecureMailboxes(skipAutoSyncStart = false) {
 }
 
 async function loadInstitutionStats(instId) {
-    const targetId = instId || window.activeInstitutionId || 1;
+    const targetId = instId || getCurrentInstitutionId();
+    if (!targetId) return;
     try {
         const res = await fetchWithTimeout(`/api/institutions/${targetId}/stats`, {}, 10000);
         const data = await res.json();
@@ -3228,9 +3342,10 @@ async function loadInstitutionEmails(instId) {
     const tbody = document.getElementById('instMailTableBody');
     if (!tbody) return;
 
-    const targetId = instId || window.activeInstitutionId || 1;
+    const targetId = instId || getCurrentInstitutionId();
+    const url = targetId ? `/api/institutions/${targetId}/emails?limit=50` : `/api/analysis-history?limit=50`;
     try {
-        const res = await fetchWithTimeout(`/api/institutions/${targetId}/emails?limit=50`, {}, 15000);
+        const res = await fetchWithTimeout(url, {}, 15000);
         const data = await res.json();
 
         if (!data.success || !data.emails || data.emails.length === 0) {
@@ -3279,14 +3394,21 @@ async function loadInstitutionEmails(instId) {
 }
 
 function openAddMailboxModal() {
-    const instId = window.activeInstitutionId || 1;
-    const inst = (window.cachedInstitutions || []).find(i => i.id === instId);
+    const instId = getCurrentInstitutionId();
+    let instName = window.institutionName || '';
+    if (instId && window.cachedInstitutions && window.cachedInstitutions.length > 0) {
+        const inst = window.cachedInstitutions.find(i => i.id === instId);
+        if (inst) instName = `${inst.name} (${inst.code || 'INST'})`;
+    }
+    if (!instName) {
+        instName = instId ? `Institution #${instId}` : (isPlatformOwner() ? 'Select an Organization' : 'My Organization');
+    }
 
     const nameEl = document.getElementById('inputMailboxInstitutionName');
     const idEl = document.getElementById('inputMailboxInstitutionId');
 
-    if (nameEl) nameEl.value = inst ? `${inst.name} (${inst.code || 'INST'})` : 'BullyMail Demo Institution';
-    if (idEl) idEl.value = instId;
+    if (nameEl) nameEl.value = instName;
+    if (idEl) idEl.value = instId || '';
 
     const modalEl = document.getElementById('addMailboxModal');
     if (modalEl && typeof bootstrap !== 'undefined') {
@@ -3919,11 +4041,13 @@ async function triggerHeaderSyncTelemetry(btn) {
 
     try {
         // 1. Sync all active institutional mailboxes
-        const instId = window.activeInstitutionId || 1;
-        try {
-            await fetchWithTimeout(`/api/institutions/${instId}/sync-all`, { method: 'POST' }, 35000);
-        } catch (e) {
-            console.warn("Header sync institution notice:", e);
+        const instId = getCurrentInstitutionId();
+        if (instId) {
+            try {
+                await fetchWithTimeout(`/api/institutions/${instId}/sync-all`, { method: 'POST' }, 35000);
+            } catch (e) {
+                console.warn("Header sync institution notice:", e);
+            }
         }
 
         // 2. Synchronize stats, live stream, threat trend, history, and mailboxes concurrently
@@ -4129,7 +4253,14 @@ async function handleAddMailboxSubmit() {
     if (!email || !pass) return;
 
     const instIdInput = document.getElementById('inputMailboxInstitutionId');
-    const instId = instIdInput ? (parseInt(instIdInput.value, 10) || window.activeInstitutionId || 1) : (window.activeInstitutionId || 1);
+    let instId = instIdInput && instIdInput.value ? parseInt(instIdInput.value, 10) : null;
+    if (!instId) {
+        instId = getCurrentInstitutionId();
+    }
+    if (!instId && !isPlatformOwner()) {
+        if (window.SOCToast) window.SOCToast.error('No organization selected for mailbox creation.', 'Validation Error');
+        return;
+    }
 
     try {
         const res = await fetchWithTimeout('/api/mailbox', {
@@ -4320,6 +4451,8 @@ function renderPlatformOrgsTable(orgs) {
             statusBadge = `<span class="badge bg-warning text-dark font-mono"><i class="fas fa-clock me-1"></i>PENDING</span>`;
         } else if (org.status === 'REJECTED') {
             statusBadge = `<span class="badge bg-danger font-mono"><i class="fas fa-ban me-1"></i>REJECTED</span>`;
+        } else if (org.status === 'SUSPENDED') {
+            statusBadge = `<span class="badge bg-secondary font-mono"><i class="fas fa-pause-circle me-1"></i>SUSPENDED</span>`;
         }
 
         let actionBtns = `<span class="text-muted font-mono small">—</span>`;
@@ -4330,6 +4463,21 @@ function renderPlatformOrgsTable(orgs) {
                 </button>
                 <button class="btn-soc-danger btn-sm font-mono" onclick="confirmRejectOrg(${org.id}, '${safeName}')">
                     <i class="fas fa-ban me-1"></i> Reject
+                </button>
+            `;
+        } else if (org.status === 'ACTIVE') {
+            actionBtns = `
+                <button class="btn-soc-secondary btn-sm font-mono me-1" onclick="inspectOrganizationWorkspace(${org.id}, '${safeName}')" title="Inspect Organization Workspace">
+                    <i class="fas fa-arrow-up-right-from-square me-1"></i> Open
+                </button>
+                <button class="btn-soc-danger btn-sm font-mono" onclick="confirmSuspendOrg(${org.id}, '${safeName}')" title="Suspend Organization Access">
+                    <i class="fas fa-pause me-1"></i> Suspend
+                </button>
+            `;
+        } else if (org.status === 'SUSPENDED') {
+            actionBtns = `
+                <button class="btn-soc-primary btn-sm font-mono" onclick="confirmActivateOrg(${org.id}, '${safeName}')" title="Activate Organization Access">
+                    <i class="fas fa-play me-1"></i> Activate
                 </button>
             `;
         }
@@ -4372,6 +4520,54 @@ function filterPlatformOrgs() {
     renderPlatformOrgsTable(filtered);
 }
 
+window.inspectOrganizationWorkspace = function(orgId, orgName) {
+    window.platformSelectedOrgId = orgId;
+    window.activeInstitutionId = orgId;
+    updateWorkspaceInspectionBanner(orgName);
+    window.switchTab('tab-dashboard');
+    loadDashboardStats();
+    loadSecureMailboxes();
+    loadMembers(1);
+    loadOrgSettings();
+    if (window.SOCToast) window.SOCToast.info(`Workspace inspection active for ${orgName}`, 'Workspace Switch');
+};
+
+window.exitOrganizationWorkspace = function() {
+    window.platformSelectedOrgId = null;
+    window.activeInstitutionId = null;
+    updateWorkspaceInspectionBanner();
+    window.switchTab('tab-organizations');
+    loadPlatformOrganizations();
+    loadDashboardStats();
+    loadSecureMailboxes();
+    if (window.SOCToast) window.SOCToast.success('Returned to Platform Command', 'Platform Scope');
+};
+
+function updateWorkspaceInspectionBanner(orgName = '') {
+    let banner = document.getElementById('platformInspectionBanner');
+    if (window.platformSelectedOrgId) {
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'platformInspectionBanner';
+            banner.className = 'alert alert-warning d-flex align-items-center justify-content-between p-2 mb-3 font-mono shadow-sm';
+            const mainContainer = document.querySelector('.main-content') || document.querySelector('main') || document.body;
+            mainContainer.insertBefore(banner, mainContainer.firstChild);
+        }
+        banner.innerHTML = `
+            <div class="d-flex align-items-center">
+                <i class="fas fa-eye text-warning fa-lg me-2"></i>
+                <span><strong>WORKSPACE INSPECTION:</strong> Inspecting <strong>${escapeHtml(orgName || 'Org #' + window.platformSelectedOrgId)}</strong> [Read/Manage Mode]</span>
+            </div>
+            <button class="btn btn-sm btn-outline-dark font-mono fw-bold" onclick="exitOrganizationWorkspace()">
+                <i class="fas fa-sign-out-alt me-1"></i> Exit to Platform Command
+            </button>
+        `;
+        banner.style.display = 'flex';
+    } else if (banner) {
+        banner.style.display = 'none';
+    }
+}
+
 /* ==========================================================================
    SECTION: Tenant Member Management Workstation (Org Admin)
    ========================================================================== */
@@ -4404,6 +4600,10 @@ async function loadMembers(page = 1) {
             member_type: memberType,
             status: status
         });
+        const currentInst = getCurrentInstitutionId();
+        if (currentInst) {
+            queryParams.append('institution_id', currentInst);
+        }
 
         const res = await fetch(`/api/members?${queryParams.toString()}`);
         const data = await res.json();
@@ -4536,6 +4736,9 @@ function renderMembersTable(members) {
                     <button type="button" class="btn-soc-secondary btn-sm me-1 font-mono p-1 px-2" title="Edit Member" onclick="openEditMemberModal(${m.id})">
                         <i class="fas fa-pen small"></i>
                     </button>
+                    <button type="button" class="btn-soc-outline btn-sm me-1 font-mono p-1 px-2" title="${m.status === 'ACTIVE' ? 'Disable Member' : 'Activate Member'}" onclick="toggleMemberStatus(${m.id}, '${m.status}')">
+                        <i class="fas ${m.status === 'ACTIVE' ? 'fa-user-slash text-warning' : 'fa-user-check text-success'} small"></i>
+                    </button>
                     <button type="button" class="btn-soc-danger btn-sm font-mono p-1 px-2" title="Delete Member" onclick="confirmDeleteMember(${m.id}, '${safeName}')">
                         <i class="fas fa-trash small"></i>
                     </button>
@@ -4614,6 +4817,7 @@ async function submitAddMember() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                institution_id: getCurrentInstitutionId(),
                 full_name: name,
                 email: email,
                 member_type: memberType,
@@ -4776,6 +4980,26 @@ async function executeDeleteMemberSubmit(forcedId) {
     }
 }
 
+async function toggleMemberStatus(memberId, currentStatus) {
+    const targetStatus = (currentStatus === 'ACTIVE') ? 'INACTIVE' : 'ACTIVE';
+    try {
+        const res = await fetch(`/api/members/${memberId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: targetStatus })
+        });
+        const data = await res.json();
+        if (data.success) {
+            if (window.SOCToast) SOCToast.success(data.message || `Member marked as ${targetStatus}.`, 'Member Directory');
+            loadMembers(window.membersCurrentPage);
+        } else {
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to update member status.', 'Directory Error');
+        }
+    } catch (e) {
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Directory Error');
+    }
+}
+
 function openImportCsvModal() {
     const fileInput = document.getElementById('inputCsvFile');
     if (fileInput) fileInput.value = '';
@@ -4811,6 +5035,8 @@ async function submitMemberCsvImport() {
     try {
         const formData = new FormData();
         formData.append('file', file);
+        const curInst = getCurrentInstitutionId();
+        if (curInst) formData.append('institution_id', curInst);
 
         const res = await fetch('/api/members/import-csv', {
             method: 'POST',
@@ -4882,7 +5108,9 @@ async function loadOrgSettings() {
     if (!canManageTenant()) return;
 
     try {
-        const res = await fetch('/api/org/settings');
+        const currentInst = getCurrentInstitutionId();
+        const url = currentInst ? `/api/org/settings?institution_id=${encodeURIComponent(currentInst)}` : '/api/org/settings';
+        const res = await fetch(url);
         const data = await res.json();
         if (!data.success || !data.organization) {
             console.warn('Unable to load organization settings:', data.error);
@@ -4933,7 +5161,9 @@ async function saveOrgSettings() {
         const sensitivity = document.getElementById('orgSettingsSensitivity')?.value || 'standard';
         const autoQuarantine = document.getElementById('orgSettingsAutoQuarantine')?.checked;
 
+        const currentInst = getCurrentInstitutionId();
         const payload = {
+            institution_id: currentInst,
             name: name,
             contact_name: contactName,
             contact_email: contactEmail,
