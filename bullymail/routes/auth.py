@@ -270,8 +270,19 @@ def require_auth(f):
         return f(user, *args, **kwargs)
     return decorated
 
+def normalize_role(role):
+    """Normalizes role strings to canonical names supporting SUPER_ADMIN, ORGANIZATION_ADMIN, etc."""
+    r = str(role or '').lower().strip()
+    if r in ('super_admin', 'platform_owner'):
+        return 'platform_owner'
+    if r in ('organization_admin', 'org_admin'):
+        return 'org_admin'
+    if r in ('organization_member', 'member', 'analyst', 'operator'):
+        return 'analyst'
+    return r
+
 def require_platform_owner(f):
-    """Restricts endpoint access STRICTLY to the Platform Owner (Jaya Chandra Vennam)."""
+    """Restricts endpoint access STRICTLY to the Platform Owner (Jaya Chandra Vennam) / Super Admin."""
     @wraps(f)
     def decorated(*args, **kwargs):
         user = get_current_user()
@@ -280,7 +291,7 @@ def require_platform_owner(f):
                 return jsonify({'success': False, 'error': 'Unauthorized'}), 401
             session.clear()
             return redirect(url_for('auth.login'))
-        if user.get('role') != 'platform_owner':
+        if normalize_role(user.get('role')) != 'platform_owner':
             if request.is_json or request.path.startswith('/api/'):
                 return jsonify({'success': False, 'error': 'Forbidden: Platform Owner access required'}), 403
             return render_template('login.html', error="Forbidden: Platform Owner access required."), 403
@@ -290,9 +301,9 @@ def require_platform_owner(f):
 def require_role(*roles):
     """
     Role-based access control decorator.
-    Supports 'platform_owner', 'org_admin', 'analyst' (and legacy 'admin', 'operator').
+    Supports 'super_admin' / 'platform_owner', 'organization_admin' / 'org_admin', 'organization_member' / 'analyst'.
     """
-    req = set(roles)
+    req = {normalize_role(r) for r in roles}
     allowed_roles = set(req)
 
     # Role hierarchy:
@@ -315,7 +326,7 @@ def require_role(*roles):
                     return jsonify({'success': False, 'error': 'Unauthorized'}), 401
                 session.clear()
                 return redirect(url_for('auth.login'))
-            user_role = user.get('role', 'analyst')
+            user_role = normalize_role(user.get('role', 'analyst'))
             if user_role not in allowed_roles:
                 if request.is_json or request.path.startswith('/api/'):
                     return jsonify({'success': False, 'error': 'Forbidden: Insufficient privileges'}), 403

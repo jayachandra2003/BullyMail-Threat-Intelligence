@@ -402,3 +402,98 @@ def test_warning_service_remains_functional(client, multi_tenant_fixture):
     assert 'target_recipient' in preview
     assert 'warning_subject' in preview
     assert 'warning_body' in preview
+
+
+# =========================================================================
+# 6. Explicit 13-Point Multi-Tenant Verification Tests
+# =========================================================================
+
+def test_super_admin_role_alias_and_approvals(client, multi_tenant_fixture):
+    """TEST 1 & 3: SUPER_ADMIN role alias can view pending approvals and approve organizations."""
+    f = multi_tenant_fixture
+    login_as(client, f['owner_id'], 'jayachandra', 'SUPER_ADMIN', full_name="Jaya Chandra Vennam")
+
+    # 1. SUPER_ADMIN can view pending approvals
+    res = client.get('/api/admin/pending-registrations')
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data['success'] is True
+    assert 'pending_orgs' in data
+
+    # 2. SUPER_ADMIN can approve organization
+    res_app = client.post(f"/api/admin/approve-org/{f['inst_gamma_id']}")
+    assert res_app.status_code == 200
+    assert res_app.get_json()['success'] is True
+
+
+def test_organization_admin_role_alias_rejections(client, multi_tenant_fixture):
+    """TEST 2 & 4 & 11: ORGANIZATION_ADMIN cannot view pending approvals or approve organizations (HTTP 403)."""
+    f = multi_tenant_fixture
+    login_as(client, f['admin_a_id'], 'vit_admin', 'ORGANIZATION_ADMIN', institution_id=f['inst_a_id'], full_name="Alexa")
+
+    # 1. ORGANIZATION_ADMIN cannot view pending approvals
+    res1 = client.get('/api/admin/pending-registrations')
+    assert res1.status_code == 403
+
+    # 2. ORGANIZATION_ADMIN cannot approve organizations
+    res2 = client.post(f"/api/admin/approve-org/{f['inst_gamma_id']}")
+    assert res2.status_code == 403
+
+    # 3. ORGANIZATION_ADMIN cannot access platform overview
+    res3 = client.get('/api/admin/platform-overview')
+    assert res3.status_code == 403
+
+
+def test_org_admin_cannot_access_other_org_mailboxes_threats_incidents(client, multi_tenant_fixture):
+    """TEST 8, 9, 10: Organization Admin cannot access another organization's mailboxes, incidents, or threats."""
+    f = multi_tenant_fixture
+    login_as(client, f['admin_b_id'], 'abc_admin', 'org_admin', institution_id=f['inst_b_id'])
+
+    # 1. Cross-tenant incident details (Institution A incident requested by Org Admin B)
+    res_inc = client.get(f"/api/analysis/history/{f['analysis_a_id']}")
+    assert res_inc.status_code in (403, 404)
+
+    # 2. Cross-tenant threat statistics (Org Admin B cannot query Institution A stats)
+    res_threats = client.get(f"/api/institutions/{f['inst_a_id']}/stats")
+    assert res_threats.status_code == 403
+
+    # 3. Cross-tenant mailbox emails
+    res_mb_emails = client.get(f"/api/mailboxes/999/emails?institution_id={f['inst_a_id']}")
+    # Even with parameter tampering, user B is confined to inst B (returns 404 for mailbox not in tenant B)
+    assert res_mb_emails.status_code in (403, 404)
+
+
+def test_member_categories_support_universities_and_companies(client, multi_tenant_fixture):
+    """TEST 5, 6, 7: Organization Admin can add and view members across categories (student, faculty, staff, employee, worker, other)."""
+    f = multi_tenant_fixture
+
+    # University Admin (Institution A) adds student, faculty, staff
+    login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'])
+    for cat, email in [('student', 's1@vit.ac.in'), ('faculty', 'f1@vit.ac.in'), ('staff', 'st1@vit.ac.in')]:
+        res = client.post('/api/members', json={
+            'full_name': f'Test {cat.capitalize()}',
+            'email': email,
+            'member_type': cat,
+            'department': 'Campus Ops'
+        })
+        assert res.status_code == 201
+
+    # Company Admin (Institution B) adds employee, worker, other
+    login_as(client, f['admin_b_id'], 'abc_admin', 'org_admin', institution_id=f['inst_b_id'])
+    for cat, email in [('employee', 'e1@abccorp.com'), ('worker', 'w1@abccorp.com'), ('other', 'o1@abccorp.com')]:
+        res = client.post('/api/members', json={
+            'full_name': f'Corp {cat.capitalize()}',
+            'email': email,
+            'member_type': cat,
+            'department': 'Corporate Ops'
+        })
+        assert res.status_code == 201
+
+    # Cross-tenant isolation verification: Admin B cannot see Admin A's members
+    res_b_list = client.get('/api/members')
+    assert res_b_list.status_code == 200
+    b_emails = [m['email'] for m in res_b_list.get_json()['members']]
+    assert 'e1@abccorp.com' in b_emails
+    assert 'w1@abccorp.com' in b_emails
+    assert 's1@vit.ac.in' not in b_emails
+    assert 'f1@vit.ac.in' not in b_emails

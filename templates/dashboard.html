@@ -70,13 +70,34 @@
                     <li>
                         <a class="nav-link-v2 active" data-tab="tab-dashboard">
                             <i class="fas fa-chart-pie"></i>
-                            <span>{% if session.get('role') == 'platform_owner' %}Executive Overview{% else %}Executive Dashboard{% endif %}</span>
+                            <span>{% if session.get('role') in ('platform_owner', 'super_admin') %}Executive Overview{% else %}Executive Dashboard{% endif %}</span>
                         </a>
                     </li>
                 </ul>
             </div>
 
-            {% if session.get('role') != 'platform_owner' %}
+            {% if session.get('role') in ('platform_owner', 'super_admin') %}
+            <!-- Platform Owner Only: Organizations & Governance -->
+            <div class="nav-group">
+                <div class="nav-group-title">Organizations</div>
+                <ul class="nav-menu">
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-organizations">
+                            <i class="fas fa-sitemap"></i>
+                            <span>Organizations</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-pending-approvals" id="navPendingApprovalsLink">
+                            <i class="fas fa-user-clock text-warning"></i>
+                            <span>Pending Approvals</span>
+                            <span class="badge bg-warning text-dark font-mono ms-auto d-none" id="sidebarPendingBadge" style="font-size: 0.65rem; padding: 2px 6px;">0</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            {% endif %}
+
             <div class="nav-group">
                 <div class="nav-group-title">Investigate</div>
                 <ul class="nav-menu">
@@ -94,48 +115,6 @@
                     </li>
                 </ul>
             </div>
-            {% endif %}
-
-            {% if session.get('role') in ('org_admin', 'admin') %}
-            <div class="nav-group">
-                <div class="nav-group-title">Organization</div>
-                <ul class="nav-menu">
-                    <li>
-                        <a class="nav-link-v2" data-tab="tab-members">
-                            <i class="fas fa-users-gear"></i>
-                            <span>Organization Members</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a class="nav-link-v2" data-tab="tab-org-settings">
-                            <i class="fas fa-sliders"></i>
-                            <span>Organization Settings</span>
-                        </a>
-                    </li>
-                </ul>
-            </div>
-            {% endif %}
-
-            {% if session.get('role') == 'platform_owner' %}
-            <div class="nav-group">
-                <div class="nav-group-title">Platform Governance</div>
-                <ul class="nav-menu">
-                    <li>
-                        <a class="nav-link-v2" data-tab="tab-pending-approvals" id="navPendingApprovalsLink">
-                            <i class="fas fa-user-clock text-warning"></i>
-                            <span>Organization Approvals</span>
-                            <span class="badge bg-warning text-dark font-mono ms-auto d-none" id="sidebarPendingBadge" style="font-size: 0.65rem; padding: 2px 6px;">0</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a class="nav-link-v2" data-tab="tab-organizations">
-                            <i class="fas fa-sitemap"></i>
-                            <span>Organizations Directory</span>
-                        </a>
-                    </li>
-                </ul>
-            </div>
-            {% endif %}
 
             <div class="nav-group">
                 <div class="nav-group-title">Intelligence</div>
@@ -164,8 +143,50 @@
                             <span>Secure Mailbox</span>
                         </a>
                     </li>
+                    {% if session.get('role') in ('org_admin', 'organization_admin', 'admin') %}
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-members">
+                            <i class="fas fa-users-gear"></i>
+                            <span>Organization Members</span>
+                        </a>
+                    </li>
+                    {% endif %}
                 </ul>
             </div>
+
+            {% if session.get('role') in ('org_admin', 'organization_admin', 'admin') %}
+            <div class="nav-group">
+                <div class="nav-group-title">Settings</div>
+                <ul class="nav-menu">
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-org-settings">
+                            <i class="fas fa-sliders"></i>
+                            <span>Organization Settings</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if session.get('role') in ('platform_owner', 'super_admin') %}
+            <div class="nav-group">
+                <div class="nav-group-title">Platform</div>
+                <ul class="nav-menu">
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-org-settings">
+                            <i class="fas fa-sliders"></i>
+                            <span>Platform Settings</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-history">
+                            <i class="fas fa-shield-halved"></i>
+                            <span>Audit Logs</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            {% endif %}
 
             <!-- Sidebar Telemetry & User Controls -->
             <div class="sidebar-footer">
@@ -179,11 +200,11 @@
                             {{ session.get('full_name') or session.get('username', 'Administrator') }}
                         </div>
                         <div class="user-role font-mono">
-                            {% if session.get('role') == 'platform_owner' %}
+                            {% if session.get('role') in ('platform_owner', 'super_admin') %}
                                 <span class="badge bg-primary text-light" style="font-size: 0.62rem; padding: 2px 5px;">Platform Owner</span>
-                            {% elif session.get('role') in ('org_admin', 'admin') %}
+                            {% elif session.get('role') in ('org_admin', 'organization_admin', 'admin') %}
                                 <span class="badge bg-info text-dark" style="font-size: 0.62rem; padding: 2px 5px;">Org Admin</span>
-                            {% elif session.get('role') == 'analyst' %}
+                            {% elif session.get('role') in ('analyst', 'organization_member') %}
                                 <span class="badge bg-secondary text-light" style="font-size: 0.62rem; padding: 2px 5px;">Analyst</span>
                             {% else %}
                                 {{ session.get('role', 'SOC Operator') }}
@@ -1322,6 +1343,7 @@
                                 <option value="faculty">Faculty</option>
                                 <option value="staff">Staff</option>
                                 <option value="employee">Employee</option>
+                                <option value="worker">Worker</option>
                                 <option value="contractor">Contractor</option>
                                 <option value="other">Other</option>
                             </select>
@@ -1470,6 +1492,7 @@
                                             <option value="faculty">Faculty</option>
                                             <option value="staff">Staff</option>
                                             <option value="employee">Employee</option>
+                                            <option value="worker">Worker</option>
                                             <option value="contractor">Contractor</option>
                                             <option value="other">Other</option>
                                         </select>
@@ -1524,6 +1547,7 @@
                                             <option value="faculty">Faculty</option>
                                             <option value="staff">Staff</option>
                                             <option value="employee">Employee</option>
+                                            <option value="worker">Worker</option>
                                             <option value="contractor">Contractor</option>
                                             <option value="other">Other</option>
                                         </select>

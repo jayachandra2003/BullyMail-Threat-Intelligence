@@ -11,10 +11,10 @@ def _resolve_member_inst_id(current_user, req_inst_id=None):
     Enforces strict tenant isolation for member operations.
     Returns: (institution_id, error_tuple_or_None)
     """
-    user_role = current_user.get('role', 'analyst')
+    user_role = (current_user.get('role') or 'analyst').lower().strip()
     user_inst = current_user.get('institution_id')
 
-    if user_role == 'platform_owner':
+    if user_role in ('platform_owner', 'super_admin'):
         if req_inst_id is not None:
             try:
                 t_id = int(req_inst_id)

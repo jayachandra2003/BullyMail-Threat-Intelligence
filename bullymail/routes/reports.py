@@ -8,10 +8,10 @@ from .auth import get_current_user
 reports_bp = Blueprint('reports', __name__)
 
 def _resolve_tenant_inst_id(user, req_inst):
-    user_role = user.get('role', 'analyst')
+    user_role = (user.get('role') or 'analyst').lower().strip()
     user_inst = user.get('institution_id')
 
-    if user_role == 'platform_owner':
+    if user_role in ('platform_owner', 'super_admin'):
         if req_inst:
             try:
                 return int(req_inst), None

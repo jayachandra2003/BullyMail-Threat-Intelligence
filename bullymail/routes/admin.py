@@ -43,7 +43,7 @@ def get_pending_registrations(current_user):
 def list_institutions(current_user):
     """Lists institutions. Platform owner sees all; org admin sees only their own."""
     try:
-        if current_user.get('role') == 'platform_owner':
+        if (current_user.get('role') or '').lower() in ('platform_owner', 'super_admin'):
             institutions = InstitutionModel.list_all()
         else:
             inst = InstitutionModel.get_by_id(current_user.get('institution_id'))
@@ -186,7 +186,7 @@ def list_admin_mailboxes(current_user):
     """Lists all mailboxes belonging strictly to current_user['institution_id']."""
     try:
         inst_id = current_user.get('institution_id')
-        if not inst_id and current_user.get('role') != 'platform_owner':
+        if not inst_id and (current_user.get('role') or '').lower() not in ('platform_owner', 'super_admin'):
             return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
         inst_id = int(inst_id) if inst_id else 1
 

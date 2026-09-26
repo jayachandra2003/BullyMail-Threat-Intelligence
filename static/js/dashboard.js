@@ -32,9 +32,13 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAnalysisHistory();
     loadModelStatus();
     loadAvailableDatasets();
-    if (window.currentUserRole === 'platform_owner') {
+    const isPlatformOwner = ['platform_owner', 'super_admin'].includes((window.currentUserRole || '').toLowerCase());
+    const isOrgAdmin = ['org_admin', 'organization_admin', 'admin'].includes((window.currentUserRole || '').toLowerCase());
+
+    if (isPlatformOwner) {
         loadPendingRegistrations();
-    } else if (window.currentUserRole === 'org_admin' || window.currentUserRole === 'admin') {
+        loadPlatformOrganizations();
+    } else if (isOrgAdmin) {
         loadMembers();
         loadOrgSettings();
     }

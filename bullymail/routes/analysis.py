@@ -24,9 +24,9 @@ def _resolve_target_institution_id(current_user, requested_inst_id=None, strict_
       - If strict_403 is False: safely ignores client tampering and enforces user's authentic institution_id.
     - Never defaults or falls back to institution_id = 1 for non-platform_owners.
     """
-    user_role = current_user.get('role', 'analyst')
+    user_role = (current_user.get('role') or 'analyst').lower().strip()
     user_inst_id = current_user.get('institution_id')
-    is_platform_level = (user_role == 'platform_owner' or (user_role == 'admin' and not user_inst_id))
+    is_platform_level = (user_role in ('platform_owner', 'super_admin') or (user_role == 'admin' and not user_inst_id))
 
     if is_platform_level:
         if requested_inst_id is not None:
