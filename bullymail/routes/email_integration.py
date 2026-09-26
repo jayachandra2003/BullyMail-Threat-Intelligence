@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, session
 from ..database.connection import fetch_one
-from ..services.email_service import EmailService
+from ..services.email_service import EmailService, email_service
 from ..services.risk_engine import UnifiedRiskEngine
 from ..models.analysis import AnalysisModel
 from ..worker.processor import MailboxProcessor
@@ -9,7 +9,6 @@ from .auth import get_current_user, require_role
 from ..models.institution import InstitutionModel
 
 email_bp = Blueprint('email', __name__)
-email_service = EmailService()
 risk_engine = UnifiedRiskEngine()
 mailbox_processor = MailboxProcessor(risk_engine=risk_engine)
 
@@ -64,12 +63,13 @@ def _iso(val):
     return val.isoformat() if hasattr(val, 'isoformat') else str(val)
 
 @email_bp.route('/api/institutions', methods=['GET'])
-@require_role('admin', 'analyst')
+@email_bp.route('/api/organizations', methods=['GET'])
+@require_role('admin', 'org_admin', 'platform_owner', 'analyst')
 def get_institutions(current_user):
-    user_role = current_user.get('role', 'analyst')
+    user_role = (current_user.get('role') or 'analyst').lower().strip()
     user_inst_id = current_user.get('institution_id') or 1
 
-    if user_role == 'admin':
+    if user_role in ('platform_owner', 'super_admin'):
         insts = InstitutionModel.list_all()
     else:
         inst = InstitutionModel.get_by_id(user_inst_id)
@@ -280,15 +280,27 @@ def test_new_mailbox_connection(current_user):
     return jsonify({'success': success, 'message': message})
 
 @email_bp.route('/api/mailbox/<int:mailbox_id>/test', methods=['POST'])
-@require_role('admin')
+@email_bp.route('/api/mailboxes/<int:mailbox_id>/test', methods=['POST'])
+@require_role('admin', 'org_admin', 'platform_owner')
 def test_existing_mailbox_connection(current_user, mailbox_id):
-    inst_id = current_user.get('institution_id') or 1
+    user_role = (current_user.get('role') or '').lower().strip()
+    inst_id = current_user.get('institution_id')
+
+    if user_role in ('platform_owner', 'super_admin') and not inst_id:
+        mb_row = fetch_one("SELECT institution_id FROM email_config WHERE id = %s", (mailbox_id,))
+        inst_id = mb_row['institution_id'] if mb_row else 1
+    elif not inst_id:
+        return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
 
     mb = email_service.get_mailbox_by_id(mailbox_id, inst_id)
     if not mb:
         return jsonify({'success': False, 'error': 'Mailbox not found'}), 404
 
-    success, message = email_service.test_connection(institution_id=inst_id)
+    email_addr, app_pw, smtp_host, smtp_p, imap_host = email_service._get_credentials(mailbox_id=mailbox_id, institution_id=inst_id)
+    if not email_addr or not app_pw:
+        return jsonify({'success': False, 'error': 'Mailbox credentials not found or unreadable.'}), 400
+
+    success, message = email_service.test_preflight_connection(email_addr, app_pw, imap_server=imap_host)
     return jsonify({'success': success, 'message': message})
 
 @email_bp.route('/api/mailbox', methods=['POST'])
@@ -332,13 +344,18 @@ def create_mailbox(current_user):
 
 @email_bp.route('/api/mailbox/<int:mailbox_id>/sync', methods=['POST'])
 @email_bp.route('/api/mailboxes/<int:mailbox_id>/sync', methods=['POST'])
-@require_role('admin')
+@require_role('admin', 'org_admin', 'platform_owner')
 def sync_mailbox(current_user, mailbox_id):
     mb = fetch_one("SELECT * FROM email_config WHERE id = %s", (mailbox_id,))
     if not mb:
         return jsonify({'success': False, 'error': 'Mailbox not found'}), 404
 
     inst_id = mb.get('institution_id') or 1
+    user_inst = current_user.get('institution_id')
+    user_role = (current_user.get('role') or '').lower().strip()
+    if user_role not in ('platform_owner', 'super_admin') and user_inst != inst_id:
+        return jsonify({'success': False, 'error': 'Forbidden: Access to specified mailbox is denied'}), 403
+
     if mb.get('status') == 'disabled':
         return jsonify({'success': False, 'error': 'Cannot sync a disabled mailbox.'}), 400
 
@@ -421,15 +438,17 @@ def sync_all_institution_mailboxes(current_user, inst_id):
     })
 
 @email_bp.route('/api/mailbox/<int:mailbox_id>/enable', methods=['POST'])
-@require_role('admin')
+@email_bp.route('/api/mailboxes/<int:mailbox_id>/enable', methods=['POST'])
+@require_role('admin', 'org_admin', 'platform_owner')
 def enable_mailbox(current_user, mailbox_id):
     mb = fetch_one("SELECT institution_id FROM email_config WHERE id = %s", (mailbox_id,))
     if not mb:
         return jsonify({'success': False, 'error': 'Mailbox not found'}), 404
     inst_id = mb.get('institution_id')
     user_inst = current_user.get('institution_id')
-    if user_inst and user_inst != inst_id and current_user.get('role') != 'admin':
-        return jsonify({'success': False, 'error': 'Unauthorized institution access'}), 403
+    user_role = (current_user.get('role') or '').lower().strip()
+    if user_inst and user_inst != inst_id and user_role not in ('platform_owner', 'super_admin'):
+        return jsonify({'success': False, 'error': 'Forbidden: Access to specified mailbox is denied'}), 403
 
     ok = email_service.update_mailbox_status(mailbox_id, inst_id, 'active')
     if not ok:
@@ -437,20 +456,48 @@ def enable_mailbox(current_user, mailbox_id):
     return jsonify({'success': True, 'message': 'Mailbox enabled successfully.'})
 
 @email_bp.route('/api/mailbox/<int:mailbox_id>/disable', methods=['POST'])
-@require_role('admin')
+@email_bp.route('/api/mailboxes/<int:mailbox_id>/disable', methods=['POST'])
+@require_role('admin', 'org_admin', 'platform_owner')
 def disable_mailbox(current_user, mailbox_id):
     mb = fetch_one("SELECT institution_id FROM email_config WHERE id = %s", (mailbox_id,))
     if not mb:
         return jsonify({'success': False, 'error': 'Mailbox not found'}), 404
     inst_id = mb.get('institution_id')
     user_inst = current_user.get('institution_id')
-    if user_inst and user_inst != inst_id and current_user.get('role') != 'admin':
-        return jsonify({'success': False, 'error': 'Unauthorized institution access'}), 403
+    user_role = (current_user.get('role') or '').lower().strip()
+    if user_inst and user_inst != inst_id and user_role not in ('platform_owner', 'super_admin'):
+        return jsonify({'success': False, 'error': 'Forbidden: Access to specified mailbox is denied'}), 403
 
     ok = email_service.update_mailbox_status(mailbox_id, inst_id, 'disabled')
     if not ok:
         return jsonify({'success': False, 'error': 'Mailbox not found'}), 404
     return jsonify({'success': True, 'message': 'Mailbox disabled successfully.'})
+
+@email_bp.route('/api/mailbox/<int:mailbox_id>', methods=['DELETE'])
+@email_bp.route('/api/mailboxes/<int:mailbox_id>', methods=['DELETE'])
+@require_role('admin', 'org_admin', 'platform_owner')
+def delete_mailbox_endpoint(current_user, mailbox_id):
+    """Deletes/removes a tenant-owned mailbox (Tenant Scoped)."""
+    try:
+        user_role = (current_user.get('role') or '').lower().strip()
+        inst_id = current_user.get('institution_id')
+
+        if user_role in ('platform_owner', 'super_admin') and not inst_id:
+            mb_row = fetch_one("SELECT institution_id FROM email_config WHERE id = %s", (mailbox_id,))
+            if not mb_row:
+                return jsonify({'success': False, 'error': 'Mailbox not found.'}), 404
+            inst_id = mb_row['institution_id']
+        elif not inst_id:
+            return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
+
+        success, message = email_service.delete_mailbox(mailbox_id, inst_id)
+        if not success:
+            status_code = 404 if 'not found' in message.lower() else 400
+            return jsonify({'success': False, 'error': message}), status_code
+
+        return jsonify({'success': True, 'message': message})
+    except Exception as e:
+        return jsonify({'success': False, 'error': f"Failed to delete mailbox: {e}"}), 500
 
 @email_bp.route('/api/configure-email', methods=['POST'])
 @require_role('admin')

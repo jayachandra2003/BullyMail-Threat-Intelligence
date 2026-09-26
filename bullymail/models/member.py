@@ -172,6 +172,10 @@ class OrganizationMemberModel:
 
         if 'identifier' in fields and 'member_id' not in fields:
             fields['member_id'] = fields.pop('identifier')
+        if 'name' in fields and 'full_name' not in fields:
+            fields['full_name'] = fields.pop('name')
+        if 'role' in fields and 'member_type' not in fields:
+            fields['member_type'] = fields.pop('role')
 
         allowed = {'full_name', 'email', 'member_id', 'department', 'member_type', 'status'}
         updates = []

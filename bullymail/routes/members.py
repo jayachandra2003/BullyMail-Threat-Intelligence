@@ -147,11 +147,12 @@ def add_member(current_user, org_id=None):
         return jsonify({'success': False, 'error': f"Failed to add member: {e}"}), 500
 
 @members_bp.route('/api/members/<int:member_id>', methods=['GET'])
+@members_bp.route('/api/organizations/<int:org_id>/members/<int:member_id>', methods=['GET'])
 @require_role('platform_owner', 'org_admin')
-def get_member(current_user, member_id):
+def get_member(current_user, member_id, org_id=None):
     """Retrieves a single member by ID (Tenant Scoped)."""
     try:
-        req_inst = request.args.get('institution_id')
+        req_inst = org_id if org_id is not None else request.args.get('institution_id')
         inst_id, err = _resolve_member_inst_id(current_user, req_inst)
         if err:
             msg, code = err
@@ -166,12 +167,13 @@ def get_member(current_user, member_id):
         return jsonify({'success': False, 'error': f"Failed to retrieve member: {e}"}), 500
 
 @members_bp.route('/api/members/<int:member_id>', methods=['PUT'])
+@members_bp.route('/api/organizations/<int:org_id>/members/<int:member_id>', methods=['PUT'])
 @require_role('platform_owner', 'org_admin')
-def update_member(current_user, member_id):
+def update_member(current_user, member_id, org_id=None):
     """Updates member details (Tenant Scoped)."""
     try:
-        data = request.get_json() or {}
-        req_inst = data.get('institution_id')
+        data = request.get_json(silent=True) or {}
+        req_inst = org_id if org_id is not None else data.get('institution_id')
         inst_id, err = _resolve_member_inst_id(current_user, req_inst)
         if err:
             msg, code = err
@@ -182,14 +184,18 @@ def update_member(current_user, member_id):
         if not existing:
             return jsonify({'success': False, 'error': 'Member not found.'}), 404
 
+        full_name = data.get('name') or data.get('full_name')
+        member_type = data.get('role') or data.get('member_type')
+        clean_mid = data.get('identifier') or data.get('member_id')
+
         success = OrganizationMemberModel.update_member(
             member_id,
             inst_id,
-            full_name=data.get('full_name'),
+            full_name=full_name,
             email=data.get('email'),
-            member_id=data.get('member_id'),
+            member_id=clean_mid,
             department=data.get('department'),
-            member_type=data.get('member_type'),
+            member_type=member_type,
             status=data.get('status')
         )
         return jsonify({'success': success, 'message': 'Member updated successfully.' if success else 'No changes applied.'})
@@ -199,11 +205,12 @@ def update_member(current_user, member_id):
         return jsonify({'success': False, 'error': f"Failed to update member: {e}"}), 500
 
 @members_bp.route('/api/members/<int:member_id>', methods=['DELETE'])
+@members_bp.route('/api/organizations/<int:org_id>/members/<int:member_id>', methods=['DELETE'])
 @require_role('platform_owner', 'org_admin')
-def delete_member(current_user, member_id):
+def delete_member(current_user, member_id, org_id=None):
     """Deletes a member from the organization (Tenant Scoped)."""
     try:
-        req_inst = request.args.get('institution_id')
+        req_inst = org_id if org_id is not None else request.args.get('institution_id')
         inst_id, err = _resolve_member_inst_id(current_user, req_inst)
         if err:
             msg, code = err

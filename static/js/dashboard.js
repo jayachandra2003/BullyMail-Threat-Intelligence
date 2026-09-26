@@ -58,6 +58,39 @@ document.addEventListener('DOMContentLoaded', () => {
 /* ==========================================================================
    1. Navigation & Layout Controls
    ========================================================================== */
+function isPlatformOwnerRole() {
+    return ['platform_owner', 'super_admin'].includes((window.currentUserRole || '').toLowerCase());
+}
+
+function isOrgAdminRole() {
+    return ['org_admin', 'organization_admin', 'admin'].includes((window.currentUserRole || '').toLowerCase());
+}
+
+function canManageTenant() {
+    return isPlatformOwnerRole() || isOrgAdminRole();
+}
+
+window.switchTab = function(targetTab) {
+    const link = document.querySelector(`.nav-link-v2[data-tab="${targetTab}"], .nav-link-sub[data-tab="${targetTab}"]`);
+    if (link) {
+        link.click();
+    } else {
+        const pane = document.getElementById(targetTab);
+        if (pane) {
+            document.querySelectorAll('.tab-content-pane').forEach(p => p.style.display = 'none');
+            pane.style.display = 'block';
+            document.querySelectorAll('.nav-link-v2, .nav-link-sub').forEach(l => l.classList.remove('active'));
+            if (targetTab === 'tab-dashboard') renderCharts();
+            if (targetTab === 'tab-history') loadAnalysisHistory();
+            if (targetTab === 'tab-email') loadSecureMailboxes();
+            if (targetTab === 'tab-pending-approvals' && isPlatformOwnerRole()) loadPendingRegistrations();
+            if (targetTab === 'tab-organizations' && isPlatformOwnerRole()) loadPlatformOrganizations();
+            if (targetTab === 'tab-members') loadMembers();
+            if (targetTab === 'tab-org-settings') loadOrgSettings();
+        }
+    }
+};
+
 function initNavigation() {
     const navLinks = document.querySelectorAll('.nav-link-v2, .nav-link-sub');
     navLinks.forEach(link => {
@@ -79,8 +112,8 @@ function initNavigation() {
                 if (targetTab === 'tab-dashboard') renderCharts();
                 if (targetTab === 'tab-history') loadAnalysisHistory();
                 if (targetTab === 'tab-email') loadSecureMailboxes();
-                if (targetTab === 'tab-pending-approvals' && window.currentUserRole === 'platform_owner') loadPendingRegistrations();
-                if (targetTab === 'tab-organizations' && window.currentUserRole === 'platform_owner') loadPlatformOrganizations();
+                if (targetTab === 'tab-pending-approvals' && isPlatformOwnerRole()) loadPendingRegistrations();
+                if (targetTab === 'tab-organizations' && isPlatformOwnerRole()) loadPlatformOrganizations();
                 if (targetTab === 'tab-members') loadMembers();
                 if (targetTab === 'tab-org-settings') loadOrgSettings();
             }
@@ -306,6 +339,18 @@ async function loadDashboardStats() {
                 if (headerDateEl) {
                     headerDateEl.textContent = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                 }
+            }
+
+            // Tenant Banner Real-Time Telemetry
+            const tMembersEl = document.getElementById('tenantStatMembers');
+            const tMailboxesEl = document.getElementById('tenantStatMailboxes');
+            if (isOrgAdminRole()) {
+                fetch('/api/members?limit=1').then(r => r.json()).then(d => {
+                    if (d.success && tMembersEl) tMembersEl.textContent = d.total || 0;
+                }).catch(() => {});
+                fetch('/api/mailboxes').then(r => r.json()).then(d => {
+                    if (d.success && tMailboxesEl) tMailboxesEl.textContent = (d.mailboxes || []).length;
+                }).catch(() => {});
             }
 
             // 2. Threat Posture Hero Card
@@ -1911,7 +1956,7 @@ function renderSecurityReport(rep, container) {
         statusBadgeHtml = '<span class="badge bg-secondary-subtle text-muted border border-secondary-subtle px-2 py-1" style="font-size: 0.7rem;"><i class="fas fa-shield-slash me-1"></i>FALSE POSITIVE</span>';
     }
 
-    const isAdmin = (typeof window.currentUserRole !== 'undefined' && window.currentUserRole === 'admin');
+    const isAdmin = canManageTenant();
 
     let html = `
         <div class="soc-drawer-investigation animate-fade-in">
@@ -3310,7 +3355,7 @@ function renderSecureMailboxesList(mailboxes, container) {
 
         const formattedLastSync = m.last_synced_at ? new Date(m.last_synced_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Never';
         const formattedConfigured = m.configured_at ? new Date(m.configured_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
-        const isAdmin = (window.currentUserRole === 'admin');
+        const isAdmin = canManageTenant();
         const isGmail = (m.email_address || '').toLowerCase().includes('gmail');
 
         html += `
@@ -4336,7 +4381,7 @@ window.membersTotalPages = 1;
 window.membersRawData = [];
 
 async function loadMembers(page = 1) {
-    if (window.currentUserRole !== 'org_admin' && window.currentUserRole !== 'admin') return;
+    if (!canManageTenant()) return;
     const container = document.getElementById('membersTableContainer');
     if (!container) return;
 
@@ -4834,7 +4879,7 @@ async function submitMemberCsvImport() {
    SECTION: Organization Profile & Settings (Org Admin)
    ========================================================================== */
 async function loadOrgSettings() {
-    if (window.currentUserRole !== 'org_admin' && window.currentUserRole !== 'admin') return;
+    if (!canManageTenant()) return;
 
     try {
         const res = await fetch('/api/org/settings');

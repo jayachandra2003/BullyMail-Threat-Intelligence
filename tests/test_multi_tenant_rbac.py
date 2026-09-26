@@ -532,3 +532,306 @@ def test_member_categories_support_universities_and_companies(client, multi_tena
     assert 'w1@abccorp.com' in b_emails
     assert 's1@vit.ac.in' not in b_emails
     assert 'f1@vit.ac.in' not in b_emails
+
+
+def test_org_admin_mailbox_full_lifecycle(client, multi_tenant_fixture, monkeypatch):
+    """TEST 3, 4, 5, 10: Organization Admin can create, test, update, toggle, sync, and delete mailboxes for their org, but never other orgs."""
+    f = multi_tenant_fixture
+
+    # Mock preflight and sync to isolate from external networks
+    monkeypatch.setattr(admin_warning_service, 'send_warning_email', lambda *args, **kwargs: (True, "Mocked"))
+    from bullymail.services.email_service import EmailService, email_service
+    from bullymail.routes.email_integration import mailbox_processor
+    monkeypatch.setattr(EmailService, 'test_preflight_connection', lambda *args, **kwargs: (True, "Connection OK"))
+    monkeypatch.setattr(email_service, 'test_preflight_connection', lambda *args, **kwargs: (True, "Connection OK"))
+    monkeypatch.setattr(mailbox_processor, 'process_mailbox', lambda *args, **kwargs: {'success': True, 'emails_processed': 1, 'threats_detected': 0, 'duplicates_skipped': 0})
+
+    # Org Admin Alpha logs in
+    login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'])
+
+    # 1. Create mailbox for Organization A
+    res_create = client.post('/api/mailbox', json={
+        'email_address': 'soc-inbox@vit.ac.in',
+        'app_password': 'vit_app_password_123',
+        'imap_server': 'imap.gmail.com'
+    })
+    assert res_create.status_code == 200
+    mb_a_id = res_create.get_json()['mailbox_id']
+    assert mb_a_id is not None
+
+    # 2. Test Connection
+    res_test = client.post(f'/api/mailbox/{mb_a_id}/test')
+    assert res_test.status_code == 200
+    assert res_test.get_json()['success'] is True
+
+    # 3. Update mailbox credentials
+    res_update = client.put(f'/api/admin/mailboxes/{mb_a_id}', json={
+        'email_address': 'soc-updated@vit.ac.in',
+        'app_password': 'vit_updated_password_456'
+    })
+    assert res_update.status_code == 200
+    assert res_update.get_json()['success'] is True
+
+    # 4. Disable and Enable mailbox
+    res_dis = client.post(f'/api/mailbox/{mb_a_id}/disable')
+    assert res_dis.status_code == 200
+    res_en = client.post(f'/api/mailbox/{mb_a_id}/enable')
+    assert res_en.status_code == 200
+
+    # 5. Sync mailbox
+    res_sync = client.post(f'/api/mailbox/{mb_a_id}/sync')
+    assert res_sync.status_code == 200
+    assert res_sync.get_json()['success'] is True
+
+    # 6. Cross-Tenant Tampering Check: Org Admin B attempts to access, sync, or delete Org A's mailbox
+    login_as(client, f['admin_b_id'], 'abc_admin', 'org_admin', institution_id=f['inst_b_id'])
+    
+    # Org Admin B cannot access Org A's mailbox
+    res_b_get = client.get(f'/api/mailbox/{mb_a_id}')
+    assert res_b_get.status_code == 404
+
+    # Org Admin B cannot sync Org A's mailbox
+    res_b_sync = client.post(f'/api/mailbox/{mb_a_id}/sync')
+    assert res_b_sync.status_code in (403, 404)
+
+    # Org Admin B cannot disable Org A's mailbox
+    res_b_dis = client.post(f'/api/mailbox/{mb_a_id}/disable')
+    assert res_b_dis.status_code in (403, 404)
+
+    # Org Admin B cannot delete Org A's mailbox
+    res_b_del = client.delete(f'/api/admin/mailboxes/{mb_a_id}')
+    assert res_b_del.status_code in (403, 404)
+
+    # 7. Org Admin A logs back in and deletes the mailbox successfully
+    login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'])
+    res_a_del = client.delete(f'/api/admin/mailboxes/{mb_a_id}')
+    assert res_a_del.status_code == 200
+    assert res_a_del.get_json()['success'] is True
+
+
+def test_org_admin_member_update_and_remove(client, multi_tenant_fixture):
+    """TEST 6, 7, 8, 9: Organization Admin can update and remove their members, but cannot touch other orgs' members."""
+    f = multi_tenant_fixture
+
+    login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'])
+
+    # 1. Update Member A
+    res_up = client.put(f"/api/members/{f['member_a_id']}", json={
+        'full_name': 'Alice Student Updated',
+        'department': 'Cyber Security',
+        'status': 'ACTIVE'
+    })
+    assert res_up.status_code == 200
+
+    # 2. Admin B attempts to update Member A -> fails closed (404 or 403)
+    login_as(client, f['admin_b_id'], 'abc_admin', 'org_admin', institution_id=f['inst_b_id'])
+    res_b_up = client.put(f"/api/members/{f['member_a_id']}", json={'full_name': 'Hacked Alice'})
+    assert res_b_up.status_code in (403, 404)
+
+    # 3. Admin B attempts to delete Member A -> fails closed (404 or 403)
+    res_b_del = client.delete(f"/api/members/{f['member_a_id']}")
+    assert res_b_del.status_code in (403, 404)
+
+    # 4. Admin A deletes Member A -> succeeds
+    login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'])
+    res_a_del = client.delete(f"/api/members/{f['member_a_id']}")
+    assert res_a_del.status_code == 200
+
+    # Verify Member A is deleted
+    res_verify = client.get(f"/api/members/{f['member_a_id']}")
+    assert res_verify.status_code == 404
+
+
+def test_disabled_organization_denied_access(client, multi_tenant_fixture):
+    """TEST 15: Disabled / Inactive accounts cannot access protected tenant resources."""
+    f = multi_tenant_fixture
+
+    # Pending user (status PENDING_ADMIN_APPROVAL) cannot access tenant APIs
+    login_as(client, f['pending_user_id'], 'gamma_admin', 'org_admin', institution_id=f['inst_gamma_id'])
+    res = client.get('/api/mailboxes')
+    assert res.status_code in (401, 403)
+
+    res_members = client.get('/api/members')
+    assert res_members.status_code in (401, 403)
+
+
+def test_acceptance_scenario_a_to_q(client, monkeypatch):
+    """
+    TEST 16 & ACCEPTANCE SCENARIO:
+    A. Register: Organization: Test University, Admin: testadmin
+    B. Log in as Jaya Chandra (Platform Owner).
+    C. Open Pending Approvals.
+    D. Approve Test University.
+    E. Log out.
+    F. Log in as testadmin.
+    G. Confirm testadmin sees independent organization dashboard.
+    H. Confirm testadmin does NOT see Pending Approvals.
+    I. Open Secure Mailbox.
+    J. Confirm testadmin can: Add, Edit, Test, Sync, Disable, Delete, Open Inbox, Activity Details.
+    K. Open Organization / Members.
+    L. Confirm testadmin can add student, faculty, staff.
+    M. Confirm these records belong only to Test University.
+    N. Log in as Jaya.
+    O. Confirm Jaya can still see platform-wide organization management and Pending Approvals.
+    P. Create a second test organization.
+    Q. Confirm Test University admin cannot see or access the second organization's data.
+    """
+    from bullymail.services.email_service import EmailService, email_service
+    from bullymail.routes.email_integration import mailbox_processor
+    monkeypatch.setattr(EmailService, 'test_preflight_connection', lambda *args, **kwargs: (True, "Connection Verified"))
+    monkeypatch.setattr(email_service, 'test_preflight_connection', lambda *args, **kwargs: (True, "Connection Verified"))
+    monkeypatch.setattr(mailbox_processor, 'process_mailbox', lambda *args, **kwargs: {'success': True, 'emails_processed': 2, 'threats_detected': 0, 'duplicates_skipped': 0})
+
+    # A. Register Organization: Test University, Admin: testadmin
+    with client.application.app_context():
+        # Setup Jaya Chandra Vennam as Platform Owner
+        owner_id = execute_query(
+            "INSERT INTO users (username, full_name, password_hash, role, email, status) VALUES (%s, %s, %s, %s, %s, %s)",
+            ("jayachandra_acc", "Jaya Chandra Vennam", UserModel.hash_password("JayaPass123!"), "platform_owner", "jaya_acc@bullymail.io", "ACTIVE")
+        )
+        # Register new org
+        reg_org_id = InstitutionModel.create_institution("Test University", "testuniv.edu", org_type="university", code="TUNIV")
+        InstitutionModel.update_status(reg_org_id, 'PENDING_APPROVAL')
+        testadmin_id = execute_query(
+            "INSERT INTO users (username, full_name, password_hash, role, email, status, institution_id, requested_institution_domain) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            ("testadmin", "Test Admin", UserModel.hash_password("AdminPass123!"), "org_admin", "admin@testuniv.edu", "PENDING_ADMIN_APPROVAL", reg_org_id, "testuniv.edu")
+        )
+
+    # B. Log in as Jaya Chandra
+    login_as(client, owner_id, 'jayachandra_acc', 'platform_owner', full_name="Jaya Chandra Vennam")
+
+    # C. Open Pending Approvals
+    res_pend = client.get('/pending-approvals')
+    assert res_pend.status_code == 200
+    pend_data = res_pend.get_json()
+    assert pend_data['success'] is True
+    assert any(o['id'] == reg_org_id for o in pend_data['pending_orgs'])
+
+    # D. Approve Test University
+    res_app = client.post('/approve-organization', json={'organization_id': reg_org_id})
+    assert res_app.status_code == 200
+    assert res_app.get_json()['success'] is True
+
+    # E. Log out
+    client.get('/logout')
+
+    # F. Log in as testadmin
+    login_as(client, testadmin_id, 'testadmin', 'org_admin', institution_id=reg_org_id, full_name="Test Admin")
+
+    # G. Confirm testadmin sees independent organization dashboard
+    res_dash = client.get('/dashboard')
+    assert res_dash.status_code == 200
+    res_status = client.get('/api/auth/status')
+    assert res_status.get_json()['institution_id'] == reg_org_id
+    assert res_status.get_json()['role'] == 'org_admin'
+
+    # H. Confirm testadmin does NOT see Pending Approvals (HTTP 403 Forbidden)
+    res_no_pend = client.get('/pending-approvals')
+    assert res_no_pend.status_code == 403
+    res_no_app = client.post('/approve-organization', json={'organization_id': reg_org_id})
+    assert res_no_app.status_code == 403
+
+    # I. Open Secure Mailbox
+    res_mbs = client.get('/api/mailboxes')
+    assert res_mbs.status_code == 200
+    assert res_mbs.get_json()['success'] is True
+
+    # J. Confirm testadmin can perform all mailbox actions
+    # 1. Add Secure Mailbox
+    res_add_mb = client.post('/api/mailbox', json={
+        'email_address': 'threats@testuniv.edu',
+        'app_password': 'secret_password_99',
+        'imap_server': 'imap.testuniv.edu'
+    })
+    assert res_add_mb.status_code == 200
+    test_mb_id = res_add_mb.get_json()['mailbox_id']
+
+    # 2. Activity Details
+    res_mb_act = client.get(f'/api/mailbox/{test_mb_id}')
+    assert res_mb_act.status_code == 200
+
+    # 3. Test Connection
+    res_mb_test = client.post(f'/api/mailbox/{test_mb_id}/test')
+    assert res_mb_test.status_code == 200
+
+    # 4. Sync
+    res_mb_sync = client.post(f'/api/mailbox/{test_mb_id}/sync')
+    assert res_mb_sync.status_code == 200
+
+    # 5. Disable and Enable
+    assert client.post(f'/api/mailbox/{test_mb_id}/disable').status_code == 200
+    assert client.post(f'/api/mailbox/{test_mb_id}/enable').status_code == 200
+
+    # 6. Edit Credentials
+    res_mb_edit = client.put(f'/api/admin/mailboxes/{test_mb_id}', json={
+        'email_address': 'threats-updated@testuniv.edu'
+    })
+    assert res_mb_edit.status_code == 200
+
+    # 7. Open Inbox
+    res_inbox = client.get(f'/api/mailboxes/{test_mb_id}/emails')
+    assert res_inbox.status_code == 200
+
+    # K. Open Organization / Members
+    res_mem_list = client.get('/api/members')
+    assert res_mem_list.status_code == 200
+
+    # L. Confirm testadmin can add student, faculty, staff
+    for cat, email in [
+        ('student', 'student@example.com'),
+        ('faculty', 'faculty@example.com'),
+        ('staff', 'staff@example.com')
+    ]:
+        res_add_m = client.post('/api/members', json={
+            'full_name': f'Test {cat.capitalize()}',
+            'email': email,
+            'member_type': cat,
+            'department': 'Academics'
+        })
+        assert res_add_m.status_code == 201
+
+    # M. Confirm these records belong only to Test University
+    members_data = client.get('/api/members').get_json()
+    assert members_data['total'] == 3
+    for m in members_data['members']:
+        assert m['institution_id'] == reg_org_id
+
+    # N. Log in as Jaya
+    login_as(client, owner_id, 'jayachandra_acc', 'platform_owner', full_name="Jaya Chandra Vennam")
+
+    # O. Confirm Jaya can still see platform-wide organization management and Pending Approvals
+    res_jaya_orgs = client.get('/api/institutions')
+    assert res_jaya_orgs.status_code == 200
+    assert len(res_jaya_orgs.get_json()['institutions']) >= 2
+
+    # P. Create a second test organization
+    with client.application.app_context():
+        sec_org_id = InstitutionModel.create_institution("Second Org", "second.org", org_type="company", code="SEC")
+        InstitutionModel.update_status(sec_org_id, 'ACTIVE')
+        sec_admin_id = execute_query(
+            "INSERT INTO users (username, full_name, password_hash, role, email, status, institution_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            ("secadmin", "Second Admin", UserModel.hash_password("Pass123!"), "org_admin", "admin@second.org", "ACTIVE", sec_org_id)
+        )
+        sec_mb = email_service.configure_mailbox(sec_org_id, 'sec-mailbox@second.org', 'sec_pass')
+        sec_mb_id = sec_mb['id']
+        OrganizationMemberModel.add_member(sec_org_id, "Sec Worker", "worker@second.org", member_type="worker")
+
+    # Q. Confirm Test University admin cannot see or access the second organization's users, mailboxes, emails, incidents or data
+    login_as(client, testadmin_id, 'testadmin', 'org_admin', institution_id=reg_org_id)
+
+    # 1. Members: cannot see second org's worker
+    tuniv_members = client.get('/api/members').get_json()['members']
+    assert not any(m['email'] == 'worker@second.org' for m in tuniv_members)
+
+    # 2. Cannot query second org members via parameter tampering
+    res_tamper_mem = client.get(f'/api/members?institution_id={sec_org_id}')
+    assert res_tamper_mem.status_code == 403
+
+    # 3. Mailboxes: cannot see second org's mailbox
+    tuniv_mbs = client.get('/api/mailboxes').get_json()['mailboxes']
+    assert not any(mb['id'] == sec_mb_id for mb in tuniv_mbs)
+
+    # 4. Cannot sync or delete second org's mailbox
+    assert client.post(f'/api/mailbox/{sec_mb_id}/sync').status_code in (403, 404)
+    assert client.delete(f'/api/admin/mailboxes/{sec_mb_id}').status_code in (403, 404)
+

@@ -233,16 +233,20 @@ def list_admin_mailboxes(current_user):
         return jsonify({'success': False, 'error': f"Failed to list mailboxes: {e}"}), 500
 
 @admin_bp.route('/api/admin/mailboxes/configure', methods=['POST'])
+@admin_bp.route('/api/organizations/mailboxes/configure', methods=['POST'])
 @require_role('platform_owner', 'org_admin')
 def configure_admin_mailbox(current_user):
     """Configures a new tenant mailbox for current_user['institution_id']."""
     try:
+        user_role = (current_user.get('role') or '').lower().strip()
+        data = request.get_json(silent=True) or {}
         inst_id = current_user.get('institution_id')
-        if not inst_id and current_user.get('role') != 'platform_owner':
+        if user_role in ('platform_owner', 'super_admin'):
+            inst_id = data.get('institution_id') or inst_id or 1
+        elif not inst_id:
             return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
-        inst_id = int(inst_id) if inst_id else 1
+        inst_id = int(inst_id)
 
-        data = request.get_json() or {}
         email_address = (data.get('email_address') or '').strip()
         app_password = (data.get('app_password') or '').strip()
         imap_server = (data.get('imap_server') or 'imap.gmail.com').strip()
@@ -291,14 +295,22 @@ def test_admin_mailbox_connection(current_user):
         return jsonify({'success': False, 'error': f"Connection test error: {e}"}), 500
 
 @admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>/status', methods=['POST'])
+@admin_bp.route('/api/mailboxes/<int:mailbox_id>/status', methods=['POST'])
 @require_role('platform_owner', 'org_admin')
 def update_admin_mailbox_status(current_user, mailbox_id):
     """Enables or disables a tenant-owned mailbox."""
     try:
+        user_role = (current_user.get('role') or '').lower().strip()
         inst_id = current_user.get('institution_id')
-        if not inst_id and current_user.get('role') != 'platform_owner':
+        if user_role in ('platform_owner', 'super_admin') and not inst_id:
+            from ..database.connection import fetch_one
+            mb_row = fetch_one("SELECT institution_id FROM email_config WHERE id = %s", (mailbox_id,))
+            if not mb_row:
+                return jsonify({'success': False, 'error': 'Mailbox not found.'}), 404
+            inst_id = mb_row['institution_id']
+        elif not inst_id:
             return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
-        inst_id = int(inst_id) if inst_id else 1
+        inst_id = int(inst_id)
 
         data = request.get_json() or {}
         new_status = (data.get('status') or '').strip().lower()
@@ -316,6 +328,8 @@ def update_admin_mailbox_status(current_user, mailbox_id):
 
 @admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>', methods=['PUT', 'PATCH'])
 @admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>/update', methods=['POST'])
+@admin_bp.route('/api/mailboxes/<int:mailbox_id>', methods=['PUT', 'PATCH'])
+@admin_bp.route('/api/mailbox/<int:mailbox_id>', methods=['PUT', 'PATCH'])
 @require_role('platform_owner', 'org_admin')
 def update_admin_mailbox_credentials(current_user, mailbox_id):
     """
@@ -323,10 +337,17 @@ def update_admin_mailbox_credentials(current_user, mailbox_id):
     Preserves existing mailbox ID and preserves existing encrypted password if app_password is empty.
     """
     try:
+        user_role = (current_user.get('role') or '').lower().strip()
         inst_id = current_user.get('institution_id')
-        if not inst_id and current_user.get('role') != 'platform_owner':
+        if user_role in ('platform_owner', 'super_admin') and not inst_id:
+            from ..database.connection import fetch_one
+            mb_row = fetch_one("SELECT institution_id FROM email_config WHERE id = %s", (mailbox_id,))
+            if not mb_row:
+                return jsonify({'success': False, 'error': 'Mailbox not found.'}), 404
+            inst_id = mb_row['institution_id']
+        elif not inst_id:
             return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
-        inst_id = int(inst_id) if inst_id else 1
+        inst_id = int(inst_id)
 
         data = request.get_json() or {}
         email_address = data.get('email_address') or data.get('email')
@@ -359,14 +380,23 @@ def update_admin_mailbox_credentials(current_user, mailbox_id):
         return jsonify({'success': False, 'error': f"Failed to update mailbox credentials: {e}"}), 500
 
 @admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>', methods=['DELETE'])
+@admin_bp.route('/api/mailboxes/<int:mailbox_id>', methods=['DELETE'])
+@admin_bp.route('/api/mailbox/<int:mailbox_id>', methods=['DELETE'])
 @require_role('platform_owner', 'org_admin')
 def delete_admin_mailbox(current_user, mailbox_id):
     """Deletes/removes a tenant-owned mailbox."""
     try:
+        user_role = (current_user.get('role') or '').lower().strip()
         inst_id = current_user.get('institution_id')
-        if not inst_id and current_user.get('role') != 'platform_owner':
+        if user_role in ('platform_owner', 'super_admin') and not inst_id:
+            from ..database.connection import fetch_one
+            mb_row = fetch_one("SELECT institution_id FROM email_config WHERE id = %s", (mailbox_id,))
+            if not mb_row:
+                return jsonify({'success': False, 'error': 'Mailbox not found.'}), 404
+            inst_id = mb_row['institution_id']
+        elif not inst_id:
             return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
-        inst_id = int(inst_id) if inst_id else 1
+        inst_id = int(inst_id)
 
         from ..services.email_service import email_service
         success, message = email_service.delete_mailbox(mailbox_id, inst_id)
@@ -379,6 +409,7 @@ def delete_admin_mailbox(current_user, mailbox_id):
         return jsonify({'success': False, 'error': f"Failed to delete mailbox: {e}"}), 500
 
 @admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>/sync', methods=['POST'])
+@admin_bp.route('/api/mailboxes/<int:mailbox_id>/sync', methods=['POST'])
 @require_role('platform_owner', 'org_admin')
 def sync_admin_mailbox(current_user, mailbox_id):
     """
@@ -386,10 +417,17 @@ def sync_admin_mailbox(current_user, mailbox_id):
     Acquires atomic sync lease, executes Phase 1B MailboxProcessor pipeline, and completes lease.
     """
     try:
+        user_role = (current_user.get('role') or '').lower().strip()
         inst_id = current_user.get('institution_id')
-        if not inst_id and current_user.get('role') != 'platform_owner':
+        if user_role in ('platform_owner', 'super_admin') and not inst_id:
+            from ..database.connection import fetch_one
+            mb_row = fetch_one("SELECT institution_id FROM email_config WHERE id = %s", (mailbox_id,))
+            if not mb_row:
+                return jsonify({'success': False, 'error': 'Mailbox not found.'}), 404
+            inst_id = mb_row['institution_id']
+        elif not inst_id:
             return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
-        inst_id = int(inst_id) if inst_id else 1
+        inst_id = int(inst_id)
 
         from ..services.email_service import email_service
         mailbox = email_service.get_mailbox_by_id(mailbox_id, inst_id)

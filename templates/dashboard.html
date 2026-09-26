@@ -76,28 +76,6 @@
                 </ul>
             </div>
 
-            {% if session.get('role') in ('platform_owner', 'super_admin') %}
-            <!-- Platform Owner Only: Organizations & Governance -->
-            <div class="nav-group">
-                <div class="nav-group-title">Organizations</div>
-                <ul class="nav-menu">
-                    <li>
-                        <a class="nav-link-v2" data-tab="tab-organizations">
-                            <i class="fas fa-sitemap"></i>
-                            <span>Organizations</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a class="nav-link-v2" data-tab="tab-pending-approvals" id="navPendingApprovalsLink">
-                            <i class="fas fa-user-clock text-warning"></i>
-                            <span>Pending Approvals</span>
-                            <span class="badge bg-warning text-dark font-mono ms-auto d-none" id="sidebarPendingBadge" style="font-size: 0.65rem; padding: 2px 6px;">0</span>
-                        </a>
-                    </li>
-                </ul>
-            </div>
-            {% endif %}
-
             <div class="nav-group">
                 <div class="nav-group-title">Investigate</div>
                 <ul class="nav-menu">
@@ -143,11 +121,12 @@
                             <span>Secure Mailbox</span>
                         </a>
                     </li>
-                    {% if session.get('role') in ('org_admin', 'organization_admin', 'admin') %}
+                    {% if session.get('role') in ('platform_owner', 'super_admin') %}
                     <li>
-                        <a class="nav-link-v2" data-tab="tab-members">
-                            <i class="fas fa-users-gear"></i>
-                            <span>Organization Members</span>
+                        <a class="nav-link-v2" data-tab="tab-pending-approvals" id="navPendingApprovalsLink">
+                            <i class="fas fa-user-clock text-warning"></i>
+                            <span>Pending Approvals</span>
+                            <span class="badge bg-warning text-dark font-mono ms-auto d-none" id="sidebarPendingBadge" style="font-size: 0.65rem; padding: 2px 6px;">0</span>
                         </a>
                     </li>
                     {% endif %}
@@ -155,13 +134,32 @@
             </div>
 
             {% if session.get('role') in ('org_admin', 'organization_admin', 'admin') %}
+            <!-- Organization Administrator Navigation Group -->
             <div class="nav-group">
-                <div class="nav-group-title">Settings</div>
+                <div class="nav-group-title">Organization</div>
                 <ul class="nav-menu">
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-members">
+                            <i class="fas fa-users-gear"></i>
+                            <span>Members</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-email">
+                            <i class="fas fa-mailbox"></i>
+                            <span>Mailboxes</span>
+                        </a>
+                    </li>
                     <li>
                         <a class="nav-link-v2" data-tab="tab-org-settings">
                             <i class="fas fa-sliders"></i>
                             <span>Organization Settings</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-history">
+                            <i class="fas fa-shield-halved"></i>
+                            <span>Audit / Activity</span>
                         </a>
                     </li>
                 </ul>
@@ -169,9 +167,16 @@
             {% endif %}
 
             {% if session.get('role') in ('platform_owner', 'super_admin') %}
+            <!-- Platform Owner Navigation Group -->
             <div class="nav-group">
-                <div class="nav-group-title">Platform</div>
+                <div class="nav-group-title">Platform Administration</div>
                 <ul class="nav-menu">
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-organizations">
+                            <i class="fas fa-sitemap"></i>
+                            <span>Organizations</span>
+                        </a>
+                    </li>
                     <li>
                         <a class="nav-link-v2" data-tab="tab-org-settings">
                             <i class="fas fa-sliders"></i>
@@ -261,6 +266,70 @@
                  SECTION 1: Executive Dashboard Tab (Mission Control Architecture)
                  ============================================================== -->
             <section id="tab-dashboard" class="tab-content-pane">
+                {% if session.get('role') in ('org_admin', 'organization_admin', 'admin') %}
+                <!-- Organization Tenant Operational Command Banner -->
+                <div class="soc-panel p-3 mb-4 bg-base border-subtle">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="brand-logo" style="width: 44px; height: 44px; border-radius: 8px; background: rgba(56, 189, 248, 0.1); display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 1.3rem;">
+                                <i class="fas fa-building-shield"></i>
+                            </div>
+                            <div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <h4 class="fw-bold mb-0 text-primary-soc font-mono" style="font-size: 1.15rem;" id="tenantBannerName">{{ session.get('institution_name') or 'Organization' }}</h4>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle font-mono px-2 py-1" style="font-size: 0.7rem;">
+                                        <i class="fas fa-circle-check me-1"></i>ACTIVE TENANT
+                                    </span>
+                                </div>
+                                <div class="text-muted small font-mono">Isolated Security Operations Center • Dedicated Mailbox Ingestion & Member Protection</div>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap align-items-center">
+                            <button type="button" class="btn-soc-primary btn-sm font-mono" onclick="switchTab('tab-members')">
+                                <i class="fas fa-users-gear me-1"></i> Members (<span id="tenantStatMembers">0</span>)
+                            </button>
+                            <button type="button" class="btn-soc-outline btn-sm font-mono" onclick="switchTab('tab-email')">
+                                <i class="fas fa-inbox me-1"></i> Mailboxes (<span id="tenantStatMailboxes">0</span>)
+                            </button>
+                            <button type="button" class="btn-soc-outline btn-sm font-mono" onclick="switchTab('tab-analyze')">
+                                <i class="fas fa-microscope me-1"></i> Threat Analyzer
+                            </button>
+                            <button type="button" class="btn-soc-outline btn-sm font-mono" onclick="switchTab('tab-history')">
+                                <i class="fas fa-clock-rotate-left me-1"></i> Incident History
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% elif session.get('role') in ('platform_owner', 'super_admin') %}
+                <!-- Platform Owner Command Banner -->
+                <div class="soc-panel p-3 mb-4 bg-base border-subtle">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="brand-logo" style="width: 44px; height: 44px; border-radius: 8px; background: rgba(245, 158, 11, 0.1); display: flex; align-items: center; justify-content: center; color: var(--bs-warning, #f59e0b); font-size: 1.3rem;">
+                                <i class="fas fa-crown"></i>
+                            </div>
+                            <div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <h4 class="fw-bold mb-0 text-primary-soc font-mono" style="font-size: 1.15rem;">BullyMail Platform Command Center</h4>
+                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle font-mono px-2 py-1" style="font-size: 0.7rem;">
+                                        <i class="fas fa-shield me-1"></i>PLATFORM OWNER: JAYA CHANDRA VENNAM
+                                    </span>
+                                </div>
+                                <div class="text-muted small font-mono">Global Multi-Tenant Administration, Registration Approvals & Security Governance</div>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap align-items-center">
+                            <button type="button" class="btn-soc-warning btn-sm font-mono" onclick="switchTab('tab-pending-approvals')">
+                                <i class="fas fa-user-clock me-1"></i> Pending Approvals
+                            </button>
+                            <button type="button" class="btn-soc-outline btn-sm font-mono" onclick="switchTab('tab-organizations')">
+                                <i class="fas fa-sitemap me-1"></i> Organizations
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
                 <!-- 1. Executive Security Summary Strip (5 Futuristic KPI Cards) -->
                 <div class="soc-kpi-grid mb-4" id="socExecutiveSummaryStrip">
                     <!-- Card 1: Total Scanned -->
@@ -809,7 +878,7 @@
                                 </h6>
                                 <p class="text-muted small mb-0">Manage your institutional mailbox connections and synchronization.</p>
                             </div>
-                            {% if session.get('role') in ('platform_owner', 'org_admin', 'admin') %}
+                            {% if session.get('role') in ('platform_owner', 'super_admin', 'org_admin', 'organization_admin', 'admin') %}
                             <button type="button" class="btn-soc-primary btn-sm font-mono" onclick="openAddMailboxModal()">
                                 <i class="fas fa-plus me-1"></i> Add Secure Mailbox
                             </button>
