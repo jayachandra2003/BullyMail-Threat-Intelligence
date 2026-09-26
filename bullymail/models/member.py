@@ -97,14 +97,15 @@ class OrganizationMemberModel:
         return cls._format_member(row)
 
     @classmethod
-    def list_members(cls, institution_id: int, search: str = None,
+    def list_members(cls, institution_id: int = None, search: str = None,
                      department: str = None, member_type: str = None,
                      status: str = None, limit: int = 200, offset: int = 0):
-        if not institution_id:
-            return []
+        conditions = []
+        params = []
 
-        conditions = ["institution_id = %s"]
-        params = [institution_id]
+        if institution_id is not None:
+            conditions.append("institution_id = %s")
+            params.append(institution_id)
 
         if search:
             s = f"%{search.strip()}%"
@@ -123,7 +124,7 @@ class OrganizationMemberModel:
             conditions.append("status = %s")
             params.append(status.strip().upper())
 
-        where_clause = " WHERE " + " AND ".join(conditions)
+        where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
         sql = (
             f"SELECT id, institution_id, member_id, full_name, email, department, member_type, status, created_at, updated_at "
             f"FROM organization_members {where_clause} ORDER BY id DESC LIMIT %s OFFSET %s"
@@ -135,14 +136,15 @@ class OrganizationMemberModel:
         return rows
 
     @classmethod
-    def count_members(cls, institution_id: int, search: str = None,
+    def count_members(cls, institution_id: int = None, search: str = None,
                       department: str = None, member_type: str = None,
                       status: str = None) -> int:
-        if not institution_id:
-            return 0
+        conditions = []
+        params = []
 
-        conditions = ["institution_id = %s"]
-        params = [institution_id]
+        if institution_id is not None:
+            conditions.append("institution_id = %s")
+            params.append(institution_id)
 
         if search:
             s = f"%{search.strip()}%"
@@ -161,7 +163,7 @@ class OrganizationMemberModel:
             conditions.append("status = %s")
             params.append(status.strip().upper())
 
-        where_clause = " WHERE " + " AND ".join(conditions)
+        where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
         row = fetch_one(f"SELECT COUNT(*) as cnt FROM organization_members {where_clause}", tuple(params))
         return row['cnt'] if isinstance(row, dict) else (row[0] if row else 0)
 

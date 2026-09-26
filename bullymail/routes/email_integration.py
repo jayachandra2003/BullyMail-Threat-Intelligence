@@ -16,11 +16,10 @@ def _resolve_target_institution_id(current_user, requested_inst_id=None, strict_
     """
     Validates institution access for current user with strict tenant isolation.
     - Platform Owner ('platform_owner') can access any valid institution_id (or requests specific inst_id).
+      If no requested_inst_id is provided, returns None to signify global platform scope.
     - Organization Admin ('org_admin') and Analysts ('analyst') are strictly locked to current_user['institution_id'].
     - If user has no assigned institution_id and is not platform_owner: returns 403 Forbidden.
-    - If an explicit cross-tenant requested_inst_id is passed by a non-platform_owner:
-      - If strict_403 is True: returns 403 Forbidden.
-      - If strict_403 is False: safely ignores client tampering and enforces user's authentic institution_id.
+    - If an explicit cross-tenant requested_inst_id is passed by a non-platform_owner: returns 403 Forbidden.
     - Never defaults or falls back to institution_id = 1 for non-platform_owners.
     """
     user_role = (current_user.get('role') or 'analyst').lower().strip()
@@ -37,7 +36,7 @@ def _resolve_target_institution_id(current_user, requested_inst_id=None, strict_
                 return target_id, None
             except (ValueError, TypeError):
                 return None, ("Invalid institution ID", 400)
-        return user_inst_id or 1, None
+        return user_inst_id, None
 
     # Org Admin, Analyst, Operator:
     if not user_inst_id:
@@ -48,10 +47,7 @@ def _resolve_target_institution_id(current_user, requested_inst_id=None, strict_
         try:
             req_id = int(requested_inst_id)
             if req_id != user_inst_id:
-                if strict_403:
-                    return None, ("Forbidden: Access to specified organization is denied", 403)
-                # Safely ignore client tampering and enforce authentic tenant
-                return user_inst_id, None
+                return None, ("Forbidden: Access to specified organization is denied", 403)
         except (ValueError, TypeError):
             return None, ("Invalid institution ID", 400)
 
@@ -67,14 +63,16 @@ def _iso(val):
 @require_role('admin', 'org_admin', 'platform_owner', 'analyst')
 def get_institutions(current_user):
     user_role = (current_user.get('role') or 'analyst').lower().strip()
-    user_inst_id = current_user.get('institution_id') or 1
+    user_inst_id = current_user.get('institution_id')
 
     if user_role in ('platform_owner', 'super_admin'):
         insts = InstitutionModel.list_all()
-    else:
-        inst = InstitutionModel.get_by_id(user_inst_id)
+    elif user_inst_id:
+        inst = InstitutionModel.get_by_id(int(user_inst_id))
         insts = [inst] if inst else []
-        
+    else:
+        insts = []
+
     return jsonify({'success': True, 'institutions': insts})
 
 @email_bp.route('/api/institutions/<int:inst_id>/stats', methods=['GET'])
@@ -170,7 +168,10 @@ def get_mailboxes(current_user):
         msg, code = err_resp
         return jsonify({'success': False, 'error': msg}), code
 
-    mailboxes = email_service.get_mailboxes_for_institution(target_id)
+    if target_id is not None:
+        mailboxes = email_service.get_mailboxes_for_institution(target_id)
+    else:
+        mailboxes = email_service.list_all_mailboxes()
     sanitized = []
     for m in mailboxes:
         mb_id = m.get('id')
@@ -316,11 +317,25 @@ def create_mailbox(current_user):
     if not email_address or not app_password:
         return jsonify({'success': False, 'error': 'Email address and App Password are required'}), 400
 
+    user_role = (current_user.get('role') or 'analyst').lower().strip()
+    is_platform = user_role in ('platform_owner', 'super_admin') or (user_role == 'admin' and not current_user.get('institution_id'))
+
     req_inst_id = data.get('institution_id')
-    inst_id, err_resp = _resolve_target_institution_id(current_user, req_inst_id)
-    if err_resp:
-        msg, code = err_resp
-        return jsonify({'success': False, 'error': msg}), code
+    if is_platform:
+        if req_inst_id is not None:
+            inst_id, err_resp = _resolve_target_institution_id(current_user, req_inst_id)
+            if err_resp:
+                msg, code = err_resp
+                return jsonify({'success': False, 'error': msg}), code
+        else:
+            inst_id = 1
+    else:
+        inst_id = current_user.get('institution_id')
+        if not inst_id:
+            return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an approved organization'}), 403
+        if req_inst_id is not None and int(req_inst_id) != int(inst_id):
+            return jsonify({'success': False, 'error': 'Forbidden: Access to specified organization is denied'}), 403
+        inst_id = int(inst_id)
 
     # 1. Pre-flight connection test
     test_ok, test_msg = email_service.test_preflight_connection(email_address, app_password, imap_server=imap_server)

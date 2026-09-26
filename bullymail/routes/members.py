@@ -24,7 +24,7 @@ def _resolve_member_inst_id(current_user, req_inst_id=None):
                 return t_id, None
             except (ValueError, TypeError):
                 return None, ("Invalid organization ID", 400)
-        return user_inst or 1, None
+        return user_inst, None
 
     if not user_inst:
         return None, ("Forbidden: Account is not associated with an approved organization", 403)
@@ -123,6 +123,9 @@ def add_member(current_user, org_id=None):
 
         if not full_name or not email:
             return jsonify({'success': False, 'error': 'Full name and email are required.'}), 400
+
+        if not inst_id:
+            return jsonify({'success': False, 'error': 'organization_id is required to add a member.'}), 400
 
         new_id = OrganizationMemberModel.add_member(
             institution_id=inst_id,
@@ -291,6 +294,9 @@ def get_org_settings(current_user):
             msg, code = err
             return jsonify({'success': False, 'error': msg}), code
 
+        if not inst_id:
+            return jsonify({'success': False, 'error': 'organization_id is required.'}), 400
+
         org = InstitutionModel.get_by_id(inst_id)
         if not org:
             return jsonify({'success': False, 'error': 'Organization not found.'}), 404
@@ -331,6 +337,9 @@ def update_org_settings(current_user):
         if err:
             msg, code = err
             return jsonify({'success': False, 'error': msg}), code
+
+        if not inst_id:
+            return jsonify({'success': False, 'error': 'organization_id is required.'}), 400
 
         name = data.get('name')
         org_type = data.get('org_type')

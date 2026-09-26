@@ -179,13 +179,19 @@ def signup():
                     except Exception:
                         pass
 
+            assigned_inst_id = None
+            if target_inst_id:
+                inst_check = InstitutionModel.get_by_id(target_inst_id)
+                if inst_check and inst_check.get('status') == 'ACTIVE':
+                    assigned_inst_id = target_inst_id
+
             user_id = UserModel.create_user(
                 username=username,
                 password=password,
                 email=clean_email,
                 role='org_admin',
                 status='PENDING_EMAIL_VERIFICATION',
-                institution_id=None,
+                institution_id=assigned_inst_id,
                 requested_institution_name=resolved_org_name,
                 requested_institution_domain=resolved_domain,
                 full_name=full_name or username

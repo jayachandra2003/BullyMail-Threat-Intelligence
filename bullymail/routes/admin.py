@@ -136,6 +136,7 @@ def approve_user(current_user):
         'status': 'ACTIVE'
     })
 
+@admin_bp.route('/api/admin/organizations/<int:org_id>/approve', methods=['POST'])
 @admin_bp.route('/api/admin/approve-org/<int:org_id>', methods=['POST'])
 @admin_bp.route('/approve-organization', methods=['POST'])
 @admin_bp.route('/api/admin/approve-organization', methods=['POST'])
@@ -158,9 +159,10 @@ def approve_org(current_user, org_id=None):
 
     InstitutionModel.update_status(org_id, 'ACTIVE')
     from ..database.connection import execute_query
+    org_domain = (org.get('domain') or '').strip().lower()
     execute_query(
-        "UPDATE users SET status = 'ACTIVE', role = 'org_admin', institution_id = %s WHERE (institution_id = %s OR (institution_id IS NULL AND requested_institution_domain = %s)) AND status IN ('PENDING_ADMIN_APPROVAL', 'ACTIVE')",
-        (org_id, org_id, org.get('domain'))
+        "UPDATE users SET status = 'ACTIVE', role = 'org_admin', institution_id = %s WHERE (institution_id = %s OR (institution_id IS NULL AND LOWER(TRIM(requested_institution_domain)) = %s)) AND status IN ('PENDING_ADMIN_APPROVAL', 'ACTIVE', 'PENDING_EMAIL_VERIFICATION')",
+        (org_id, org_id, org_domain)
     )
     return jsonify({
         'success': True,
@@ -169,6 +171,7 @@ def approve_org(current_user, org_id=None):
         'status': 'APPROVED'
     })
 
+@admin_bp.route('/api/admin/organizations/<int:org_id>/reject', methods=['POST'])
 @admin_bp.route('/api/admin/reject-org/<int:org_id>', methods=['POST'])
 @admin_bp.route('/reject-organization', methods=['POST'])
 @admin_bp.route('/api/admin/reject-organization', methods=['POST'])
@@ -219,15 +222,24 @@ def get_platform_overview(current_user):
 @admin_bp.route('/api/admin/mailboxes', methods=['GET'])
 @require_role('platform_owner', 'org_admin')
 def list_admin_mailboxes(current_user):
-    """Lists all mailboxes belonging strictly to current_user['institution_id']."""
+    """Lists mailboxes belonging strictly to current_user['institution_id'] or all for platform_owner."""
     try:
-        inst_id = current_user.get('institution_id')
-        if not inst_id and (current_user.get('role') or '').lower() not in ('platform_owner', 'super_admin'):
-            return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
-        inst_id = int(inst_id) if inst_id else 1
+        user_role = (current_user.get('role') or '').lower().strip()
+        is_platform = user_role in ('platform_owner', 'super_admin')
+        req_inst = request.args.get('institution_id')
 
         from ..services.email_service import email_service
-        mailboxes = email_service.get_mailboxes_for_institution(inst_id)
+        if is_platform:
+            if req_inst:
+                mailboxes = email_service.get_mailboxes_for_institution(int(req_inst))
+            else:
+                mailboxes = email_service.list_all_mailboxes()
+            return jsonify({'success': True, 'mailboxes': mailboxes})
+
+        inst_id = current_user.get('institution_id')
+        if not inst_id:
+            return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
+        mailboxes = email_service.get_mailboxes_for_institution(int(inst_id))
         return jsonify({'success': True, 'mailboxes': mailboxes})
     except Exception as e:
         return jsonify({'success': False, 'error': f"Failed to list mailboxes: {e}"}), 500
@@ -242,7 +254,9 @@ def configure_admin_mailbox(current_user):
         data = request.get_json(silent=True) or {}
         inst_id = current_user.get('institution_id')
         if user_role in ('platform_owner', 'super_admin'):
-            inst_id = data.get('institution_id') or inst_id or 1
+            inst_id = data.get('institution_id') or inst_id
+            if not inst_id:
+                return jsonify({'success': False, 'error': 'institution_id is required for platform owner.'}), 400
         elif not inst_id:
             return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
         inst_id = int(inst_id)
@@ -463,10 +477,10 @@ def sync_admin_mailbox(current_user, mailbox_id):
 
 def _get_scoped_analysis_record(current_user, analysis_id):
     """Retrieves analysis record enforcing tenant isolation boundaries."""
-    user_role = current_user.get('role', 'analyst')
-    if user_role == 'platform_owner':
+    user_role = (current_user.get('role') or 'analyst').lower().strip()
+    if user_role in ('platform_owner', 'super_admin'):
         record = AnalysisModel.get_by_id(analysis_id, institution_id=None, role='platform_owner')
-        inst_id = record.get('institution_id') if record else 1
+        inst_id = record.get('institution_id') if record else None
         return record, inst_id
 
     inst_id = current_user.get('institution_id')
@@ -526,10 +540,11 @@ def admin_smtp_diagnostics(current_user):
     if not target_port and request.is_json:
         target_port = (request.get_json() or {}).get('port')
 
-    inst_id = current_user.get('institution_id')
-    if not inst_id and current_user.get('role') != 'platform_owner':
+    inst_id = current_user.get('institution_id') or request.args.get('institution_id')
+    user_role = (current_user.get('role') or '').lower().strip()
+    if not inst_id and user_role not in ('platform_owner', 'super_admin'):
         return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
-    inst_id = int(inst_id) if inst_id else 1
+    inst_id = int(inst_id) if inst_id else None
     results = admin_warning_service.run_smtp_diagnostics(institution_id=inst_id, target_port=target_port)
 
     # Simplified summary flags as requested

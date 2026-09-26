@@ -304,17 +304,22 @@ class AnalysisModel:
         )
 
     @staticmethod
-    def get_history(limit=50, offset=0, risk_filter=None, status_filter=None, search=None, institution_id=1, user_id=None, role=None):
+    def get_history(limit=50, offset=0, risk_filter=None, status_filter=None, search=None, institution_id=None, user_id=None, role=None):
         query = "SELECT * FROM analyzed_emails"
         conditions = []
         params = []
-        
-        inst_id = institution_id if institution_id is not None else 1
-        conditions.append("institution_id = %s")
-        params.append(inst_id)
 
         user_role = (role or '').lower().strip()
+        is_platform_role = user_role in ('platform_owner', 'super_admin') or (user_role == 'admin' and institution_id is None)
         is_admin_role = user_role in ('admin', 'org_admin', 'organization_admin', 'platform_owner', 'super_admin')
+
+        if institution_id is not None:
+            conditions.append("institution_id = %s")
+            params.append(int(institution_id))
+        elif not is_platform_role:
+            conditions.append("institution_id = %s")
+            params.append(1)
+
         if not is_admin_role and user_id is not None:
             conditions.append("user_id = %s")
             params.append(user_id)
@@ -400,17 +405,24 @@ class AnalysisModel:
         return rows
 
     @staticmethod
-    def get_dashboard_stats(institution_id=1, user_id=None, role=None):
-        inst_id = institution_id if institution_id is not None else 1
-
+    def get_dashboard_stats(institution_id=None, user_id=None, role=None):
         user_role = (role or '').lower().strip()
+        is_platform_role = user_role in ('platform_owner', 'super_admin') or (user_role == 'admin' and institution_id is None)
         is_admin_role = user_role in ('admin', 'org_admin', 'organization_admin', 'platform_owner', 'super_admin')
-        if not is_admin_role and user_id is not None:
-            inst_clause = "WHERE institution_id = %s AND user_id = %s"
-            params_base = (inst_id, user_id)
+
+        if institution_id is not None:
+            if not is_admin_role and user_id is not None:
+                inst_clause = "WHERE institution_id = %s AND user_id = %s"
+                params_base = (int(institution_id), user_id)
+            else:
+                inst_clause = "WHERE institution_id = %s"
+                params_base = (int(institution_id),)
+        elif is_platform_role:
+            inst_clause = "WHERE 1=1"
+            params_base = ()
         else:
-            inst_clause = "WHERE institution_id = %s"
-            params_base = (inst_id,)
+            inst_clause = "WHERE institution_id = 1"
+            params_base = (1,)
 
         existing_cols = AnalysisModel._get_table_columns()
 
@@ -540,7 +552,7 @@ class AnalysisModel:
         }
 
     @staticmethod
-    def get_threat_trend(range_window='7d', institution_id=1, user_id=None, role=None):
+    def get_threat_trend(range_window='7d', institution_id=None, user_id=None, role=None):
         """
         Calculates time-bucketed threat ingestion and velocity statistics over the specified window.
         Supports '24h' (hourly buckets), '7d' (daily buckets), and '30d' (daily buckets).
@@ -576,14 +588,22 @@ class AnalysisModel:
                 bucket_keys.append(b_dt.strftime('%Y-%m-%d'))
                 labels.append(b_dt.strftime('%b %d'))
 
-        inst_clause = "WHERE institution_id = %s"
-        params = [institution_id or 1]
-
         user_role = (role or '').lower().strip()
+        is_platform_role = user_role in ('platform_owner', 'super_admin') or (user_role == 'admin' and institution_id is None)
         is_admin_role = user_role in ('admin', 'org_admin', 'organization_admin', 'platform_owner', 'super_admin')
-        if not is_admin_role and user_id is not None:
-            inst_clause += " AND user_id = %s"
-            params.append(user_id)
+
+        if institution_id is not None:
+            inst_clause = "WHERE institution_id = %s"
+            params = [int(institution_id)]
+            if not is_admin_role and user_id is not None:
+                inst_clause += " AND user_id = %s"
+                params.append(user_id)
+        elif is_platform_role:
+            inst_clause = "WHERE 1=1"
+            params = []
+        else:
+            inst_clause = "WHERE institution_id = 1"
+            params = [1]
 
         start_str = start_time.strftime('%Y-%m-%d %H:%M:%S')
         query = f"SELECT created_at, overall_risk_level, is_bullying FROM analyzed_emails {inst_clause} AND created_at >= %s ORDER BY created_at ASC"

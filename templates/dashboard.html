@@ -70,7 +70,7 @@
                     <li>
                         <a class="nav-link-v2 active" data-tab="tab-dashboard">
                             <i class="fas fa-chart-pie"></i>
-                            <span>{% if session.get('role') in ('platform_owner', 'super_admin') %}Executive Overview{% else %}Executive Dashboard{% endif %}</span>
+                            <span>{% if is_platform_owner %}Executive Overview{% else %}Executive Dashboard{% endif %}</span>
                         </a>
                     </li>
                 </ul>
@@ -121,7 +121,7 @@
                             <span>Secure Mailbox</span>
                         </a>
                     </li>
-                    {% if session.get('role') in ('platform_owner', 'super_admin') %}
+                    {% if is_platform_owner %}
                     <li>
                         <a class="nav-link-v2" data-tab="tab-pending-approvals" id="navPendingApprovalsLink">
                             <i class="fas fa-user-clock text-warning"></i>
@@ -133,7 +133,7 @@
                 </ul>
             </div>
 
-            {% if session.get('role') in ('org_admin', 'organization_admin', 'admin') %}
+            {% if is_org_admin %}
             <!-- Organization Administrator Navigation Group -->
             <div class="nav-group">
                 <div class="nav-group-title">Organization</div>
@@ -166,7 +166,7 @@
             </div>
             {% endif %}
 
-            {% if session.get('role') in ('platform_owner', 'super_admin') %}
+            {% if is_platform_owner %}
             <!-- Platform Owner Navigation Group -->
             <div class="nav-group">
                 <div class="nav-group-title">Platform Administration</div>
@@ -205,14 +205,12 @@
                             {{ session.get('full_name') or session.get('username', 'Administrator') }}
                         </div>
                         <div class="user-role font-mono">
-                            {% if session.get('role') in ('platform_owner', 'super_admin') %}
+                            {% if is_platform_owner %}
                                 <span class="badge bg-primary text-light" style="font-size: 0.62rem; padding: 2px 5px;">Platform Owner</span>
-                            {% elif session.get('role') in ('org_admin', 'organization_admin', 'admin') %}
+                            {% elif is_org_admin %}
                                 <span class="badge bg-info text-dark" style="font-size: 0.62rem; padding: 2px 5px;">Org Admin</span>
-                            {% elif session.get('role') in ('analyst', 'organization_member') %}
-                                <span class="badge bg-secondary text-light" style="font-size: 0.62rem; padding: 2px 5px;">Analyst</span>
                             {% else %}
-                                {{ session.get('role', 'SOC Operator') }}
+                                <span class="badge bg-secondary text-light" style="font-size: 0.62rem; padding: 2px 5px;">Analyst</span>
                             {% endif %}
                         </div>
                     </div>
@@ -235,10 +233,10 @@
                     </button>
                     <div>
                         <h1 class="page-title text-primary-soc mb-0 d-flex align-items-center flex-wrap">
-                            <span><i class="fas fa-shield-alt text-accent me-2"></i>{% if session.get('role') in ('platform_owner', 'super_admin') %}BullyMail Platform / Super Admin Command Center{% else %}{{ session.get('institution_name') or 'Organization' }} Security Operations Center{% endif %}</span>
+                            <span><i class="fas fa-shield-alt text-accent me-2"></i>{% if is_platform_owner %}BullyMail Platform / Super Admin Command Center{% else %}{{ institution_name or 'Organization' }} Security Operations Center{% endif %}</span>
                             <span class="badge soc-title-badge ms-2">ENTERPRISE SOC PRO v2.4.1</span>
                         </h1>
-                        <p class="text-muted small mb-0">{% if session.get('role') in ('platform_owner', 'super_admin') %}Platform-wide tenant administration, registration governance & threat intelligence.{% else %}Multi-vector email threat detection, ML powered analysis & member protection for {{ session.get('institution_name') or 'your organization' }}.{% endif %}</p>
+                        <p class="text-muted small mb-0">{% if is_platform_owner %}Platform-wide tenant administration, registration governance & threat intelligence.{% else %}Multi-vector email threat detection, ML powered analysis & member protection for {{ institution_name or 'your organization' }}.{% endif %}</p>
                     </div>
                 </div>
 
@@ -1324,9 +1322,9 @@
             {% endif %}
 
             <!-- ==============================================================
-                 SECTION: Tenant Administration (Org Admin Workstations)
+                 SECTION: Tenant Administration (Org Admin & Platform Inspection)
                  ============================================================== -->
-            {% if session.get('role') in ('org_admin', 'admin') %}
+            {% if is_org_admin or is_platform_owner %}
             <!-- Tab: Organization Members Workstation -->
             <section id="tab-members" class="tab-content-pane" style="display: none;">
                 <!-- Header Panel -->
@@ -2048,10 +2046,14 @@
     <!-- Bootstrap 5 Bundle JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        window.currentUserRole = "{{ session.get('role', 'analyst') }}";
-        window.currentInstitutionId = {{ session.get('institution_id') or 'null' }};
-        window.currentUsername = {{ session.get('username', '') | tojson }};
-        window.currentUserFullName = {{ (session.get('full_name') or session.get('username', '')) | tojson }};
+        window.currentUserRole = {{ (current_role or session.get('role', 'analyst')) | tojson }};
+        window.currentInstitutionId = {{ (current_user.institution_id if (current_user and current_user.institution_id) else (session.get('institution_id') or 'null')) }};
+        window.currentUsername = {{ ((current_user.username if current_user else session.get('username', '')) | tojson) }};
+        window.currentUserFullName = {{ (((current_user.full_name or current_user.username) if current_user else session.get('full_name', '')) | tojson) }};
+        window.isPlatformOwnerUser = {{ 'true' if is_platform_owner else 'false' }};
+        window.isOrgAdminUser = {{ 'true' if is_org_admin else 'false' }};
+        window.isAnalystUser = {{ 'true' if is_analyst else 'false' }};
+        window.institutionName = {{ ((institution_name or session.get('institution_name', '')) | tojson) }};
     </script>
     <script src="{{ url_for('static', filename='js/core/toast.js') }}"></script>
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>

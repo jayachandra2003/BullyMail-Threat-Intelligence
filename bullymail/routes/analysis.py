@@ -17,6 +17,7 @@ def _resolve_target_institution_id(current_user, requested_inst_id=None, strict_
     """
     Validates institution access for current user with strict tenant isolation.
     - Platform Owner ('platform_owner' or global 'admin' without institution_id) can access any valid institution_id (or requests specific inst_id).
+      If no requested_inst_id is provided, returns None to signify global platform scope.
     - Organization Admin ('org_admin') and Analysts ('analyst') are strictly locked to current_user['institution_id'].
     - If user has no assigned institution_id and is not platform_owner: returns 403 Forbidden.
     - If an explicit cross-tenant requested_inst_id is passed by a non-platform_owner:
@@ -38,7 +39,7 @@ def _resolve_target_institution_id(current_user, requested_inst_id=None, strict_
                 return target_id, None
             except (ValueError, TypeError):
                 return None, ("Invalid institution ID", 400)
-        return user_inst_id or 1, None
+        return user_inst_id, None
 
     # Org Admin, Analyst, Operator:
     if not user_inst_id:

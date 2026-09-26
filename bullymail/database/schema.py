@@ -154,7 +154,8 @@ def apply_migrations(cursor, engine):
         # Institutional admins -> 'org_admin'
         try:
             admin_uname = (getattr(Config, 'ADMIN_USERNAME', None) or 'admin').strip()
-            _safe_execute(cursor, engine, "UPDATE users SET role = 'platform_owner', full_name = 'Jaya Chandra Vennam' WHERE username = %s AND (role = 'admin' OR role = 'platform_owner')", (admin_uname,))
+            _safe_execute(cursor, engine, "UPDATE users SET role = 'platform_owner', full_name = 'Jaya Chandra Vennam', institution_id = NULL WHERE username = %s AND (role = 'admin' OR role = 'platform_owner')", (admin_uname,))
+            _safe_execute(cursor, engine, "UPDATE users SET institution_id = NULL WHERE role IN ('platform_owner', 'super_admin')")
             _safe_execute(cursor, engine, "UPDATE users SET role = 'org_admin' WHERE role = 'admin' AND username != %s", (admin_uname,))
         except Exception:
             pass
@@ -1227,11 +1228,14 @@ def setup_database():
     except Exception:
         default_inst_id = 1
 
-    # Auto-heal any admin / org_admin user records where institution_id is NULL or 0
+    # Auto-heal any org_admin user records where institution_id is NULL or 0
     try:
         execute_query(
-            "UPDATE users SET institution_id = %s WHERE role IN ('platform_owner', 'org_admin', 'admin') AND (institution_id IS NULL OR institution_id = 0)",
+            "UPDATE users SET institution_id = %s WHERE role IN ('org_admin') AND (institution_id IS NULL OR institution_id = 0)",
             (default_inst_id,)
+        )
+        execute_query(
+            "UPDATE users SET institution_id = NULL WHERE role IN ('platform_owner', 'super_admin')"
         )
     except Exception:
         pass
@@ -1241,17 +1245,20 @@ def setup_database():
     if not admin_user:
         hashed_pw = UserModel.hash_password(admin_password)
         execute_query(
-            "INSERT INTO users (username, password_hash, role, full_name, email, status, institution_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (admin_username, hashed_pw, 'platform_owner', 'Jaya Chandra Vennam', admin_email, 'ACTIVE', default_inst_id)
+            "INSERT INTO users (username, password_hash, role, full_name, email, status, institution_id) VALUES (%s, %s, %s, %s, %s, %s, NULL)",
+            (admin_username, hashed_pw, 'platform_owner', 'Jaya Chandra Vennam', admin_email, 'ACTIVE')
         )
     else:
-        # Platform owner exists: ensure role is platform_owner, full_name is set, and synchronize credentials
+        # Platform owner exists: ensure role is platform_owner, full_name is set, institution_id is NULL, and synchronize credentials
         sql_parts = []
         update_params = []
 
         if admin_user.get('role') != 'platform_owner':
             sql_parts.append("role = %s")
             update_params.append('platform_owner')
+
+        if admin_user.get('institution_id') is not None:
+            sql_parts.append("institution_id = NULL")
 
         if not admin_user.get('full_name') or admin_user.get('full_name') == 'BullyMail Administrator':
             sql_parts.append("full_name = %s")
