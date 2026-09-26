@@ -7,6 +7,31 @@ from .auth import get_current_user
 
 reports_bp = Blueprint('reports', __name__)
 
+def _resolve_tenant_inst_id(user, req_inst):
+    user_role = user.get('role', 'analyst')
+    user_inst = user.get('institution_id')
+
+    if user_role == 'platform_owner':
+        if req_inst:
+            try:
+                return int(req_inst), None
+            except (ValueError, TypeError):
+                return None, ("Invalid institution ID", 400)
+        return user_inst or 1, None
+
+    if not user_inst:
+        return None, ("Forbidden: Account is not associated with an approved organization", 403)
+
+    user_inst = int(user_inst)
+    if req_inst:
+        try:
+            if int(req_inst) != user_inst:
+                return None, ("Forbidden: Access to specified organization is denied", 403)
+        except (ValueError, TypeError):
+            return None, ("Invalid institution ID", 400)
+
+    return user_inst, None
+
 @reports_bp.route('/api/reports/download-csv', methods=['GET'])
 def download_csv():
     """Generates and downloads a CSV export of analysis records (Tenant Scoped)."""
@@ -16,10 +41,13 @@ def download_csv():
         
     try:
         req_inst = request.args.get('institution_id')
-        user_role = user.get('role', 'analyst')
-        inst_id = int(req_inst) if (user_role == 'admin' and req_inst) else (user.get('institution_id') or 1)
+        inst_id, err = _resolve_tenant_inst_id(user, req_inst)
+        if err:
+            msg, code = err
+            return jsonify({'success': False, 'error': msg}), code
 
-        analyses = AnalysisModel.get_history(limit=500, institution_id=inst_id, user_id=user.get('id'))
+        user_role = user.get('role', 'analyst')
+        analyses = AnalysisModel.get_history(limit=500, institution_id=inst_id, user_id=user.get('id'), role=user_role)
         csv_bytes = ReportGenerator.generate_csv_report(analyses)
         
         return Response(
@@ -39,9 +67,12 @@ def view_html_report(analysis_id):
         
     try:
         req_inst = request.args.get('institution_id')
-        user_role = user.get('role', 'analyst')
-        inst_id = int(req_inst) if (user_role == 'admin' and req_inst) else (user.get('institution_id') or 1)
+        inst_id, err = _resolve_tenant_inst_id(user, req_inst)
+        if err:
+            msg, code = err
+            return msg, code
 
+        user_role = user.get('role', 'analyst')
         record = AnalysisModel.get_by_id(analysis_id, institution_id=inst_id, role=user_role)
         if not record:
             return "Report not found or access denied", 404
@@ -60,9 +91,12 @@ def download_report(analysis_id):
         
     try:
         req_inst = request.args.get('institution_id')
-        user_role = user.get('role', 'analyst')
-        inst_id = int(req_inst) if (user_role == 'admin' and req_inst) else (user.get('institution_id') or 1)
+        inst_id, err = _resolve_tenant_inst_id(user, req_inst)
+        if err:
+            msg, code = err
+            return jsonify({'success': False, 'error': msg}), code
 
+        user_role = user.get('role', 'analyst')
         record = AnalysisModel.get_by_id(analysis_id, institution_id=inst_id, role=user_role)
         if not record:
             return jsonify({'success': False, 'error': 'Analysis record not found'}), 404

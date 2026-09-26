@@ -15,7 +15,11 @@ function escapeHtml(str) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    window.activeInstitutionId = 1;
+    if (window.currentInstitutionId) {
+        window.activeInstitutionId = window.currentInstitutionId;
+    } else {
+        window.activeInstitutionId = 1;
+    }
     window.cachedInstitutions = [];
     initNavigation();
     initSidebarToggle();
@@ -28,7 +32,12 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAnalysisHistory();
     loadModelStatus();
     loadAvailableDatasets();
-    loadPendingRegistrations();
+    if (window.currentUserRole === 'platform_owner') {
+        loadPendingRegistrations();
+    } else if (window.currentUserRole === 'org_admin' || window.currentUserRole === 'admin') {
+        loadMembers();
+        loadOrgSettings();
+    }
     initForms();
     
     // Auto-refresh stats and live stream every 25s
@@ -66,7 +75,10 @@ function initNavigation() {
                 if (targetTab === 'tab-dashboard') renderCharts();
                 if (targetTab === 'tab-history') loadAnalysisHistory();
                 if (targetTab === 'tab-email') loadSecureMailboxes();
-                if (targetTab === 'tab-pending-approvals') loadPendingRegistrations();
+                if (targetTab === 'tab-pending-approvals' && window.currentUserRole === 'platform_owner') loadPendingRegistrations();
+                if (targetTab === 'tab-organizations' && window.currentUserRole === 'platform_owner') loadPlatformOrganizations();
+                if (targetTab === 'tab-members') loadMembers();
+                if (targetTab === 'tab-org-settings') loadOrgSettings();
             }
 
             // Close mobile sidebar if open
@@ -436,15 +448,19 @@ async function loadDashboardStats() {
         if (window.SOCToast) SOCToast.error(`Error loading stats: ${e.message}`, 'Network Error');
     }
 
-    // Load live stream, threat trend data, and pending registrations
+    // Load live stream and threat trend data
     loadLiveThreatStream();
     loadThreatTrendData();
-    loadPendingRegistrations();
+    if (window.currentUserRole === 'platform_owner') {
+        loadPendingRegistrations();
+    }
 }
 
 window.pendingUsersRawData = [];
+window.pendingOrgsRawData = [];
 
 async function loadPendingRegistrations() {
+    if (window.currentUserRole !== 'platform_owner') return;
     const container = document.getElementById('pendingRegistrationsContainer');
     const sidebarBadge = document.getElementById('sidebarPendingBadge');
     const dedicatedBadge = document.getElementById('dedicatedPendingBadge');
@@ -457,8 +473,10 @@ async function loadPendingRegistrations() {
         const res = await fetch('/api/admin/pending-registrations');
         const data = await res.json();
         const pendingUsers = (data.success && data.pending_users) ? data.pending_users : [];
+        const pendingOrgs = (data.success && data.pending_orgs) ? data.pending_orgs : [];
         window.pendingUsersRawData = pendingUsers;
-        const pendingCount = data.pending_count !== undefined ? data.pending_count : pendingUsers.length;
+        window.pendingOrgsRawData = pendingOrgs;
+        const pendingCount = (data.pending_count !== undefined ? data.pending_count : pendingUsers.length) + pendingOrgs.length;
 
         // Update sidebar dynamic badge
         if (sidebarBadge) {
@@ -474,8 +492,11 @@ async function loadPendingRegistrations() {
         if (kpiPending) kpiPending.textContent = pendingCount;
         if (kpiApproved) kpiApproved.textContent = data.approved_count !== undefined ? data.approved_count : '--';
         if (kpiRejected) kpiRejected.textContent = data.rejected_count !== undefined ? data.rejected_count : '--';
-        if (kpiTotal) kpiTotal.textContent = data.total_count !== undefined ? data.total_count : pendingCount;
+        if (kpiTotal) kpiTotal.textContent = data.total_count !== undefined ? (data.total_count + pendingOrgs.length) : pendingCount;
         if (dedicatedBadge) dedicatedBadge.textContent = `${pendingCount} PENDING REQUESTS`;
+
+        // Render Pending Organization Applications
+        renderPendingOrgs(pendingOrgs);
 
         // Populate Institution Filter options dynamically
         const instFilter = document.getElementById('pendingInstFilter');
@@ -511,6 +532,157 @@ async function loadPendingRegistrations() {
                 </div>
             `;
         }
+    }
+}
+
+function renderPendingOrgs(orgs) {
+    const container = document.getElementById('pendingOrgsContainer');
+    if (!container) return;
+
+    if (!orgs || orgs.length === 0) {
+        container.innerHTML = `
+            <div class="py-4 px-4 text-center text-muted font-mono">
+                <i class="fas fa-circle-check text-success me-2 fa-2x mb-2 d-block"></i>
+                <div class="fw-semibold text-primary-soc font-mono">No pending organization applications</div>
+                <div class="small text-muted font-mono mt-1">All university and enterprise registration applications have been reviewed.</div>
+            </div>
+        `;
+        return;
+    }
+
+    let html = `
+        <div class="table-responsive">
+            <table class="soc-table">
+                <thead>
+                    <tr>
+                        <th>ORGANIZATION</th>
+                        <th>TYPE</th>
+                        <th>DOMAIN</th>
+                        <th>PRIMARY CONTACT</th>
+                        <th>DATE APPLIED</th>
+                        <th>STATUS</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    orgs.forEach(org => {
+        const safeName = escapeHtml(org.name);
+        const safeType = escapeHtml(org.org_type || 'Institution');
+        const safeDomain = escapeHtml(org.domain || 'N/A');
+        const contactStr = org.contact_name ? `${org.contact_name} (${org.contact_email || ''})` : (org.contact_email || 'N/A');
+        const safeContact = escapeHtml(contactStr);
+        const safeDate = org.created_at ? new Date(org.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A';
+
+        html += `
+            <tr>
+                <td><strong class="text-primary-soc font-mono"><i class="fas fa-building text-accent me-2"></i>${safeName}</strong></td>
+                <td><span class="badge bg-secondary font-mono">${safeType}</span></td>
+                <td class="font-mono text-muted small">${safeDomain}</td>
+                <td class="font-mono small text-info">${safeContact}</td>
+                <td class="font-mono text-muted small">${safeDate}</td>
+                <td><span class="badge bg-warning text-dark font-mono"><i class="fas fa-clock me-1"></i>PENDING</span></td>
+                <td>
+                    <button class="btn-soc-primary btn-sm me-1 font-mono" onclick="confirmApproveOrg(${org.id}, '${safeName}')">
+                        <i class="fas fa-check me-1"></i> Approve
+                    </button>
+                    <button class="btn-soc-danger btn-sm font-mono" onclick="confirmRejectOrg(${org.id}, '${safeName}')">
+                        <i class="fas fa-ban me-1"></i> Reject
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    container.innerHTML = html;
+}
+
+function confirmApproveOrg(orgId, orgName) {
+    const nameEl = document.getElementById('approveOrgModalName');
+    const idEl = document.getElementById('approveOrgModalId');
+    if (nameEl) nameEl.textContent = orgName || `#${orgId}`;
+    if (idEl) idEl.value = orgId;
+
+    const modalEl = document.getElementById('approveOrgConfirmModal');
+    if (modalEl && window.bootstrap) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    } else {
+        if (confirm(`Approve organization '${orgName}'?`)) {
+            executeApproveOrgSubmit(orgId);
+        }
+    }
+}
+
+async function executeApproveOrgSubmit(forcedId) {
+    const orgId = forcedId || document.getElementById('approveOrgModalId')?.value;
+    if (!orgId) return;
+
+    try {
+        const res = await fetch(`/api/admin/approve-org/${orgId}`, { method: 'POST' });
+        const data = await res.json();
+
+        const modalEl = document.getElementById('approveOrgConfirmModal');
+        if (modalEl && window.bootstrap) {
+            const inst = bootstrap.Modal.getInstance(modalEl);
+            if (inst) inst.hide();
+        }
+
+        if (data.success) {
+            if (window.SOCToast) SOCToast.success(data.message || 'Organization approved and activated.', 'Platform Owner');
+            loadPendingRegistrations();
+            loadInstitutions();
+        } else {
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to approve organization.', 'Platform Owner');
+        }
+    } catch (e) {
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Platform Owner');
+    }
+}
+
+function confirmRejectOrg(orgId, orgName) {
+    const nameEl = document.getElementById('rejectOrgModalName');
+    const idEl = document.getElementById('rejectOrgModalId');
+    if (nameEl) nameEl.textContent = orgName || `#${orgId}`;
+    if (idEl) idEl.value = orgId;
+
+    const modalEl = document.getElementById('rejectOrgConfirmModal');
+    if (modalEl && window.bootstrap) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    } else {
+        if (confirm(`Reject organization application '${orgName}'?`)) {
+            executeRejectOrgSubmit(orgId);
+        }
+    }
+}
+
+async function executeRejectOrgSubmit(forcedId) {
+    const orgId = forcedId || document.getElementById('rejectOrgModalId')?.value;
+    if (!orgId) return;
+
+    try {
+        const res = await fetch(`/api/admin/reject-org/${orgId}`, { method: 'POST' });
+        const data = await res.json();
+
+        const modalEl = document.getElementById('rejectOrgConfirmModal');
+        if (modalEl && window.bootstrap) {
+            const inst = bootstrap.Modal.getInstance(modalEl);
+            if (inst) inst.hide();
+        }
+
+        if (data.success) {
+            if (window.SOCToast) SOCToast.success(data.message || 'Organization application rejected.', 'Platform Owner');
+            loadPendingRegistrations();
+        } else {
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to reject organization.', 'Platform Owner');
+        }
+    } catch (e) {
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Platform Owner');
     }
 }
 
@@ -4009,3 +4181,739 @@ async function openMailboxDetails(mailboxId) {
         container.innerHTML = `<div class="alert alert-danger font-mono small p-3">Error: ${escapeHtml(e.message)}</div>`;
     }
 }
+
+/* ==========================================================================
+   SECTION: Platform Owner Governance (Organizations Directory)
+   ========================================================================== */
+window.platformOrgsRawData = [];
+
+async function loadPlatformOrganizations() {
+    if (window.currentUserRole !== 'platform_owner') return;
+    const container = document.getElementById('platformOrgsContainer');
+    if (!container) return;
+
+    try {
+        const res = await fetch('/api/admin/platform-overview');
+        const data = await res.json();
+        if (!data.success) {
+            container.innerHTML = `<div class="alert alert-danger font-mono small p-3">${escapeHtml(data.error || 'Failed to load platform overview')}</div>`;
+            return;
+        }
+
+        const stats = data.stats || {};
+        window.platformOrgsRawData = stats.institutions || [];
+
+        // Update KPI metrics
+        const kpiTotalOrgs = document.getElementById('platKpiTotalOrgs');
+        const kpiActiveOrgs = document.getElementById('platKpiActiveOrgs');
+        const kpiTotalUsers = document.getElementById('platKpiTotalUsers');
+        const kpiTotalThreats = document.getElementById('platKpiTotalThreats');
+
+        if (kpiTotalOrgs) kpiTotalOrgs.textContent = stats.total_institutions !== undefined ? stats.total_institutions : window.platformOrgsRawData.length;
+        if (kpiActiveOrgs) kpiActiveOrgs.textContent = stats.active_institutions !== undefined ? stats.active_institutions : '--';
+        if (kpiTotalUsers) kpiTotalUsers.textContent = stats.total_users !== undefined ? stats.total_users : '--';
+        if (kpiTotalThreats) kpiTotalThreats.textContent = stats.total_threats !== undefined ? stats.total_threats : '--';
+
+        renderPlatformOrgsTable(window.platformOrgsRawData);
+    } catch (e) {
+        console.error('Error loading platform organizations:', e);
+        if (container) {
+            container.innerHTML = `<div class="alert alert-danger font-mono small p-3">Error: ${escapeHtml(e.message)}</div>`;
+        }
+    }
+}
+
+function renderPlatformOrgsTable(orgs) {
+    const container = document.getElementById('platformOrgsContainer');
+    if (!container) return;
+
+    if (!orgs || orgs.length === 0) {
+        container.innerHTML = `
+            <div class="py-4 text-center text-muted font-mono">
+                <i class="fas fa-building fa-2x mb-2 d-block"></i>
+                <div class="fw-semibold text-primary-soc font-mono">No registered organizations found</div>
+            </div>
+        `;
+        return;
+    }
+
+    let html = `
+        <div class="table-responsive">
+            <table class="soc-table">
+                <thead>
+                    <tr>
+                        <th>ORGANIZATION</th>
+                        <th>CODE</th>
+                        <th>DOMAIN</th>
+                        <th>TYPE</th>
+                        <th>PRIMARY CONTACT</th>
+                        <th>STATUS</th>
+                        <th>REGISTERED</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    orgs.forEach(org => {
+        const safeName = escapeHtml(org.name);
+        const safeCode = escapeHtml(org.code || 'INST');
+        const safeDomain = escapeHtml(org.domain || 'N/A');
+        const safeType = escapeHtml(org.org_type || 'Institution');
+        const contactStr = org.contact_name ? `${org.contact_name} (${org.contact_email || ''})` : (org.contact_email || 'N/A');
+        const safeContact = escapeHtml(contactStr);
+        const safeDate = org.created_at ? new Date(org.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+
+        let statusBadge = `<span class="badge bg-secondary font-mono">${escapeHtml(org.status || 'ACTIVE')}</span>`;
+        if (org.status === 'ACTIVE') {
+            statusBadge = `<span class="badge bg-success font-mono"><i class="fas fa-check-circle me-1"></i>ACTIVE</span>`;
+        } else if (org.status === 'PENDING_APPROVAL') {
+            statusBadge = `<span class="badge bg-warning text-dark font-mono"><i class="fas fa-clock me-1"></i>PENDING</span>`;
+        } else if (org.status === 'REJECTED') {
+            statusBadge = `<span class="badge bg-danger font-mono"><i class="fas fa-ban me-1"></i>REJECTED</span>`;
+        }
+
+        let actionBtns = `<span class="text-muted font-mono small">—</span>`;
+        if (org.status === 'PENDING_APPROVAL') {
+            actionBtns = `
+                <button class="btn-soc-primary btn-sm me-1 font-mono" onclick="confirmApproveOrg(${org.id}, '${safeName}')">
+                    <i class="fas fa-check me-1"></i> Approve
+                </button>
+                <button class="btn-soc-danger btn-sm font-mono" onclick="confirmRejectOrg(${org.id}, '${safeName}')">
+                    <i class="fas fa-ban me-1"></i> Reject
+                </button>
+            `;
+        }
+
+        html += `
+            <tr>
+                <td><strong class="text-primary-soc font-mono"><i class="fas fa-building text-accent me-2"></i>${safeName}</strong></td>
+                <td><span class="badge bg-dark border border-secondary font-mono text-light">${safeCode}</span></td>
+                <td class="font-mono text-muted small">${safeDomain}</td>
+                <td><span class="badge bg-secondary font-mono">${safeType}</span></td>
+                <td class="font-mono small text-info">${safeContact}</td>
+                <td>${statusBadge}</td>
+                <td class="font-mono text-muted small">${safeDate}</td>
+                <td>${actionBtns}</td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    container.innerHTML = html;
+}
+
+function filterPlatformOrgs() {
+    const searchVal = (document.getElementById('platformOrgSearchInput')?.value || '').toLowerCase().trim();
+    if (!searchVal) {
+        renderPlatformOrgsTable(window.platformOrgsRawData);
+        return;
+    }
+    const filtered = (window.platformOrgsRawData || []).filter(o => {
+        const name = (o.name || '').toLowerCase();
+        const code = (o.code || '').toLowerCase();
+        const domain = (o.domain || '').toLowerCase();
+        const contact = (o.contact_name || o.contact_email || '').toLowerCase();
+        return name.includes(searchVal) || code.includes(searchVal) || domain.includes(searchVal) || contact.includes(searchVal);
+    });
+    renderPlatformOrgsTable(filtered);
+}
+
+/* ==========================================================================
+   SECTION: Tenant Member Management Workstation (Org Admin)
+   ========================================================================== */
+window.membersCurrentPage = 1;
+window.membersPerPage = 15;
+window.membersTotalPages = 1;
+window.membersRawData = [];
+
+async function loadMembers(page = 1) {
+    if (window.currentUserRole !== 'org_admin' && window.currentUserRole !== 'admin') return;
+    const container = document.getElementById('membersTableContainer');
+    if (!container) return;
+
+    window.membersCurrentPage = page;
+    const search = document.getElementById('memberSearchInput')?.value || '';
+    const memberType = document.getElementById('memberTypeFilter')?.value || 'ALL';
+    const status = document.getElementById('memberStatusFilter')?.value || 'ALL';
+
+    const clearSearchBtn = document.getElementById('btnClearMemberSearch');
+    if (clearSearchBtn) {
+        if (search.trim().length > 0) clearSearchBtn.classList.remove('d-none');
+        else clearSearchBtn.classList.add('d-none');
+    }
+
+    try {
+        const queryParams = new URLSearchParams({
+            page: page,
+            per_page: window.membersPerPage,
+            search: search.trim(),
+            member_type: memberType,
+            status: status
+        });
+
+        const res = await fetch(`/api/members?${queryParams.toString()}`);
+        const data = await res.json();
+
+        if (!data.success) {
+            container.innerHTML = `<div class="alert alert-danger font-mono small p-3">${escapeHtml(data.error || 'Failed to load organization members')}</div>`;
+            return;
+        }
+
+        const members = data.members || [];
+        window.membersRawData = members;
+        const pagination = data.pagination || { total: members.length, page: 1, per_page: window.membersPerPage, total_pages: 1 };
+        window.membersTotalPages = pagination.total_pages || 1;
+
+        // Update KPI metrics
+        const kpiTotal = document.getElementById('memberKpiTotal');
+        const kpiActive = document.getElementById('memberKpiActive');
+        const kpiStudents = document.getElementById('memberKpiStudents');
+        const kpiStaff = document.getElementById('memberKpiStaff');
+
+        if (kpiTotal) kpiTotal.textContent = pagination.total !== undefined ? pagination.total : members.length;
+        if (kpiActive) {
+            const activeCount = members.filter(m => (m.status || '').toUpperCase() === 'ACTIVE').length;
+            kpiActive.textContent = activeCount;
+        }
+        if (kpiStudents) {
+            const studentCount = members.filter(m => ['student', 'employee'].includes((m.member_type || '').toLowerCase())).length;
+            kpiStudents.textContent = studentCount;
+        }
+        if (kpiStaff) {
+            const staffCount = members.filter(m => ['faculty', 'staff', 'contractor'].includes((m.member_type || '').toLowerCase())).length;
+            kpiStaff.textContent = staffCount;
+        }
+
+        // Result count text
+        const countText = document.getElementById('membersResultCountText');
+        if (countText) countText.textContent = `Showing ${members.length} of ${pagination.total} members`;
+
+        // Render Members Table
+        renderMembersTable(members);
+
+        // Update pagination UI
+        const pagContainer = document.getElementById('membersPaginationContainer');
+        const pagText = document.getElementById('membersPaginationText');
+        const btnPrev = document.getElementById('btnPrevMemberPage');
+        const btnNext = document.getElementById('btnNextMemberPage');
+
+        if (pagContainer) {
+            if (pagination.total > 0) pagContainer.style.display = 'flex';
+            else pagContainer.style.display = 'none';
+        }
+        if (pagText) pagText.textContent = `Page ${pagination.page} of ${pagination.total_pages || 1} (${pagination.total} total members)`;
+        if (btnPrev) btnPrev.disabled = pagination.page <= 1;
+        if (btnNext) btnNext.disabled = pagination.page >= (pagination.total_pages || 1);
+
+    } catch (e) {
+        console.error('Error loading members:', e);
+        if (container) {
+            container.innerHTML = `<div class="alert alert-danger font-mono small p-3">Error loading members: ${escapeHtml(e.message)}</div>`;
+        }
+    }
+}
+
+function renderMembersTable(members) {
+    const container = document.getElementById('membersTableContainer');
+    if (!container) return;
+
+    if (!members || members.length === 0) {
+        container.innerHTML = `
+            <div class="py-5 px-4 text-center text-muted font-mono">
+                <i class="fas fa-users-slash text-accent fa-2x mb-3 d-block"></i>
+                <div class="fw-semibold text-primary-soc font-mono" style="font-size: 1rem;">No organization members found</div>
+                <div class="small text-muted font-mono mt-1">Enroll your organization's students, faculty, or employees using Add Member or Bulk CSV Import.</div>
+            </div>
+        `;
+        return;
+    }
+
+    let html = `
+        <div class="table-responsive">
+            <table class="soc-table">
+                <thead>
+                    <tr>
+                        <th>FULL NAME</th>
+                        <th>OFFICIAL EMAIL</th>
+                        <th>MEMBER TYPE</th>
+                        <th>DEPARTMENT</th>
+                        <th>ID / IDENTIFIER</th>
+                        <th>STATUS</th>
+                        <th>JOINED</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    members.forEach(m => {
+        const safeName = escapeHtml(m.full_name);
+        const safeEmail = escapeHtml(m.email);
+        const safeType = escapeHtml(m.member_type || 'student');
+        const safeDept = escapeHtml(m.department || '—');
+        const safeId = escapeHtml(m.identifier || '—');
+        const safeDate = m.created_at ? new Date(m.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+
+        let statusBadge = `<span class="badge bg-secondary font-mono">${escapeHtml(m.status || 'ACTIVE')}</span>`;
+        if (m.status === 'ACTIVE') {
+            statusBadge = `<span class="badge bg-success font-mono"><i class="fas fa-circle-check me-1"></i>ACTIVE</span>`;
+        } else if (m.status === 'INACTIVE') {
+            statusBadge = `<span class="badge bg-warning text-dark font-mono">INACTIVE</span>`;
+        } else if (m.status === 'SUSPENDED') {
+            statusBadge = `<span class="badge bg-danger font-mono">SUSPENDED</span>`;
+        }
+
+        let typeBadge = `<span class="badge bg-secondary font-mono">${safeType}</span>`;
+        if (safeType === 'student') typeBadge = `<span class="badge bg-info text-dark font-mono"><i class="fas fa-graduation-cap me-1"></i>student</span>`;
+        else if (safeType === 'faculty') typeBadge = `<span class="badge bg-warning text-dark font-mono"><i class="fas fa-chalkboard-user me-1"></i>faculty</span>`;
+        else if (safeType === 'staff') typeBadge = `<span class="badge bg-primary text-light font-mono"><i class="fas fa-user-shield me-1"></i>staff</span>`;
+        else if (safeType === 'employee') typeBadge = `<span class="badge bg-primary text-light font-mono"><i class="fas fa-briefcase me-1"></i>employee</span>`;
+
+        html += `
+            <tr>
+                <td><strong class="text-primary-soc font-mono">${safeName}</strong></td>
+                <td class="font-mono text-muted small">${safeEmail}</td>
+                <td>${typeBadge}</td>
+                <td class="font-mono text-muted small">${safeDept}</td>
+                <td><span class="badge bg-dark border border-secondary font-mono text-light">${safeId}</span></td>
+                <td>${statusBadge}</td>
+                <td class="font-mono text-muted small">${safeDate}</td>
+                <td>
+                    <button type="button" class="btn-soc-secondary btn-sm me-1 font-mono p-1 px-2" title="Edit Member" onclick="openEditMemberModal(${m.id})">
+                        <i class="fas fa-pen small"></i>
+                    </button>
+                    <button type="button" class="btn-soc-danger btn-sm font-mono p-1 px-2" title="Delete Member" onclick="confirmDeleteMember(${m.id}, '${safeName}')">
+                        <i class="fas fa-trash small"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    container.innerHTML = html;
+}
+
+function changeMemberPage(delta) {
+    const newPage = window.membersCurrentPage + delta;
+    if (newPage >= 1 && newPage <= window.membersTotalPages) {
+        loadMembers(newPage);
+    }
+}
+
+function handleMemberFilterChange() {
+    loadMembers(1);
+}
+
+function clearMemberSearch() {
+    const input = document.getElementById('memberSearchInput');
+    if (input) input.value = '';
+    loadMembers(1);
+}
+
+function resetMemberFilters() {
+    const searchInput = document.getElementById('memberSearchInput');
+    const typeSelect = document.getElementById('memberTypeFilter');
+    const statusSelect = document.getElementById('memberStatusFilter');
+
+    if (searchInput) searchInput.value = '';
+    if (typeSelect) typeSelect.value = 'ALL';
+    if (statusSelect) statusSelect.value = 'ALL';
+
+    loadMembers(1);
+}
+
+function openAddMemberModal() {
+    const form = document.getElementById('formAddMember');
+    if (form) form.reset();
+    const modalEl = document.getElementById('addMemberModal');
+    if (modalEl && window.bootstrap) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+}
+
+async function submitAddMember() {
+    const name = document.getElementById('inputNewMemberName')?.value.trim();
+    const email = document.getElementById('inputNewMemberEmail')?.value.trim();
+    const memberType = document.getElementById('selectNewMemberType')?.value || 'student';
+    const identifier = document.getElementById('inputNewMemberIdentifier')?.value.trim() || '';
+    const department = document.getElementById('inputNewMemberDepartment')?.value.trim() || '';
+
+    if (!name || !email) {
+        if (window.SOCToast) SOCToast.error('Full name and email address are required.', 'Validation Error');
+        return;
+    }
+
+    const btn = document.getElementById('btnSubmitAddMember');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin me-1"></i> Saving...`;
+    }
+
+    try {
+        const res = await fetch('/api/members', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                full_name: name,
+                email: email,
+                member_type: memberType,
+                identifier: identifier,
+                department: department
+            })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            const modalEl = document.getElementById('addMemberModal');
+            if (modalEl && window.bootstrap) {
+                const inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+            }
+            if (window.SOCToast) SOCToast.success(data.message || 'Member added successfully.', 'Member Directory');
+            loadMembers(1);
+        } else {
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to add member.', 'Directory Error');
+        }
+    } catch (e) {
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Directory Error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+}
+
+async function openEditMemberModal(memberId) {
+    if (!memberId) return;
+
+    try {
+        const res = await fetch(`/api/members/${memberId}`);
+        const data = await res.json();
+        if (!data.success || !data.member) {
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to fetch member details.', 'Directory Error');
+            return;
+        }
+
+        const m = data.member;
+        const idEl = document.getElementById('editMemberId');
+        const nameEl = document.getElementById('inputEditMemberName');
+        const emailEl = document.getElementById('inputEditMemberEmail');
+        const typeEl = document.getElementById('selectEditMemberType');
+        const statusEl = document.getElementById('selectEditMemberStatus');
+        const deptEl = document.getElementById('inputEditMemberDepartment');
+        const identEl = document.getElementById('inputEditMemberIdentifier');
+
+        if (idEl) idEl.value = m.id;
+        if (nameEl) nameEl.value = m.full_name || '';
+        if (emailEl) emailEl.value = m.email || '';
+        if (typeEl) typeEl.value = m.member_type || 'student';
+        if (statusEl) statusEl.value = m.status || 'ACTIVE';
+        if (deptEl) deptEl.value = m.department || '';
+        if (identEl) identEl.value = m.identifier || '';
+
+        const modalEl = document.getElementById('editMemberModal');
+        if (modalEl && window.bootstrap) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+    } catch (e) {
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Directory Error');
+    }
+}
+
+async function submitEditMember() {
+    const memberId = document.getElementById('editMemberId')?.value;
+    if (!memberId) return;
+
+    const name = document.getElementById('inputEditMemberName')?.value.trim();
+    const email = document.getElementById('inputEditMemberEmail')?.value.trim();
+    const memberType = document.getElementById('selectEditMemberType')?.value;
+    const status = document.getElementById('selectEditMemberStatus')?.value;
+    const department = document.getElementById('inputEditMemberDepartment')?.value.trim();
+    const identifier = document.getElementById('inputEditMemberIdentifier')?.value.trim();
+
+    const btn = document.getElementById('btnSubmitEditMember');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin me-1"></i> Updating...`;
+    }
+
+    try {
+        const res = await fetch(`/api/members/${memberId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                full_name: name,
+                email: email,
+                member_type: memberType,
+                status: status,
+                department: department,
+                identifier: identifier
+            })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            const modalEl = document.getElementById('editMemberModal');
+            if (modalEl && window.bootstrap) {
+                const inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+            }
+            if (window.SOCToast) SOCToast.success(data.message || 'Member updated successfully.', 'Member Directory');
+            loadMembers(window.membersCurrentPage);
+        } else {
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to update member.', 'Directory Error');
+        }
+    } catch (e) {
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Directory Error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+}
+
+function confirmDeleteMember(memberId, memberName) {
+    const idEl = document.getElementById('deleteMemberId');
+    const nameEl = document.getElementById('deleteMemberNameText');
+    if (idEl) idEl.value = memberId;
+    if (nameEl) nameEl.textContent = memberName || `#${memberId}`;
+
+    const modalEl = document.getElementById('deleteMemberModal');
+    if (modalEl && window.bootstrap) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    } else {
+        if (confirm(`Are you sure you want to delete member '${memberName}'?`)) {
+            executeDeleteMemberSubmit(memberId);
+        }
+    }
+}
+
+async function executeDeleteMemberSubmit(forcedId) {
+    const memberId = forcedId || document.getElementById('deleteMemberId')?.value;
+    if (!memberId) return;
+
+    try {
+        const res = await fetch(`/api/members/${memberId}`, { method: 'DELETE' });
+        const data = await res.json();
+
+        const modalEl = document.getElementById('deleteMemberModal');
+        if (modalEl && window.bootstrap) {
+            const inst = bootstrap.Modal.getInstance(modalEl);
+            if (inst) inst.hide();
+        }
+
+        if (data.success) {
+            if (window.SOCToast) SOCToast.success(data.message || 'Member deleted successfully.', 'Member Directory');
+            loadMembers(window.membersCurrentPage);
+        } else {
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to delete member.', 'Directory Error');
+        }
+    } catch (e) {
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Directory Error');
+    }
+}
+
+function openImportCsvModal() {
+    const fileInput = document.getElementById('inputCsvFile');
+    if (fileInput) fileInput.value = '';
+    const resultsContainer = document.getElementById('importCsvResults');
+    if (resultsContainer) {
+        resultsContainer.innerHTML = '';
+        resultsContainer.classList.add('d-none');
+    }
+
+    const modalEl = document.getElementById('importCsvModal');
+    if (modalEl && window.bootstrap) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+}
+
+async function submitMemberCsvImport() {
+    const fileInput = document.getElementById('inputCsvFile');
+    const file = fileInput?.files?.[0];
+    if (!file) {
+        if (window.SOCToast) SOCToast.error('Please select a CSV file to upload.', 'CSV Import');
+        return;
+    }
+
+    const btn = document.getElementById('btnSubmitImportCsv');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin me-1"></i> Importing...`;
+    }
+
+    const resultsContainer = document.getElementById('importCsvResults');
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch('/api/members/import-csv', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            if (resultsContainer) {
+                resultsContainer.classList.remove('d-none');
+                let errHtml = '';
+                if (data.errors && data.errors.length > 0) {
+                    errHtml = `
+                        <div class="mt-2 text-danger small font-mono" style="max-height: 100px; overflow-y: auto;">
+                            <strong>Import Notices:</strong>
+                            <ul class="mb-0 ps-3">
+                                ${data.errors.slice(0, 5).map(e => `<li>${escapeHtml(e)}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+                resultsContainer.innerHTML = `
+                    <div class="alert alert-success font-mono small mb-0 p-3">
+                        <i class="fas fa-check-circle me-1 text-success"></i>
+                        Successfully imported <strong>${data.imported}</strong> member(s). Skipped: <strong>${data.skipped || 0}</strong>.
+                        ${errHtml}
+                    </div>
+                `;
+            }
+
+            if (window.SOCToast) SOCToast.success(`Imported ${data.imported} members successfully.`, 'Bulk CSV Import');
+            loadMembers(1);
+
+            // Auto-hide modal after 2.5s if no errors
+            if (!data.errors || data.errors.length === 0) {
+                setTimeout(() => {
+                    const modalEl = document.getElementById('importCsvModal');
+                    if (modalEl && window.bootstrap) {
+                        const inst = bootstrap.Modal.getInstance(modalEl);
+                        if (inst) inst.hide();
+                    }
+                }, 2200);
+            }
+        } else {
+            if (resultsContainer) {
+                resultsContainer.classList.remove('d-none');
+                resultsContainer.innerHTML = `<div class="alert alert-danger font-mono small mb-0 p-3">${escapeHtml(data.error || 'CSV import failed.')}</div>`;
+            }
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to import CSV.', 'CSV Import');
+        }
+    } catch (e) {
+        if (resultsContainer) {
+            resultsContainer.classList.remove('d-none');
+            resultsContainer.innerHTML = `<div class="alert alert-danger font-mono small mb-0 p-3">Error: ${escapeHtml(e.message)}</div>`;
+        }
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'CSV Import');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+}
+
+/* ==========================================================================
+   SECTION: Organization Profile & Settings (Org Admin)
+   ========================================================================== */
+async function loadOrgSettings() {
+    if (window.currentUserRole !== 'org_admin' && window.currentUserRole !== 'admin') return;
+
+    try {
+        const res = await fetch('/api/org/settings');
+        const data = await res.json();
+        if (!data.success || !data.organization) {
+            console.warn('Unable to load organization settings:', data.error);
+            return;
+        }
+
+        const org = data.organization;
+        const nameEl = document.getElementById('orgSettingsName');
+        const typeEl = document.getElementById('orgSettingsType');
+        const codeEl = document.getElementById('orgSettingsCode');
+        const domainEl = document.getElementById('orgSettingsDomain');
+        const contactNameEl = document.getElementById('orgSettingsContactName');
+        const contactEmailEl = document.getElementById('orgSettingsContactEmail');
+        const sensitivityEl = document.getElementById('orgSettingsSensitivity');
+        const autoQuarEl = document.getElementById('orgSettingsAutoQuarantine');
+
+        if (nameEl) nameEl.value = org.name || '';
+        if (typeEl) typeEl.value = org.org_type || 'Institution';
+        if (codeEl) codeEl.value = org.code || 'INST';
+        if (domainEl) domainEl.value = org.domain || '';
+        if (contactNameEl) contactNameEl.value = org.contact_name || '';
+        if (contactEmailEl) contactEmailEl.value = org.contact_email || '';
+
+        const settings = org.settings || {};
+        if (sensitivityEl && settings.threat_sensitivity) {
+            sensitivityEl.value = settings.threat_sensitivity;
+        }
+        if (autoQuarEl) {
+            autoQuarEl.checked = Boolean(settings.auto_quarantine !== false);
+        }
+    } catch (e) {
+        console.error('Error loading organization settings:', e);
+    }
+}
+
+async function saveOrgSettings() {
+    const btn = document.getElementById('btnSaveOrgSettings');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin me-1"></i> Saving...`;
+    }
+
+    try {
+        const name = document.getElementById('orgSettingsName')?.value.trim();
+        const contactName = document.getElementById('orgSettingsContactName')?.value.trim();
+        const contactEmail = document.getElementById('orgSettingsContactEmail')?.value.trim();
+        const sensitivity = document.getElementById('orgSettingsSensitivity')?.value || 'standard';
+        const autoQuarantine = document.getElementById('orgSettingsAutoQuarantine')?.checked;
+
+        const payload = {
+            name: name,
+            contact_name: contactName,
+            contact_email: contactEmail,
+            settings: {
+                notification_email: contactEmail,
+                threat_sensitivity: sensitivity,
+                auto_quarantine: autoQuarantine
+            }
+        };
+
+        const res = await fetch('/api/org/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            if (window.SOCToast) SOCToast.success(data.message || 'Organization settings saved successfully.', 'Tenant Settings');
+        } else {
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to save settings.', 'Settings Error');
+        }
+    } catch (e) {
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Settings Error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+}
+

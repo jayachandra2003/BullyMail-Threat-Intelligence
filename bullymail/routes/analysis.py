@@ -15,15 +15,20 @@ risk_engine = UnifiedRiskEngine()
 
 def _resolve_target_institution_id(current_user, requested_inst_id=None, strict_403=False):
     """
-    Validates institution access for current user.
-    Admin can access any valid institution_id (or requests specific inst_id).
-    Analyst/Operator is strictly locked to their assigned user['institution_id'].
-    If strict_403 is True and an explicit cross-tenant requested_inst_id is passed by a non-admin, returns 403 Forbidden.
-    Otherwise, tampered parameters are safely ignored and scoped to user['institution_id'].
+    Validates institution access for current user with strict tenant isolation.
+    - Platform Owner ('platform_owner' or global 'admin' without institution_id) can access any valid institution_id (or requests specific inst_id).
+    - Organization Admin ('org_admin') and Analysts ('analyst') are strictly locked to current_user['institution_id'].
+    - If user has no assigned institution_id and is not platform_owner: returns 403 Forbidden.
+    - If an explicit cross-tenant requested_inst_id is passed by a non-platform_owner:
+      - If strict_403 is True: returns 403 Forbidden.
+      - If strict_403 is False: safely ignores client tampering and enforces user's authentic institution_id.
+    - Never defaults or falls back to institution_id = 1 for non-platform_owners.
     """
     user_role = current_user.get('role', 'analyst')
-    user_inst_id = current_user.get('institution_id') or 1
-    if user_role == 'admin':
+    user_inst_id = current_user.get('institution_id')
+    is_platform_level = (user_role == 'platform_owner' or (user_role == 'admin' and not user_inst_id))
+
+    if is_platform_level:
         if requested_inst_id is not None:
             try:
                 target_id = int(requested_inst_id)
@@ -33,15 +38,25 @@ def _resolve_target_institution_id(current_user, requested_inst_id=None, strict_
                 return target_id, None
             except (ValueError, TypeError):
                 return None, ("Invalid institution ID", 400)
-        return user_inst_id, None
-    else:
-        if strict_403 and requested_inst_id is not None:
-            try:
-                if int(requested_inst_id) != user_inst_id:
-                    return None, ("Forbidden: Access to specified institution is denied", 403)
-            except (ValueError, TypeError):
-                return None, ("Invalid institution ID", 400)
-        return user_inst_id, None
+        return user_inst_id or 1, None
+
+    # Org Admin, Analyst, Operator:
+    if not user_inst_id:
+        return None, ("Forbidden: Account is not associated with an approved organization", 403)
+
+    user_inst_id = int(user_inst_id)
+    if requested_inst_id is not None:
+        try:
+            req_id = int(requested_inst_id)
+            if req_id != user_inst_id:
+                if strict_403:
+                    return None, ("Forbidden: Access to specified organization is denied", 403)
+                # Safely ignore client tampering and enforce authentic tenant
+                return user_inst_id, None
+        except (ValueError, TypeError):
+            return None, ("Invalid institution ID", 400)
+
+    return user_inst_id, None
 
 @analysis_bp.route('/api/quick-demo-analyze', methods=['POST'])
 def quick_demo_analyze():
@@ -331,7 +346,7 @@ def delete_analysis_record(analysis_id):
         return jsonify({'success': False, 'error': 'Unauthorized: Authentication required.'}), 401
 
     user_role = user.get('role', 'analyst')
-    if user_role not in ('admin', 'security_officer'):
+    if user_role not in ('platform_owner', 'org_admin', 'admin', 'security_officer'):
         return jsonify({'success': False, 'error': 'Forbidden: Administrative privileges required to delete incident records.'}), 403
 
     try:

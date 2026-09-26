@@ -1,6 +1,7 @@
 import time
 from flask import Blueprint, request, jsonify, session, redirect, url_for, render_template, make_response
 from ..models.user import UserModel
+from ..models.institution import InstitutionModel
 from ..services.rate_limiter import auth_rate_limiter
 from ..services.auth_token_service import AuthTokenService
 from ..services.auth_email_service import auth_email_service
@@ -31,20 +32,24 @@ def signup():
         if request.is_json:
             data = request.get_json() or {}
             username = (data.get('username') or '').strip()
+            full_name = (data.get('full_name') or data.get('admin_name') or '').strip()
             email = (data.get('email') or '').strip()
             password = data.get('password') or ''
             confirm_password = data.get('confirm_password') or ''
             captcha_token = data.get('captcha_token') or ''
-            requested_inst_name = (data.get('institution_name') or data.get('requested_institution_name') or '').strip()
-            requested_inst_domain = (data.get('institution_domain') or data.get('requested_institution_domain') or '').strip()
+            requested_inst_name = (data.get('organization_name') or data.get('institution_name') or data.get('requested_institution_name') or '').strip()
+            requested_inst_domain = (data.get('organization_domain') or data.get('institution_domain') or data.get('requested_institution_domain') or '').strip()
+            requested_inst_type = (data.get('organization_type') or data.get('org_type') or 'university').strip().lower()
         else:
             username = (request.form.get('username') or '').strip()
+            full_name = (request.form.get('full_name') or request.form.get('admin_name') or '').strip()
             email = (request.form.get('email') or '').strip()
             password = request.form.get('password') or ''
             confirm_password = request.form.get('confirm_password') or ''
             captcha_token = request.form.get('captcha_token') or ''
-            requested_inst_name = (request.form.get('institution_name') or request.form.get('requested_institution_name') or '').strip()
-            requested_inst_domain = (request.form.get('institution_domain') or request.form.get('requested_institution_domain') or '').strip()
+            requested_inst_name = (request.form.get('organization_name') or request.form.get('institution_name') or request.form.get('requested_institution_name') or '').strip()
+            requested_inst_domain = (request.form.get('organization_domain') or request.form.get('institution_domain') or request.form.get('requested_institution_domain') or '').strip()
+            requested_inst_type = (request.form.get('organization_type') or request.form.get('org_type') or 'university').strip().lower()
 
         # Rate Limit Check
         is_locked, retry_after = auth_rate_limiter.is_locked(client_ip, email, action='signup')
@@ -152,15 +157,38 @@ def signup():
             return render_template('signup.html', success=success_msg)
 
         try:
+            # Resolve or provision pending institution
+            target_inst_id = None
+            resolved_domain = requested_inst_domain or (clean_email.split('@')[-1] if '@' in clean_email else None)
+            resolved_org_name = requested_inst_name or (f"{resolved_domain.split('.')[0].capitalize()} Organization" if resolved_domain else f"{username.capitalize()}'s Organization")
+
+            if resolved_domain:
+                existing_inst = InstitutionModel.get_by_domain(resolved_domain)
+                if existing_inst:
+                    target_inst_id = existing_inst['id']
+                else:
+                    try:
+                        target_inst_id = InstitutionModel.create_institution(
+                            name=resolved_org_name,
+                            domain=resolved_domain,
+                            org_type=requested_inst_type,
+                            contact_name=full_name or username,
+                            contact_email=clean_email,
+                            status='PENDING_APPROVAL'
+                        )
+                    except Exception:
+                        pass
+
             user_id = UserModel.create_user(
                 username=username,
                 password=password,
                 email=clean_email,
-                role='analyst',
+                role='org_admin',
                 status='PENDING_EMAIL_VERIFICATION',
                 institution_id=None,
-                requested_institution_name=requested_inst_name or None,
-                requested_institution_domain=requested_inst_domain or None
+                requested_institution_name=resolved_org_name,
+                requested_institution_domain=resolved_domain,
+                full_name=full_name or username
             )
 
             # Ensure user_id was retrieved
@@ -242,7 +270,42 @@ def require_auth(f):
         return f(user, *args, **kwargs)
     return decorated
 
+def require_platform_owner(f):
+    """Restricts endpoint access STRICTLY to the Platform Owner (Jaya Chandra Vennam)."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = get_current_user()
+        if not user:
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+            session.clear()
+            return redirect(url_for('auth.login'))
+        if user.get('role') != 'platform_owner':
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Forbidden: Platform Owner access required'}), 403
+            return render_template('login.html', error="Forbidden: Platform Owner access required."), 403
+        return f(user, *args, **kwargs)
+    return decorated
+
 def require_role(*roles):
+    """
+    Role-based access control decorator.
+    Supports 'platform_owner', 'org_admin', 'analyst' (and legacy 'admin', 'operator').
+    """
+    req = set(roles)
+    allowed_roles = set(req)
+
+    # Role hierarchy:
+    # 1. 'analyst' / 'operator' requirement allows all authenticated roles
+    if 'analyst' in req or 'operator' in req:
+        allowed_roles.update({'platform_owner', 'org_admin', 'admin', 'analyst', 'operator'})
+    # 2. 'org_admin' or 'admin' requirement allows org_admin, admin, and platform_owner
+    if 'org_admin' in req or 'admin' in req:
+        allowed_roles.update({'platform_owner', 'org_admin', 'admin'})
+    # 3. 'platform_owner' requirement strictly allows platform_owner and legacy admin
+    if 'platform_owner' in req and 'org_admin' not in req and 'analyst' not in req and 'admin' not in req:
+        allowed_roles = {'platform_owner', 'admin'}
+
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
@@ -253,10 +316,10 @@ def require_role(*roles):
                 session.clear()
                 return redirect(url_for('auth.login'))
             user_role = user.get('role', 'analyst')
-            if user_role not in roles:
+            if user_role not in allowed_roles:
                 if request.is_json or request.path.startswith('/api/'):
                     return jsonify({'success': False, 'error': 'Forbidden: Insufficient privileges'}), 403
-                return render_template('signup.html', error="Forbidden: Insufficient privileges for this action."), 403
+                return render_template('login.html', error="Forbidden: Insufficient privileges for this action."), 403
             return f(user, *args, **kwargs)
         return decorated
     return decorator
@@ -426,8 +489,9 @@ def login():
             session.clear()
             session['user_id'] = user['id']
             session['username'] = user['username']
+            session['full_name'] = user.get('full_name') or user.get('username')
             session['role'] = user.get('role', 'analyst')
-            session['institution_id'] = user.get('institution_id', 1)
+            session['institution_id'] = user.get('institution_id')
             session['auth_time'] = time.time()
             session.permanent = True
 
@@ -631,29 +695,30 @@ def auth_status():
             'authenticated': True,
             'user_id': user.get('id'),
             'username': user.get('username'),
+            'full_name': user.get('full_name') or user.get('username'),
             'role': user.get('role'),
-            'institution_id': user.get('institution_id', 1)
+            'institution_id': user.get('institution_id')
         })
     return jsonify({'authenticated': False})
 
 # =========================================================================
-# 7. ADMINISTRATOR USER APPROVAL & MANAGEMENT
+# 7. ADMINISTRATOR USER APPROVAL & MANAGEMENT (PLATFORM OWNER ONLY)
 # =========================================================================
 
 @auth_bp.route('/api/admin/pending-users', methods=['GET'])
-@require_role('admin')
+@require_role('platform_owner')
 def get_pending_users(current_user):
-    """Lists accounts awaiting administrator approval (Admin Only)."""
-    pending = UserModel.get_pending_approval_users(current_user.get('institution_id', 1))
+    """Lists accounts awaiting administrator approval (Platform Owner Only)."""
+    pending = UserModel.get_pending_approval_users()
     return jsonify({'success': True, 'pending_users': pending})
 
 @auth_bp.route('/api/admin/approve-user/<int:target_user_id>', methods=['POST'])
-@require_role('admin')
+@require_role('platform_owner')
 def approve_user(current_user, target_user_id):
-    """Approves a user account, setting status to ACTIVE (Admin Only)."""
+    """Approves a user account, setting status to ACTIVE (Platform Owner Only)."""
     data = request.get_json() or {}
-    role = data.get('role', 'analyst')
-    institution_id = data.get('institution_id', current_user.get('institution_id', 1))
+    role = data.get('role', 'org_admin')
+    institution_id = data.get('institution_id')
 
     success = UserModel.approve_user_by_admin(target_user_id, role=role, institution_id=institution_id)
     if not success:

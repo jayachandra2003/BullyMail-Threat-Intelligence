@@ -1,0 +1,404 @@
+import pytest
+import json
+import io
+from bullymail.database.connection import execute_query, fetch_one
+from bullymail.models.institution import InstitutionModel
+from bullymail.models.user import UserModel
+from bullymail.models.member import OrganizationMemberModel
+from bullymail.models.analysis import AnalysisModel
+from bullymail.services.admin_warning_service import admin_warning_service
+
+@pytest.fixture
+def multi_tenant_fixture(app, client):
+    """
+    Sets up a complete multi-tenant SaaS environment:
+    - Platform Owner: Jaya Chandra Vennam
+    - Institution Alpha (e.g. VIT University) with Org Admin Alpha and Analyst Alpha
+    - Institution Beta (e.g. ABC Corp) with Org Admin Beta and Analyst Beta
+    - Pending Institution Gamma awaiting approval
+    """
+    with app.app_context():
+        # 1. Institutions
+        inst_a_id = InstitutionModel.create_institution(
+            "VIT University", "vit.ac.in", org_type="university",
+            contact_name="VIT Dean", contact_email="dean@vit.ac.in", code="VIT"
+        )
+        inst_b_id = InstitutionModel.create_institution(
+            "ABC Corporation", "abccorp.com", org_type="company",
+            contact_name="ABC CISO", contact_email="ciso@abccorp.com", code="ABC"
+        )
+        inst_gamma_id = InstitutionModel.create_institution(
+            "Gamma Institute", "gamma.edu", org_type="college",
+            contact_name="Gamma Admin", contact_email="admin@gamma.edu", code="GAMMA"
+        )
+        InstitutionModel.update_status(inst_gamma_id, 'PENDING_APPROVAL')
+
+        # 2. Users
+        # Platform Owner (Jaya Chandra Vennam)
+        owner_id = execute_query(
+            "INSERT INTO users (username, full_name, password_hash, role, email, status) VALUES (%s, %s, %s, %s, %s, %s)",
+            ("jayachandra", "Jaya Chandra Vennam", UserModel.hash_password("OwnerPass123!"), "platform_owner", "jaya@bullymail.io", "ACTIVE")
+        )
+
+        # Org Admin Alpha (VIT University)
+        admin_a_id = execute_query(
+            "INSERT INTO users (username, full_name, password_hash, role, email, status, institution_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            ("vit_admin", "VIT Administrator", UserModel.hash_password("AdminPass123!"), "org_admin", "admin@vit.ac.in", "ACTIVE", inst_a_id)
+        )
+
+        # Analyst Alpha (VIT University)
+        analyst_a_id = execute_query(
+            "INSERT INTO users (username, full_name, password_hash, role, email, status, institution_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            ("vit_analyst", "VIT Analyst", UserModel.hash_password("AnalystPass123!"), "analyst", "analyst@vit.ac.in", "ACTIVE", inst_a_id)
+        )
+
+        # Org Admin Beta (ABC Corporation)
+        admin_b_id = execute_query(
+            "INSERT INTO users (username, full_name, password_hash, role, email, status, institution_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            ("abc_admin", "ABC Administrator", UserModel.hash_password("AdminPass123!"), "org_admin", "admin@abccorp.com", "ACTIVE", inst_b_id)
+        )
+
+        # Analyst Beta (ABC Corporation)
+        analyst_b_id = execute_query(
+            "INSERT INTO users (username, full_name, password_hash, role, email, status, institution_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            ("abc_analyst", "ABC Analyst", UserModel.hash_password("AnalystPass123!"), "analyst", "analyst@abccorp.com", "ACTIVE", inst_b_id)
+        )
+
+        # Pending User for Gamma
+        pending_user_id = execute_query(
+            "INSERT INTO users (username, full_name, password_hash, role, email, status, institution_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            ("gamma_admin", "Gamma Administrator", UserModel.hash_password("Pass123!"), "org_admin", "admin@gamma.edu", "PENDING_ADMIN_APPROVAL", inst_gamma_id)
+        )
+
+        # 3. Seed Members for Institution Alpha
+        member_a_id = OrganizationMemberModel.add_member(
+            institution_id=inst_a_id,
+            full_name="Alice Student",
+            email="alice@vit.ac.in",
+            member_type="student",
+            department="CSE",
+            identifier="21BCE001"
+        )
+
+        # 4. Seed Members for Institution Beta
+        member_b_id = OrganizationMemberModel.add_member(
+            institution_id=inst_b_id,
+            full_name="Bob Employee",
+            email="bob@abccorp.com",
+            member_type="employee",
+            department="Security Operations",
+            identifier="EMP-902"
+        )
+
+        # 5. Seed Analysis Incidents
+        sample_report = {
+            'email_subject': 'Threat Test Incident',
+            'email_from': 'attacker@external.com',
+            'email_to': 'victim@vit.ac.in',
+            'email_text': 'You will pay for this.',
+            'overall_risk_level': 'HIGH',
+            'overall_confidence': 0.88,
+            'threat_score': 0.88,
+            'bullying_analysis': {'is_bullying': True, 'confidence': 0.88, 'rule_based_matches': ['pay for this'], 'rule_based_score': 0.88, 'ml_prediction': True, 'ml_confidence': 0.85, 'model_used': 'Hybrid'},
+            'phishing_analysis': {'risk_level': 'LOW', 'confidence': 0.0, 'indicators': []},
+            'url_analysis': {'total_urls': 0, 'suspicious_count': 0, 'urls': []},
+            'domain_analysis': {},
+            'social_eng_analysis': {'risk_level': 'LOW', 'confidence': 0.0, 'techniques': []},
+            'malware_analysis': {'total_attachments': 0, 'malware_detected': False, 'malicious_count': 0, 'risk_level': 'LOW', 'attachments': []},
+            'image_analysis': {'total_images': 0, 'suspicious_count': 0, 'images': []},
+            'top_risk_factors': []
+        }
+        analysis_a_id = AnalysisModel.save_analysis(sample_report, institution_id=inst_a_id, user_id=admin_a_id)
+
+        return {
+            'inst_a_id': inst_a_id,
+            'inst_b_id': inst_b_id,
+            'inst_gamma_id': inst_gamma_id,
+            'owner_id': owner_id,
+            'admin_a_id': admin_a_id,
+            'analyst_a_id': analyst_a_id,
+            'admin_b_id': admin_b_id,
+            'analyst_b_id': analyst_b_id,
+            'pending_user_id': pending_user_id,
+            'member_a_id': member_a_id,
+            'member_b_id': member_b_id,
+            'analysis_a_id': analysis_a_id
+        }
+
+
+def login_as(client, user_id, username, role, institution_id=None, full_name=""):
+    """Helper to set up authenticated session cookies directly."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = user_id
+        sess['username'] = username
+        sess['role'] = role
+        sess['institution_id'] = institution_id
+        sess['full_name'] = full_name
+
+
+# =========================================================================
+# 1. Platform Owner Privileges & Isolation Tests
+# =========================================================================
+
+def test_platform_owner_can_access_governance_endpoints(client, multi_tenant_fixture):
+    """Platform Owner (Jaya Chandra Vennam) has exclusive access to pending approvals and platform overview."""
+    f = multi_tenant_fixture
+    login_as(client, f['owner_id'], 'jayachandra', 'platform_owner', full_name="Jaya Chandra Vennam")
+
+    # 1. Pending registrations
+    res = client.get('/api/admin/pending-registrations')
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data['success'] is True
+    assert 'pending_users' in data
+    assert 'pending_orgs' in data
+    assert any(o['id'] == f['inst_gamma_id'] for o in data['pending_orgs'])
+
+    # 2. Platform overview metrics
+    res_ov = client.get('/api/admin/platform-overview')
+    assert res_ov.status_code == 200
+    ov_data = res_ov.get_json()
+    assert ov_data['success'] is True
+    assert 'stats' in ov_data
+    assert ov_data['stats']['total_institutions'] >= 3
+
+    # 3. Approve Organization Application
+    res_app = client.post(f"/api/admin/approve-org/{f['inst_gamma_id']}")
+    assert res_app.status_code == 200
+    app_data = res_app.get_json()
+    assert app_data['success'] is True
+    # Confirm org is now active
+    gamma = InstitutionModel.get_by_id(f['inst_gamma_id'])
+    assert gamma['status'] == 'ACTIVE'
+
+
+def test_org_admin_cannot_access_platform_owner_endpoints(client, multi_tenant_fixture):
+    """Org Admin cannot access pending approvals, org approvals, or platform overview (Fail Closed 403)."""
+    f = multi_tenant_fixture
+    login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'], full_name="VIT Admin")
+
+    # 1. Cannot view pending registrations
+    res1 = client.get('/api/admin/pending-registrations')
+    assert res1.status_code == 403
+
+    # 2. Cannot view platform overview
+    res2 = client.get('/api/admin/platform-overview')
+    assert res2.status_code == 403
+
+    # 3. Cannot approve organization
+    res3 = client.post(f"/api/admin/approve-org/{f['inst_gamma_id']}")
+    assert res3.status_code == 403
+
+    # 4. Cannot reject organization
+    res4 = client.post(f"/api/admin/reject-org/{f['inst_gamma_id']}")
+    assert res4.status_code == 403
+
+    # 5. Cannot approve pending users
+    res5 = client.post('/api/admin/approve-user', json={'user_id': f['pending_user_id'], 'action': 'approve'})
+    assert res5.status_code == 403
+
+
+def test_analyst_cannot_access_platform_or_admin_endpoints(client, multi_tenant_fixture):
+    """Analyst cannot access administrative endpoints (Fail Closed 403)."""
+    f = multi_tenant_fixture
+    login_as(client, f['analyst_a_id'], 'vit_analyst', 'analyst', institution_id=f['inst_a_id'])
+
+    res1 = client.get('/api/admin/pending-registrations')
+    assert res1.status_code == 403
+
+    res2 = client.get('/api/admin/mailboxes')
+    assert res2.status_code == 403
+
+    res3 = client.post('/api/members', json={'full_name': 'Test', 'email': 't@vit.ac.in', 'member_type': 'student'})
+    assert res3.status_code == 403
+
+    res4 = client.put('/api/org/settings', json={'name': 'Hacked VIT'})
+    assert res4.status_code == 403
+
+
+# =========================================================================
+# 2. Strict Cross-Tenant Isolation Tests
+# =========================================================================
+
+def test_cross_tenant_stats_access_forbidden(client, multi_tenant_fixture):
+    """Org Admin A attempting to access stats of Institution B must fail with 403 Forbidden."""
+    f = multi_tenant_fixture
+    login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'])
+
+    # Access own stats -> OK
+    res_own = client.get(f"/api/institutions/{f['inst_a_id']}/stats")
+    assert res_own.status_code == 200
+
+    # Cross-tenant access to Institution B -> 403 Forbidden
+    res_cross = client.get(f"/api/institutions/{f['inst_b_id']}/stats")
+    assert res_cross.status_code == 403
+
+
+def test_cross_tenant_analysis_history_tampering(client, multi_tenant_fixture):
+    """Org Admin B attempting to delete or access analysis belonging to Institution A must fail closed."""
+    f = multi_tenant_fixture
+    login_as(client, f['admin_b_id'], 'abc_admin', 'org_admin', institution_id=f['inst_b_id'])
+
+    # Attempt to delete Institution A's analysis record
+    res_del = client.delete(f"/api/analysis/history/{f['analysis_a_id']}")
+    # Must fail: 404 (not found in tenant scope) or 403
+    assert res_del.status_code in (403, 404)
+
+    # Verification: record still exists in database
+    rec = AnalysisModel.get_by_id(f['analysis_a_id'], institution_id=f['inst_a_id'], role='org_admin')
+    assert rec is not None
+
+
+# =========================================================================
+# 3. Organization Member Management Tests
+# =========================================================================
+
+def test_member_crud_isolated_to_tenant(client, multi_tenant_fixture):
+    """Org Admin can create, view, update, and delete members strictly within their tenant."""
+    f = multi_tenant_fixture
+    login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'])
+
+    # 1. List members for Institution A (sees Alice, not Bob)
+    res_list = client.get('/api/members')
+    assert res_list.status_code == 200
+    data = res_list.get_json()
+    assert data['success'] is True
+    member_emails = [m['email'] for m in data['members']]
+    assert 'alice@vit.ac.in' in member_emails
+    assert 'bob@abccorp.com' not in member_emails
+
+    # 2. Add Member for Institution A
+    res_add = client.post('/api/members', json={
+        'full_name': 'Charlie Faculty',
+        'email': 'charlie@vit.ac.in',
+        'member_type': 'faculty',
+        'department': 'Physics',
+        'identifier': 'FAC-101'
+    })
+    assert res_add.status_code == 201
+    add_data = res_add.get_json()
+    assert add_data['success'] is True
+    charlie_id = add_data['member_id']
+
+    # 3. Update Member
+    res_upd = client.put(f'/api/members/{charlie_id}', json={
+        'full_name': 'Prof. Charlie',
+        'email': 'charlie@vit.ac.in',
+        'member_type': 'faculty',
+        'department': 'Applied Physics',
+        'status': 'ACTIVE'
+    })
+    assert res_upd.status_code == 200
+
+    # 4. Cross-tenant tampering: Org Admin B tries to update Charlie
+    login_as(client, f['admin_b_id'], 'abc_admin', 'org_admin', institution_id=f['inst_b_id'])
+    res_cross_upd = client.put(f'/api/members/{charlie_id}', json={
+        'full_name': 'Hacked Charlie',
+        'status': 'SUSPENDED'
+    })
+    assert res_cross_upd.status_code == 404
+
+    # Org Admin B tries to delete Charlie
+    res_cross_del = client.delete(f'/api/members/{charlie_id}')
+    assert res_cross_del.status_code == 404
+
+    # 5. Org Admin A deletes Charlie successfully
+    login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'])
+    res_del = client.delete(f'/api/members/{charlie_id}')
+    assert res_del.status_code == 200
+
+
+def test_member_bulk_csv_import(client, multi_tenant_fixture):
+    """Org Admin can upload CSV to bulk import members, all scoped to tenant."""
+    f = multi_tenant_fixture
+    login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'])
+
+    csv_content = (
+        "full_name,email,member_type,department,identifier\n"
+        "David Dave,david@vit.ac.in,student,CSE,21BCE045\n"
+        "Emma Watson,emma@vit.ac.in,student,ECE,21BEC012\n"
+        "Dr. Smith,smith@vit.ac.in,faculty,Mathematics,FAC-090\n"
+    )
+
+    data = {
+        'file': (io.BytesIO(csv_content.encode('utf-8')), 'members.csv')
+    }
+
+    res = client.post('/api/members/import-csv', data=data, content_type='multipart/form-data')
+    assert res.status_code == 200
+    res_data = res.get_json()
+    assert res_data['success'] is True
+    assert res_data['imported'] == 3
+
+    # Check imported members exist and are assigned to Institution A
+    m = OrganizationMemberModel.get_by_email('david@vit.ac.in', f['inst_a_id'])
+    assert m is not None
+    assert m['full_name'] == 'David Dave'
+    assert m['institution_id'] == f['inst_a_id']
+
+
+def test_csv_template_download(client, multi_tenant_fixture):
+    """Org Admin can download CSV template."""
+    f = multi_tenant_fixture
+    login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'])
+
+    res = client.get('/api/members/template-csv')
+    assert res.status_code == 200
+    assert 'text/csv' in res.content_type
+    assert b'full_name,email,member_type,department,identifier' in res.data
+
+
+# =========================================================================
+# 4. Organization Profile & Settings Tests
+# =========================================================================
+
+def test_organization_settings_management(client, multi_tenant_fixture):
+    """Org Admin can view and modify their organization profile and settings."""
+    f = multi_tenant_fixture
+    login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'])
+
+    # 1. View settings
+    res = client.get('/api/org/settings')
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data['success'] is True
+    assert data['organization']['name'] == 'VIT University'
+    assert data['organization']['domain'] == 'vit.ac.in'
+
+    # 2. Update settings
+    res_upd = client.put('/api/org/settings', json={
+        'name': 'VIT University Updated',
+        'contact_name': 'VIT Registrar',
+        'contact_email': 'registrar@vit.ac.in',
+        'settings': {
+            'threat_sensitivity': 'strict',
+            'auto_quarantine': True
+        }
+    })
+    assert res_upd.status_code == 200
+    upd_data = res_upd.get_json()
+    assert upd_data['success'] is True
+
+    # Confirm updated in DB
+    inst = InstitutionModel.get_by_id(f['inst_a_id'])
+    assert inst['name'] == 'VIT University Updated'
+    assert inst['contact_name'] == 'VIT Registrar'
+
+
+# =========================================================================
+# 5. Warning Service Integrity Verification
+# =========================================================================
+
+def test_warning_service_remains_functional(client, multi_tenant_fixture):
+    """Admin warning service diagnostics and preview work seamlessly with tenant isolation."""
+    f = multi_tenant_fixture
+    login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'])
+
+    # Warning preview
+    rec = AnalysisModel.get_by_id(f['analysis_a_id'], institution_id=f['inst_a_id'], role='org_admin')
+    assert rec is not None
+
+    preview = admin_warning_service.get_warning_preview(rec)
+    assert 'target_recipient' in preview
+    assert 'warning_subject' in preview
+    assert 'warning_body' in preview

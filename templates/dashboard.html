@@ -70,12 +70,13 @@
                     <li>
                         <a class="nav-link-v2 active" data-tab="tab-dashboard">
                             <i class="fas fa-chart-pie"></i>
-                            <span>Executive Dashboard</span>
+                            <span>{% if session.get('role') == 'platform_owner' %}Executive Overview{% else %}Executive Dashboard{% endif %}</span>
                         </a>
                     </li>
                 </ul>
             </div>
 
+            {% if session.get('role') != 'platform_owner' %}
             <div class="nav-group">
                 <div class="nav-group-title">Investigate</div>
                 <ul class="nav-menu">
@@ -93,6 +94,48 @@
                     </li>
                 </ul>
             </div>
+            {% endif %}
+
+            {% if session.get('role') in ('org_admin', 'admin') %}
+            <div class="nav-group">
+                <div class="nav-group-title">Organization</div>
+                <ul class="nav-menu">
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-members">
+                            <i class="fas fa-users-gear"></i>
+                            <span>Organization Members</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-org-settings">
+                            <i class="fas fa-sliders"></i>
+                            <span>Organization Settings</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if session.get('role') == 'platform_owner' %}
+            <div class="nav-group">
+                <div class="nav-group-title">Platform Governance</div>
+                <ul class="nav-menu">
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-pending-approvals" id="navPendingApprovalsLink">
+                            <i class="fas fa-user-clock text-warning"></i>
+                            <span>Organization Approvals</span>
+                            <span class="badge bg-warning text-dark font-mono ms-auto d-none" id="sidebarPendingBadge" style="font-size: 0.65rem; padding: 2px 6px;">0</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link-v2" data-tab="tab-organizations">
+                            <i class="fas fa-sitemap"></i>
+                            <span>Organizations Directory</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            {% endif %}
 
             <div class="nav-group">
                 <div class="nav-group-title">Intelligence</div>
@@ -120,19 +163,6 @@
                             <i class="fas fa-inbox"></i>
                             <span>Secure Mailbox</span>
                         </a>
-                        {% if session.get('role') == 'admin' %}
-                        <ul class="nav-sub-menu">
-                            <li>
-                                <a class="nav-link-sub" data-tab="tab-pending-approvals" id="navPendingApprovalsLink">
-                                    <span class="d-flex align-items-center">
-                                        <i class="fas fa-user-clock me-2 text-warning"></i>
-                                        <span>Pending Approvals</span>
-                                    </span>
-                                    <span class="badge bg-warning text-dark font-mono d-none" id="sidebarPendingBadge" style="font-size: 0.65rem; padding: 2px 6px;">0</span>
-                                </a>
-                            </li>
-                        </ul>
-                        {% endif %}
                     </li>
                 </ul>
             </div>
@@ -142,11 +172,23 @@
                 <!-- User Profile Widget -->
                 <div class="user-profile-widget">
                     <div class="user-avatar">
-                        {{ session.get('username', 'A')[0].upper() }}
+                        {{ (session.get('full_name') or session.get('username', 'A'))[0].upper() }}
                     </div>
                     <div class="user-meta">
-                        <div class="user-name">{{ session.get('username', 'Administrator') }}</div>
-                        <div class="user-role">{{ session.get('role', 'SOC Operator') }}</div>
+                        <div class="user-name text-truncate" style="max-width: 130px;" title="{{ session.get('full_name') or session.get('username') }}">
+                            {{ session.get('full_name') or session.get('username', 'Administrator') }}
+                        </div>
+                        <div class="user-role font-mono">
+                            {% if session.get('role') == 'platform_owner' %}
+                                <span class="badge bg-primary text-light" style="font-size: 0.62rem; padding: 2px 5px;">Platform Owner</span>
+                            {% elif session.get('role') in ('org_admin', 'admin') %}
+                                <span class="badge bg-info text-dark" style="font-size: 0.62rem; padding: 2px 5px;">Org Admin</span>
+                            {% elif session.get('role') == 'analyst' %}
+                                <span class="badge bg-secondary text-light" style="font-size: 0.62rem; padding: 2px 5px;">Analyst</span>
+                            {% else %}
+                                {{ session.get('role', 'SOC Operator') }}
+                            {% endif %}
+                        </div>
                     </div>
                     <a href="/logout" class="btn-soc-danger btn-sm p-2" title="Sign Out">
                         <i class="fas fa-right-from-bracket"></i>
@@ -746,7 +788,7 @@
                                 </h6>
                                 <p class="text-muted small mb-0">Manage your institutional mailbox connections and synchronization.</p>
                             </div>
-                            {% if session.get('role') == 'admin' %}
+                            {% if session.get('role') in ('platform_owner', 'org_admin', 'admin') %}
                             <button type="button" class="btn-soc-primary btn-sm font-mono" onclick="openAddMailboxModal()">
                                 <i class="fas fa-plus me-1"></i> Add Secure Mailbox
                             </button>
@@ -889,28 +931,23 @@
             <!-- ==============================================================
                  SECTION 6: Pending Account Approvals (Dedicated Governance Workstation)
                  ============================================================== -->
-            {% if session.get('role') == 'admin' %}
+            <!-- ==============================================================
+                 SECTION: Platform Governance (Platform Owner Workstations)
+                 ============================================================== -->
+            {% if session.get('role') == 'platform_owner' %}
+            <!-- Tab: Organization & User Approvals -->
             <section id="tab-pending-approvals" class="tab-content-pane" style="display: none;">
-                <!-- Breadcrumb Bar -->
-                <div class="mb-3 font-mono small text-muted">
-                    <span class="text-accent"><i class="fas fa-building-user me-1"></i>Integration</span>
-                    <span class="mx-2 text-muted">/</span>
-                    <a href="#" onclick="openSecureMailboxTab(event)" class="text-muted text-decoration-none hover-accent">Secure Mailbox</a>
-                    <span class="mx-2 text-muted">/</span>
-                    <span class="text-primary-soc fw-bold">Account Approvals</span>
-                </div>
-
                 <!-- Header Panel -->
                 <div class="soc-panel p-4 mb-4">
                     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                         <div>
                             <h4 class="fw-bold mb-1 font-mono text-primary-soc d-flex align-items-center gap-2" style="font-size: 1.25rem;">
-                                <i class="fas fa-user-shield text-accent"></i> Account Approvals
+                                <i class="fas fa-building-circle-check text-accent"></i> Organization & Account Governance
                             </h4>
-                            <p class="text-muted small mb-0 font-mono">Review and authorize institutional user registration requests.</p>
+                            <p class="text-muted small mb-0 font-mono">Review, approve, or reject organization onboarding requests and administrative users.</p>
                         </div>
                         <button type="button" class="btn-soc-outline btn-sm font-mono" id="btnRefreshPendingApprovals" onclick="loadPendingRegistrations()">
-                            <i class="fas fa-sync-alt me-1"></i> Refresh
+                            <i class="fas fa-sync-alt me-1"></i> Refresh Queue
                         </button>
                     </div>
 
@@ -919,54 +956,71 @@
                         <div class="col">
                             <div class="soc-kpi-card h-100">
                                 <div class="soc-kpi-header">
-                                    <span class="soc-kpi-title">PENDING</span>
-                                    <i class="fas fa-user-clock text-warning"></i>
+                                    <span class="soc-kpi-title">PENDING APPLICATIONS</span>
+                                    <i class="fas fa-clock text-warning"></i>
                                 </div>
                                 <div class="soc-kpi-val text-warning" id="kpiPendingCount">0</div>
-                                <div class="soc-kpi-sub">Awaiting review</div>
+                                <div class="soc-kpi-sub">Awaiting Owner Approval</div>
                             </div>
                         </div>
                         <div class="col">
                             <div class="soc-kpi-card h-100">
                                 <div class="soc-kpi-header">
-                                    <span class="soc-kpi-title">APPROVED</span>
-                                    <i class="fas fa-user-check text-success"></i>
+                                    <span class="soc-kpi-title">ACTIVE ORGANIZATIONS</span>
+                                    <i class="fas fa-check-double text-success"></i>
                                 </div>
                                 <div class="soc-kpi-val text-success" id="kpiApprovedCount">0</div>
-                                <div class="soc-kpi-sub">Active accounts</div>
+                                <div class="soc-kpi-sub">Provisioned Tenants</div>
                             </div>
                         </div>
                         <div class="col">
                             <div class="soc-kpi-card h-100">
                                 <div class="soc-kpi-header">
-                                    <span class="soc-kpi-title">REJECTED</span>
-                                    <i class="fas fa-user-times text-danger"></i>
+                                    <span class="soc-kpi-title">REJECTED APPLICATIONS</span>
+                                    <i class="fas fa-ban text-danger"></i>
                                 </div>
                                 <div class="soc-kpi-val text-danger" id="kpiRejectedCount">0</div>
-                                <div class="soc-kpi-sub">Denied requests</div>
+                                <div class="soc-kpi-sub">Denied Requests</div>
                             </div>
                         </div>
                         <div class="col">
                             <div class="soc-kpi-card h-100">
                                 <div class="soc-kpi-header">
-                                    <span class="soc-kpi-title">TOTAL REQUESTS</span>
-                                    <i class="fas fa-users text-accent"></i>
+                                    <span class="soc-kpi-title">TOTAL SUBMISSIONS</span>
+                                    <i class="fas fa-layer-group text-accent"></i>
                                 </div>
                                 <div class="soc-kpi-val text-accent" id="kpiTotalCount">0</div>
-                                <div class="soc-kpi-sub">Total submissions</div>
+                                <div class="soc-kpi-sub">Lifetime Applications</div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Approval Work Queue Panel -->
+                <!-- Organization Applications Queue -->
                 <div class="soc-panel p-4 mb-4">
                     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                         <div>
                             <h6 class="fw-bold font-mono text-uppercase mb-0" style="color: var(--text-primary); font-size: 0.85rem; letter-spacing: 0.05em;">
-                                <i class="fas fa-list-check text-accent me-2"></i>Pending Registration Requests
+                                <i class="fas fa-building-user text-warning me-2"></i>Pending Organization Applications
                             </h6>
-                            <p class="text-muted small mb-0 font-mono">Review and authorize institutional user access.</p>
+                            <p class="text-muted small mb-0 font-mono">New institutions and enterprises awaiting platform authorization.</p>
+                        </div>
+                    </div>
+                    <div id="pendingOrgsContainer">
+                        <div class="py-4 text-center text-muted font-mono small">
+                            <i class="fas fa-spinner fa-spin me-2"></i>Loading organization applications...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Individual User Accounts Queue -->
+                <div class="soc-panel p-4 mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div>
+                            <h6 class="fw-bold font-mono text-uppercase mb-0" style="color: var(--text-primary); font-size: 0.85rem; letter-spacing: 0.05em;">
+                                <i class="fas fa-users-gear text-accent me-2"></i>Pending Individual User Accounts
+                            </h6>
+                            <p class="text-muted small mb-0 font-mono">User accounts awaiting platform administrative verification.</p>
                         </div>
                     </div>
 
@@ -995,9 +1049,9 @@
                             <!-- 4. Role Filter -->
                             <select id="pendingRoleFilter" class="form-select form-select-sm soc-toolbar-select font-mono" onchange="applyPendingFilters()">
                                 <option value="ALL">All Roles</option>
+                                <option value="org_admin">Org Admin</option>
                                 <option value="analyst">Analyst</option>
                                 <option value="operator">Operator</option>
-                                <option value="admin">Admin</option>
                             </select>
 
                             <!-- 5. Clear Button -->
@@ -1018,13 +1072,143 @@
                     <!-- Work Queue Table Container -->
                     <div id="pendingRegistrationsContainer">
                         <div class="py-4 text-center text-muted font-mono small">
-                            <i class="fas fa-spinner fa-spin me-2"></i>Loading pending account registrations...
+                            <i class="fas fa-spinner fa-spin me-2"></i>Loading pending user registrations...
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Reject Registration Confirmation Modal -->
+            <!-- Tab: Organizations Directory (Platform Owner) -->
+            <section id="tab-organizations" class="tab-content-pane" style="display: none;">
+                <div class="soc-panel p-4 mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div>
+                            <h4 class="fw-bold mb-1 font-mono text-primary-soc d-flex align-items-center gap-2" style="font-size: 1.25rem;">
+                                <i class="fas fa-sitemap text-accent"></i> Registered Organizations Directory
+                            </h4>
+                            <p class="text-muted small mb-0 font-mono">Platform-wide overview of all onboarded tenants, universities, and enterprises.</p>
+                        </div>
+                        <button type="button" class="btn-soc-outline btn-sm font-mono" onclick="loadPlatformOrganizations()">
+                            <i class="fas fa-sync-alt me-1"></i> Refresh Directory
+                        </button>
+                    </div>
+
+                    <!-- Platform Stats KPIs -->
+                    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-3 mt-2" id="platformStatsContainer">
+                        <div class="col">
+                            <div class="soc-kpi-card h-100">
+                                <div class="soc-kpi-header">
+                                    <span class="soc-kpi-title">TOTAL ORGANIZATIONS</span>
+                                    <i class="fas fa-building text-accent"></i>
+                                </div>
+                                <div class="soc-kpi-val text-accent" id="platKpiTotalOrgs">0</div>
+                                <div class="soc-kpi-sub">Registered Tenants</div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="soc-kpi-card h-100">
+                                <div class="soc-kpi-header">
+                                    <span class="soc-kpi-title">ACTIVE TENANTS</span>
+                                    <i class="fas fa-circle-check text-success"></i>
+                                </div>
+                                <div class="soc-kpi-val text-success" id="platKpiActiveOrgs">0</div>
+                                <div class="soc-kpi-sub">Operational Workspaces</div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="soc-kpi-card h-100">
+                                <div class="soc-kpi-header">
+                                    <span class="soc-kpi-title">TOTAL USERS</span>
+                                    <i class="fas fa-users text-info"></i>
+                                </div>
+                                <div class="soc-kpi-val text-info" id="platKpiTotalUsers">0</div>
+                                <div class="soc-kpi-sub">Across All Tenants</div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="soc-kpi-card h-100">
+                                <div class="soc-kpi-header">
+                                    <span class="soc-kpi-title">TOTAL THREATS DETECTED</span>
+                                    <i class="fas fa-shield-virus text-danger"></i>
+                                </div>
+                                <div class="soc-kpi-val text-danger" id="platKpiTotalThreats">0</div>
+                                <div class="soc-kpi-sub">Platform-wide Detections</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Organizations Table Panel -->
+                <div class="soc-panel p-4 mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div class="soc-search-wrapper" style="max-width: 320px;">
+                            <i class="fas fa-search soc-search-icon"></i>
+                            <input type="text" id="platformOrgSearchInput" class="form-control soc-toolbar-input font-mono" placeholder="Search organizations..." oninput="filterPlatformOrgs()">
+                        </div>
+                    </div>
+                    <div id="platformOrgsContainer">
+                        <div class="py-4 text-center text-muted font-mono small">
+                            <i class="fas fa-spinner fa-spin me-2"></i>Loading organization directory...
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Confirm Approve Org Modal -->
+            <div class="modal fade soc-action-modal" id="approveOrgConfirmModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-success font-mono">
+                                <i class="fas fa-building-circle-check me-2"></i>Approve Organization Application?
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="text-muted font-mono small mb-3">
+                                You are approving <strong class="text-primary-soc" id="approveOrgModalName">Org Name</strong> as an active tenant.
+                                All pending institutional admin accounts associated with this organization will be activated as <strong>Org Admin</strong>.
+                            </p>
+                            <input type="hidden" id="approveOrgModalId">
+                            <div class="d-flex justify-content-end gap-2 mt-4">
+                                <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn-soc-primary btn-sm font-mono" id="btnConfirmApproveOrg" onclick="executeApproveOrgSubmit()">
+                                    <i class="fas fa-check me-1"></i> Confirm & Activate Organization
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Confirm Reject Org Modal -->
+            <div class="modal fade soc-action-modal" id="rejectOrgConfirmModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-danger font-mono">
+                                <i class="fas fa-building-circle-xmark me-2"></i>Reject Organization Application?
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="text-muted font-mono small mb-3">
+                                Are you sure you want to reject the application for <strong class="text-primary-soc" id="rejectOrgModalName">Org Name</strong>?
+                                Associated admin accounts will be marked as REJECTED.
+                            </p>
+                            <input type="hidden" id="rejectOrgModalId">
+                            <div class="d-flex justify-content-end gap-2 mt-4">
+                                <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn-soc-danger btn-sm font-mono" id="btnConfirmRejectOrg" onclick="executeRejectOrgSubmit()">
+                                    <i class="fas fa-ban me-1"></i> Reject Organization
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reject User Confirmation Modal -->
             <div class="modal fade" id="rejectUserConfirmModal" tabindex="-1" aria-labelledby="rejectUserConfirmModalLabel" aria-hidden="true">
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content soc-panel p-2">
@@ -1043,6 +1227,395 @@
                                     <i class="fas fa-user-times me-1"></i> Reject Request
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- ==============================================================
+                 SECTION: Tenant Administration (Org Admin Workstations)
+                 ============================================================== -->
+            {% if session.get('role') in ('org_admin', 'admin') %}
+            <!-- Tab: Organization Members Workstation -->
+            <section id="tab-members" class="tab-content-pane" style="display: none;">
+                <!-- Header Panel -->
+                <div class="soc-panel p-4 mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div>
+                            <h4 class="fw-bold mb-1 font-mono text-primary-soc d-flex align-items-center gap-2" style="font-size: 1.25rem;">
+                                <i class="fas fa-users-gear text-accent"></i> Organization Members
+                            </h4>
+                            <p class="text-muted small mb-0 font-mono">Manage enrolled students, faculty, employees, and staff for threat intelligence correlation.</p>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <a href="/api/members/template-csv" class="btn-soc-outline btn-sm font-mono" title="Download sample CSV template">
+                                <i class="fas fa-download me-1"></i> CSV Template
+                            </a>
+                            <button type="button" class="btn-soc-secondary btn-sm font-mono" onclick="openImportCsvModal()">
+                                <i class="fas fa-file-import me-1"></i> Bulk Import CSV
+                            </button>
+                            <button type="button" class="btn-soc-primary btn-sm font-mono" onclick="openAddMemberModal()">
+                                <i class="fas fa-user-plus me-1"></i> Add Member
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 4 Summary KPI Cards -->
+                    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-3 mt-2">
+                        <div class="col">
+                            <div class="soc-kpi-card h-100">
+                                <div class="soc-kpi-header">
+                                    <span class="soc-kpi-title">TOTAL MEMBERS</span>
+                                    <i class="fas fa-users text-accent"></i>
+                                </div>
+                                <div class="soc-kpi-val text-accent" id="memberKpiTotal">0</div>
+                                <div class="soc-kpi-sub">Enrolled Directory</div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="soc-kpi-card h-100">
+                                <div class="soc-kpi-header">
+                                    <span class="soc-kpi-title">ACTIVE MEMBERS</span>
+                                    <i class="fas fa-user-check text-success"></i>
+                                </div>
+                                <div class="soc-kpi-val text-success" id="memberKpiActive">0</div>
+                                <div class="soc-kpi-sub">Protected Inboxes</div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="soc-kpi-card h-100">
+                                <div class="soc-kpi-header">
+                                    <span class="soc-kpi-title">STUDENTS / EMPLOYEES</span>
+                                    <i class="fas fa-graduation-cap text-info"></i>
+                                </div>
+                                <div class="soc-kpi-val text-info" id="memberKpiStudents">0</div>
+                                <div class="soc-kpi-sub">Primary Cohort</div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="soc-kpi-card h-100">
+                                <div class="soc-kpi-header">
+                                    <span class="soc-kpi-title">FACULTY / STAFF</span>
+                                    <i class="fas fa-briefcase text-warning"></i>
+                                </div>
+                                <div class="soc-kpi-val text-warning" id="memberKpiStaff">0</div>
+                                <div class="soc-kpi-sub">Staff & Instructors</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Members Data Workstation -->
+                <div class="soc-panel p-4 mb-4">
+                    <!-- Search & Filter Toolbar -->
+                    <div class="soc-inbox-toolbar-container mb-3">
+                        <div class="soc-inbox-toolbar">
+                            <div class="soc-search-wrapper">
+                                <i class="fas fa-search soc-search-icon"></i>
+                                <input type="text" id="memberSearchInput" class="form-control soc-toolbar-input font-mono" placeholder="Search name, email, department, ID..." oninput="handleMemberFilterChange()">
+                                <button type="button" class="btn-clear-search d-none" id="btnClearMemberSearch" onclick="clearMemberSearch()"><i class="fas fa-times"></i></button>
+                            </div>
+                            <select id="memberTypeFilter" class="form-select form-select-sm soc-toolbar-select font-mono" onchange="handleMemberFilterChange()">
+                                <option value="ALL">All Types</option>
+                                <option value="student">Student</option>
+                                <option value="faculty">Faculty</option>
+                                <option value="staff">Staff</option>
+                                <option value="employee">Employee</option>
+                                <option value="contractor">Contractor</option>
+                                <option value="other">Other</option>
+                            </select>
+                            <select id="memberStatusFilter" class="form-select form-select-sm soc-toolbar-select font-mono" onchange="handleMemberFilterChange()">
+                                <option value="ALL">All Status</option>
+                                <option value="ACTIVE">Active</option>
+                                <option value="INACTIVE">Inactive</option>
+                                <option value="SUSPENDED">Suspended</option>
+                            </select>
+                            <button type="button" class="btn-soc-secondary btn-sm soc-btn-clear font-mono" onclick="resetMemberFilters()">
+                                <i class="fas fa-undo-alt me-1"></i> Reset
+                            </button>
+                        </div>
+                        <div class="soc-toolbar-meta d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2 pt-2 border-top border-secondary-subtle">
+                            <div class="soc-result-count font-mono small text-muted fw-semibold">
+                                <i class="fas fa-list-ul me-1 text-accent"></i> <span id="membersResultCountText">Showing 0 members</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Members Table Container -->
+                    <div id="membersTableContainer">
+                        <div class="py-4 text-center text-muted font-mono small">
+                            <i class="fas fa-spinner fa-spin me-2"></i>Loading organization members...
+                        </div>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top border-secondary-subtle flex-wrap gap-2" id="membersPaginationContainer" style="display: none;">
+                        <div class="font-mono small text-muted" id="membersPaginationText">Page 1 of 1</div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn-soc-outline btn-sm font-mono" id="btnPrevMemberPage" onclick="changeMemberPage(-1)" disabled>
+                                <i class="fas fa-chevron-left me-1"></i> Previous
+                            </button>
+                            <button type="button" class="btn-soc-outline btn-sm font-mono" id="btnNextMemberPage" onclick="changeMemberPage(1)" disabled>
+                                Next <i class="fas fa-chevron-right ms-1"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Organization Settings Workstation -->
+            <section id="tab-org-settings" class="tab-content-pane" style="display: none;">
+                <div class="soc-panel p-4 mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div>
+                            <h4 class="fw-bold mb-1 font-mono text-primary-soc d-flex align-items-center gap-2" style="font-size: 1.25rem;">
+                                <i class="fas fa-sliders text-accent"></i> Organization Profile & Settings
+                            </h4>
+                            <p class="text-muted small mb-0 font-mono">Configure your tenant profile, official contacts, and automated threat response parameters.</p>
+                        </div>
+                        <button type="button" class="btn-soc-primary btn-sm font-mono" id="btnSaveOrgSettings" onclick="saveOrgSettings()">
+                            <i class="fas fa-save me-1"></i> Save Changes
+                        </button>
+                    </div>
+
+                    <div class="row g-4 mt-1">
+                        <!-- Profile Card -->
+                        <div class="col-lg-6">
+                            <div class="p-3 rounded h-100" style="background: var(--bg-surface-elevated, #0d1424); border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));">
+                                <h6 class="fw-bold font-mono text-primary-soc mb-3">
+                                    <i class="fas fa-building text-accent me-2"></i>Organization Profile
+                                </h6>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">ORGANIZATION NAME</label>
+                                    <input type="text" class="form-control soc-input font-mono" id="orgSettingsName" placeholder="Organization Legal Name">
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="intake-field-label">ORGANIZATION TYPE</label>
+                                        <input type="text" class="form-control soc-input font-mono" id="orgSettingsType" readonly style="opacity: 0.75;">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="intake-field-label">ORGANIZATION CODE</label>
+                                        <input type="text" class="form-control soc-input font-mono" id="orgSettingsCode" readonly style="opacity: 0.75;">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">PRIMARY EMAIL DOMAIN</label>
+                                    <input type="text" class="form-control soc-input font-mono" id="orgSettingsDomain" readonly style="opacity: 0.75;">
+                                    <div class="form-text text-muted small mt-1 font-mono">Domain changes require platform owner approval.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Administrative Contact & Threat Policy Card -->
+                        <div class="col-lg-6">
+                            <div class="p-3 rounded h-100" style="background: var(--bg-surface-elevated, #0d1424); border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));">
+                                <h6 class="fw-bold font-mono text-primary-soc mb-3">
+                                    <i class="fas fa-user-shield text-accent me-2"></i>Administrative Contact & Policy
+                                </h6>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">PRIMARY CONTACT NAME</label>
+                                    <input type="text" class="form-control soc-input font-mono" id="orgSettingsContactName" placeholder="Administrative Contact Full Name">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">OFFICIAL CONTACT EMAIL</label>
+                                    <input type="email" class="form-control soc-input font-mono" id="orgSettingsContactEmail" placeholder="admin@domain.edu">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">THREAT SENSITIVITY PROFILE</label>
+                                    <select class="form-select soc-input font-mono" id="orgSettingsSensitivity">
+                                        <option value="standard" selected>Standard Security (Balanced Precision & Recall)</option>
+                                        <option value="strict">Strict Protection (Higher Warning Sensitivity)</option>
+                                        <option value="permissive">Permissive / Low Interruption</option>
+                                    </select>
+                                </div>
+                                <div class="form-check form-switch mt-3">
+                                    <input class="form-check-input" type="checkbox" id="orgSettingsAutoQuarantine">
+                                    <label class="form-check-label font-mono small text-light" for="orgSettingsAutoQuarantine">
+                                        Auto-flag severe threat incidents for administrative review
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Add Member Modal -->
+            <div class="modal fade soc-action-modal" id="addMemberModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-primary-soc font-mono">
+                                <i class="fas fa-user-plus text-accent me-2"></i>Add Organization Member
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="formAddMember" onsubmit="event.preventDefault(); submitAddMember();">
+                                <div class="mb-3">
+                                    <label class="intake-field-label">FULL NAME *</label>
+                                    <input type="text" class="form-control soc-input font-mono" id="inputNewMemberName" placeholder="e.g. John Doe" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">OFFICIAL EMAIL ADDRESS *</label>
+                                    <input type="email" class="form-control soc-input font-mono" id="inputNewMemberEmail" placeholder="e.g. john.doe@university.edu" required>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="intake-field-label">MEMBER TYPE *</label>
+                                        <select class="form-select soc-input font-mono" id="selectNewMemberType" required>
+                                            <option value="student" selected>Student</option>
+                                            <option value="faculty">Faculty</option>
+                                            <option value="staff">Staff</option>
+                                            <option value="employee">Employee</option>
+                                            <option value="contractor">Contractor</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="intake-field-label">STUDENT / EMPLOYEE ID</label>
+                                        <input type="text" class="form-control soc-input font-mono" id="inputNewMemberIdentifier" placeholder="e.g. 21BCE1001">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">DEPARTMENT / SCHOOL</label>
+                                    <input type="text" class="form-control soc-input font-mono" id="inputNewMemberDepartment" placeholder="e.g. Computer Science & Eng.">
+                                </div>
+                                <div class="d-flex justify-content-end gap-2 mt-4">
+                                    <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn-soc-primary btn-sm font-mono" id="btnSubmitAddMember">
+                                        <i class="fas fa-check me-1"></i> Save Member
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit Member Modal -->
+            <div class="modal fade soc-action-modal" id="editMemberModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-primary-soc font-mono">
+                                <i class="fas fa-user-pen text-accent me-2"></i>Edit Member Details
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="formEditMember" onsubmit="event.preventDefault(); submitEditMember();">
+                                <input type="hidden" id="editMemberId">
+                                <div class="mb-3">
+                                    <label class="intake-field-label">FULL NAME *</label>
+                                    <input type="text" class="form-control soc-input font-mono" id="inputEditMemberName" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">OFFICIAL EMAIL ADDRESS *</label>
+                                    <input type="email" class="form-control soc-input font-mono" id="inputEditMemberEmail" required>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="intake-field-label">MEMBER TYPE *</label>
+                                        <select class="form-select soc-input font-mono" id="selectEditMemberType" required>
+                                            <option value="student">Student</option>
+                                            <option value="faculty">Faculty</option>
+                                            <option value="staff">Staff</option>
+                                            <option value="employee">Employee</option>
+                                            <option value="contractor">Contractor</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="intake-field-label">STATUS *</label>
+                                        <select class="form-select soc-input font-mono" id="selectEditMemberStatus" required>
+                                            <option value="ACTIVE">ACTIVE</option>
+                                            <option value="INACTIVE">INACTIVE</option>
+                                            <option value="SUSPENDED">SUSPENDED</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="intake-field-label">DEPARTMENT / SCHOOL</label>
+                                        <input type="text" class="form-control soc-input font-mono" id="inputEditMemberDepartment">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="intake-field-label">STUDENT / EMPLOYEE ID</label>
+                                        <input type="text" class="form-control soc-input font-mono" id="inputEditMemberIdentifier">
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-end gap-2 mt-4">
+                                    <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn-soc-primary btn-sm font-mono" id="btnSubmitEditMember">
+                                        <i class="fas fa-save me-1"></i> Update Member
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Delete Member Confirm Modal -->
+            <div class="modal fade soc-action-modal" id="deleteMemberModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-danger font-mono">
+                                <i class="fas fa-user-xmark me-2"></i>Delete Organization Member?
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="text-muted font-mono small mb-3">
+                                Are you sure you want to remove <strong class="text-primary-soc" id="deleteMemberNameText">Member</strong> from the organization directory?
+                            </p>
+                            <input type="hidden" id="deleteMemberId">
+                            <div class="d-flex justify-content-end gap-2 mt-4">
+                                <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn-soc-danger btn-sm font-mono" id="btnConfirmDeleteMember" onclick="executeDeleteMemberSubmit()">
+                                    <i class="fas fa-trash me-1"></i> Delete Member
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bulk Import CSV Modal -->
+            <div class="modal fade soc-action-modal" id="importCsvModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-primary-soc font-mono">
+                                <i class="fas fa-file-csv text-accent me-2"></i>Bulk Import Members (CSV)
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="formImportCsv" onsubmit="event.preventDefault(); submitMemberCsvImport();">
+                                <p class="text-muted font-mono small mb-3">
+                                    Upload a CSV file containing members to enroll. Expected columns: <code>full_name,email,member_type,department,identifier</code>.
+                                </p>
+                                <div class="mb-3">
+                                    <input type="file" class="form-control soc-input font-mono" id="inputCsvFile" accept=".csv" required>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <a href="/api/members/template-csv" class="font-mono small text-accent text-decoration-none">
+                                        <i class="fas fa-download me-1"></i> Download Sample CSV
+                                    </a>
+                                </div>
+                                <div id="importCsvResults" class="d-none mb-3"></div>
+                                <div class="d-flex justify-content-end gap-2 mt-4">
+                                    <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn-soc-primary btn-sm font-mono" id="btnSubmitImportCsv">
+                                        <i class="fas fa-upload me-1"></i> Upload & Import
+                                    </button>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -1381,8 +1954,12 @@
 
     <!-- Bootstrap 5 Bundle JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- BullyMail Toast & Dashboard Controller -->
-    <script>window.currentUserRole = "{{ session.get('role', 'analyst') }}";</script>
+    <script>
+        window.currentUserRole = "{{ session.get('role', 'analyst') }}";
+        window.currentInstitutionId = {{ session.get('institution_id') or 'null' }};
+        window.currentUsername = {{ session.get('username', '') | tojson }};
+        window.currentUserFullName = {{ (session.get('full_name') or session.get('username', '')) | tojson }};
+    </script>
     <script src="{{ url_for('static', filename='js/core/toast.js') }}"></script>
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>

@@ -10,12 +10,13 @@ logger = logging.getLogger("bullymail.admin")
 admin_bp = Blueprint('admin', __name__)
 
 @admin_bp.route('/api/admin/pending-registrations', methods=['GET'])
-@require_role('admin')
+@require_role('platform_owner')
 def get_pending_registrations(current_user):
-    """Retrieves all pending account registration requests and user approval summary stats."""
+    """Retrieves all pending account registration requests and organization applications (Platform Owner Only)."""
     try:
         from ..database.connection import fetch_one
         pending_users = UserModel.get_pending_approval_users()
+        pending_orgs = InstitutionModel.list_pending()
         
         approved_res = fetch_one("SELECT COUNT(*) as count FROM users WHERE status IN ('ACTIVE', 'APPROVED')")
         rejected_res = fetch_one("SELECT COUNT(*) as count FROM users WHERE status = 'REJECTED'")
@@ -28,6 +29,7 @@ def get_pending_registrations(current_user):
         return jsonify({
             'success': True,
             'pending_users': pending_users,
+            'pending_orgs': pending_orgs,
             'pending_count': pnd_cnt,
             'approved_count': app_cnt,
             'rejected_count': rej_cnt,
@@ -37,27 +39,31 @@ def get_pending_registrations(current_user):
         return jsonify({'success': False, 'error': f"Failed to retrieve pending registrations: {e}"}), 500
 
 @admin_bp.route('/api/admin/institutions', methods=['GET'])
-@require_role('admin')
+@require_role('platform_owner', 'org_admin')
 def list_institutions(current_user):
-    """Lists all active institutions for tenant assignment."""
+    """Lists institutions. Platform owner sees all; org admin sees only their own."""
     try:
-        institutions = InstitutionModel.list_all()
+        if current_user.get('role') == 'platform_owner':
+            institutions = InstitutionModel.list_all()
+        else:
+            inst = InstitutionModel.get_by_id(current_user.get('institution_id'))
+            institutions = [inst] if inst else []
         return jsonify({'success': True, 'institutions': institutions})
     except Exception as e:
         return jsonify({'success': False, 'error': f"Failed to list institutions: {e}"}), 500
 
 @admin_bp.route('/api/admin/approve-user', methods=['POST'])
-@require_role('admin')
+@require_role('platform_owner')
 def approve_user(current_user):
     """
-    Administrative approval endpoint.
+    Administrative approval endpoint (Platform Owner Only).
     Approves/rejects pending users, provisions new institutions, or assigns existing institutions.
     """
     data = request.get_json() or {}
     user_id = data.get('user_id')
     action = data.get('action', 'approve').lower()
     provision_type = data.get('provision_type', 'assign_existing').lower()
-    role = data.get('role', 'analyst').lower()
+    role = data.get('role', 'org_admin').lower()
 
     if not user_id:
         return jsonify({'success': False, 'error': 'User ID is required.'}), 400
@@ -72,13 +78,15 @@ def approve_user(current_user):
     # Rejection workflow
     if action == 'reject':
         UserModel.reject_user(user_id)
+        if target_user.get('institution_id'):
+            InstitutionModel.update_status(target_user.get('institution_id'), 'REJECTED')
         return jsonify({'success': True, 'message': f"Registration request for user '{target_user.get('username')}' has been rejected."})
 
     # Approval / Provisioning workflow
     if action != 'approve':
         return jsonify({'success': False, 'error': f"Invalid action '{action}'. Allowed actions: 'approve', 'reject'."}), 400
 
-    target_inst_id = None
+    target_inst_id = target_user.get('institution_id')
 
     if provision_type == 'create_new':
         inst_name = (data.get('institution_name') or target_user.get('requested_institution_name') or '').strip()
@@ -93,7 +101,7 @@ def approve_user(current_user):
             return jsonify({'success': False, 'error': str(ve)}), 400
 
     elif provision_type == 'assign_existing':
-        inst_id = data.get('institution_id')
+        inst_id = data.get('institution_id') or target_user.get('institution_id')
         if not inst_id:
             return jsonify({'success': False, 'error': 'Institution ID must be specified for existing institution assignment.'}), 400
 
@@ -103,16 +111,19 @@ def approve_user(current_user):
 
         target_inst_id = inst_id
 
-    else:
-        return jsonify({'success': False, 'error': f"Invalid provision_type '{provision_type}'. Allowed types: 'create_new', 'assign_existing'."}), 400
-
     # Activate account with provisioned institution_id and assigned role
-    valid_roles = {'admin', 'analyst', 'operator'}
-    assigned_role = role if role in valid_roles else 'analyst'
+    valid_roles = {'platform_owner', 'org_admin', 'analyst', 'admin', 'operator'}
+    assigned_role = role if role in valid_roles else 'org_admin'
+    if assigned_role == 'admin':
+        assigned_role = 'org_admin'
 
     success = UserModel.provision_and_approve_user(user_id, target_inst_id, assigned_role)
     if not success:
         return jsonify({'success': False, 'error': 'Failed to update user provisioning state.'}), 500
+
+    # Ensure institution status is ACTIVE
+    if target_inst_id:
+        InstitutionModel.update_status(target_inst_id, 'ACTIVE')
 
     return jsonify({
         'success': True,
@@ -123,16 +134,62 @@ def approve_user(current_user):
         'status': 'ACTIVE'
     })
 
+@admin_bp.route('/api/admin/approve-org/<int:org_id>', methods=['POST'])
+@require_role('platform_owner')
+def approve_org(current_user, org_id):
+    """Platform Owner approves an organization application."""
+    org = InstitutionModel.get_by_id(org_id)
+    if not org:
+        return jsonify({'success': False, 'error': 'Organization not found.'}), 404
+
+    InstitutionModel.update_status(org_id, 'ACTIVE')
+    from ..database.connection import execute_query
+    execute_query(
+        "UPDATE users SET status = 'ACTIVE', role = 'org_admin' WHERE institution_id = %s AND status = 'PENDING_ADMIN_APPROVAL'",
+        (org_id,)
+    )
+    return jsonify({'success': True, 'message': f"Organization '{org.get('name')}' approved and activated successfully."})
+
+@admin_bp.route('/api/admin/reject-org/<int:org_id>', methods=['POST'])
+@require_role('platform_owner')
+def reject_org(current_user, org_id):
+    """Platform Owner rejects an organization application."""
+    org = InstitutionModel.get_by_id(org_id)
+    if not org:
+        return jsonify({'success': False, 'error': 'Organization not found.'}), 404
+
+    InstitutionModel.update_status(org_id, 'REJECTED')
+    from ..database.connection import execute_query
+    execute_query(
+        "UPDATE users SET status = 'REJECTED' WHERE institution_id = %s",
+        (org_id,)
+    )
+    return jsonify({'success': True, 'message': f"Organization '{org.get('name')}' rejected."})
+
+@admin_bp.route('/api/admin/platform-overview', methods=['GET'])
+@require_role('platform_owner')
+def get_platform_overview(current_user):
+    """Platform-wide summary metrics for Platform Owner (Jaya Chandra Vennam)."""
+    try:
+        stats = InstitutionModel.get_platform_stats()
+        return jsonify({'success': True, 'stats': stats})
+    except Exception as e:
+        return jsonify({'success': False, 'error': f"Failed to retrieve platform overview: {e}"}), 500
+
 # =========================================================================
 # Phase 1D Tenant-Scoped Mailbox Administration Endpoints
 # =========================================================================
 
 @admin_bp.route('/api/admin/mailboxes', methods=['GET'])
-@require_role('admin')
+@require_role('platform_owner', 'org_admin')
 def list_admin_mailboxes(current_user):
     """Lists all mailboxes belonging strictly to current_user['institution_id']."""
     try:
-        inst_id = current_user.get('institution_id') or 1
+        inst_id = current_user.get('institution_id')
+        if not inst_id and current_user.get('role') != 'platform_owner':
+            return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
+        inst_id = int(inst_id) if inst_id else 1
+
         from ..services.email_service import email_service
         mailboxes = email_service.get_mailboxes_for_institution(inst_id)
         return jsonify({'success': True, 'mailboxes': mailboxes})
@@ -140,11 +197,14 @@ def list_admin_mailboxes(current_user):
         return jsonify({'success': False, 'error': f"Failed to list mailboxes: {e}"}), 500
 
 @admin_bp.route('/api/admin/mailboxes/configure', methods=['POST'])
-@require_role('admin')
+@require_role('platform_owner', 'org_admin')
 def configure_admin_mailbox(current_user):
     """Configures a new tenant mailbox for current_user['institution_id']."""
     try:
-        inst_id = current_user.get('institution_id') or 1
+        inst_id = current_user.get('institution_id')
+        if not inst_id and current_user.get('role') != 'platform_owner':
+            return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
+        inst_id = int(inst_id) if inst_id else 1
 
         data = request.get_json() or {}
         email_address = (data.get('email_address') or '').strip()
@@ -170,7 +230,7 @@ def configure_admin_mailbox(current_user):
         return jsonify({'success': False, 'error': f"Failed to configure mailbox: {e}"}), 500
 
 @admin_bp.route('/api/admin/mailboxes/test-connection', methods=['POST'])
-@require_role('admin')
+@require_role('platform_owner', 'org_admin')
 def test_admin_mailbox_connection(current_user):
     """Runs pre-flight connection test using IMAP TLS. Never persists credentials."""
     try:
@@ -195,11 +255,14 @@ def test_admin_mailbox_connection(current_user):
         return jsonify({'success': False, 'error': f"Connection test error: {e}"}), 500
 
 @admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>/status', methods=['POST'])
-@require_role('admin')
+@require_role('platform_owner', 'org_admin')
 def update_admin_mailbox_status(current_user, mailbox_id):
     """Enables or disables a tenant-owned mailbox."""
     try:
-        inst_id = current_user.get('institution_id') or 1
+        inst_id = current_user.get('institution_id')
+        if not inst_id and current_user.get('role') != 'platform_owner':
+            return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
+        inst_id = int(inst_id) if inst_id else 1
 
         data = request.get_json() or {}
         new_status = (data.get('status') or '').strip().lower()
@@ -217,14 +280,17 @@ def update_admin_mailbox_status(current_user, mailbox_id):
 
 @admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>', methods=['PUT', 'PATCH'])
 @admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>/update', methods=['POST'])
-@require_role('admin')
+@require_role('platform_owner', 'org_admin')
 def update_admin_mailbox_credentials(current_user, mailbox_id):
     """
     Updates credentials and settings for an existing tenant-owned mailbox (Admin Only).
     Preserves existing mailbox ID and preserves existing encrypted password if app_password is empty.
     """
     try:
-        inst_id = current_user.get('institution_id') or 1
+        inst_id = current_user.get('institution_id')
+        if not inst_id and current_user.get('role') != 'platform_owner':
+            return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
+        inst_id = int(inst_id) if inst_id else 1
 
         data = request.get_json() or {}
         email_address = data.get('email_address') or data.get('email')
@@ -257,11 +323,14 @@ def update_admin_mailbox_credentials(current_user, mailbox_id):
         return jsonify({'success': False, 'error': f"Failed to update mailbox credentials: {e}"}), 500
 
 @admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>', methods=['DELETE'])
-@require_role('admin')
+@require_role('platform_owner', 'org_admin')
 def delete_admin_mailbox(current_user, mailbox_id):
     """Deletes/removes a tenant-owned mailbox."""
     try:
-        inst_id = current_user.get('institution_id') or 1
+        inst_id = current_user.get('institution_id')
+        if not inst_id and current_user.get('role') != 'platform_owner':
+            return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
+        inst_id = int(inst_id) if inst_id else 1
 
         from ..services.email_service import email_service
         success, message = email_service.delete_mailbox(mailbox_id, inst_id)
@@ -274,14 +343,17 @@ def delete_admin_mailbox(current_user, mailbox_id):
         return jsonify({'success': False, 'error': f"Failed to delete mailbox: {e}"}), 500
 
 @admin_bp.route('/api/admin/mailboxes/<int:mailbox_id>/sync', methods=['POST'])
-@require_role('admin')
+@require_role('platform_owner', 'org_admin')
 def sync_admin_mailbox(current_user, mailbox_id):
     """
     Synchronously triggers manual mailbox synchronization for tenant-owned mailbox.
     Acquires atomic sync lease, executes Phase 1B MailboxProcessor pipeline, and completes lease.
     """
     try:
-        inst_id = current_user.get('institution_id') or 1
+        inst_id = current_user.get('institution_id')
+        if not inst_id and current_user.get('role') != 'platform_owner':
+            return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
+        inst_id = int(inst_id) if inst_id else 1
 
         from ..services.email_service import email_service
         mailbox = email_service.get_mailbox_by_id(mailbox_id, inst_id)
@@ -312,18 +384,25 @@ def sync_admin_mailbox(current_user, mailbox_id):
         return jsonify({'success': False, 'error': f"Synchronization error: {e}"}), 500
 
 # =========================================================================
-# Phase 2 Human-In-The-Loop Incident Review & Warning Endpoints (Admin Only)
+# Phase 2 Human-In-The-Loop Incident Review & Warning Endpoints
 # =========================================================================
 
 def _get_scoped_analysis_record(current_user, analysis_id):
     """Retrieves analysis record enforcing tenant isolation boundaries."""
-    inst_id = current_user.get('institution_id') or 1
-    # Check if analysis exists and matches admin's institution
-    record = AnalysisModel.get_by_id(analysis_id, institution_id=inst_id, role='admin')
-    return record, inst_id
+    user_role = current_user.get('role', 'analyst')
+    if user_role == 'platform_owner':
+        record = AnalysisModel.get_by_id(analysis_id, institution_id=None, role='platform_owner')
+        inst_id = record.get('institution_id') if record else 1
+        return record, inst_id
+
+    inst_id = current_user.get('institution_id')
+    if not inst_id:
+        return None, None
+    record = AnalysisModel.get_by_id(analysis_id, institution_id=int(inst_id), role=user_role)
+    return record, int(inst_id)
 
 @admin_bp.route('/api/admin/analysis/<int:analysis_id>/warning-preview', methods=['GET'])
-@require_role('admin')
+@require_role('platform_owner', 'org_admin')
 def get_warning_preview(current_user, analysis_id):
     """
     Returns warning preview details, recipient, sender, advisory text,
@@ -361,7 +440,7 @@ def get_warning_preview(current_user, analysis_id):
     })
 
 @admin_bp.route('/api/admin/diagnostics/smtp', methods=['GET', 'POST'])
-@require_role('admin')
+@require_role('platform_owner', 'org_admin')
 def admin_smtp_diagnostics(current_user):
     """
     Temporary safe production diagnostics endpoint.
@@ -373,7 +452,10 @@ def admin_smtp_diagnostics(current_user):
     if not target_port and request.is_json:
         target_port = (request.get_json() or {}).get('port')
 
-    inst_id = current_user.get('institution_id') or 1
+    inst_id = current_user.get('institution_id')
+    if not inst_id and current_user.get('role') != 'platform_owner':
+        return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
+    inst_id = int(inst_id) if inst_id else 1
     results = admin_warning_service.run_smtp_diagnostics(institution_id=inst_id, target_port=target_port)
 
     # Simplified summary flags as requested
@@ -387,7 +469,7 @@ def admin_smtp_diagnostics(current_user):
     return jsonify(summary), 200
 
 @admin_bp.route('/api/admin/analysis/<int:analysis_id>/warning', methods=['POST'])
-@require_role('admin')
+@require_role('platform_owner', 'org_admin')
 def send_admin_warning(current_user, analysis_id):
     """
     Dispatches a professional advisory warning email to the original sender of a detected harmful email.
@@ -506,7 +588,7 @@ def send_admin_warning(current_user, analysis_id):
         }), 500
 
 @admin_bp.route('/api/admin/analysis/<int:analysis_id>/review', methods=['POST'])
-@require_role('admin')
+@require_role('platform_owner', 'org_admin')
 def mark_incident_reviewed(current_user, analysis_id):
     """Marks an incident as reviewed without sending an email (Admin Only)."""
     record, inst_id = _get_scoped_analysis_record(current_user, analysis_id)
@@ -536,7 +618,7 @@ def mark_incident_reviewed(current_user, analysis_id):
     })
 
 @admin_bp.route('/api/admin/analysis/<int:analysis_id>/false-positive', methods=['POST'])
-@require_role('admin')
+@require_role('platform_owner', 'org_admin')
 def mark_incident_false_positive(current_user, analysis_id):
     """Marks an incident as a false positive with an optional reason classification (Admin Only)."""
     record, inst_id = _get_scoped_analysis_record(current_user, analysis_id)
