@@ -202,6 +202,7 @@ def analyze_email():
         return jsonify({'success': False, 'error': 'An internal error occurred while processing the threat analysis.'}), 500
 
 @analysis_bp.route('/api/institutions/<int:inst_id>/emails', methods=['GET'])
+@analysis_bp.route('/api/organizations/<int:inst_id>/emails', methods=['GET'])
 def get_institution_emails(inst_id):
     """Retrieves emails and threat analysis history scoped strictly to target institution_id."""
     user = get_current_user()

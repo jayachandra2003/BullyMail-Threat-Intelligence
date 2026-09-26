@@ -10,7 +10,9 @@ logger = logging.getLogger("bullymail.admin")
 admin_bp = Blueprint('admin', __name__)
 
 @admin_bp.route('/api/admin/pending-registrations', methods=['GET'])
-@require_role('platform_owner')
+@admin_bp.route('/pending-approvals', methods=['GET'])
+@admin_bp.route('/api/admin/pending-approvals', methods=['GET'])
+@require_role('SUPER_ADMIN')
 def get_pending_registrations(current_user):
     """Retrieves all pending account registration requests and organization applications (Platform Owner Only)."""
     try:
@@ -135,9 +137,21 @@ def approve_user(current_user):
     })
 
 @admin_bp.route('/api/admin/approve-org/<int:org_id>', methods=['POST'])
-@require_role('platform_owner')
-def approve_org(current_user, org_id):
-    """Platform Owner approves an organization application."""
+@admin_bp.route('/approve-organization', methods=['POST'])
+@admin_bp.route('/api/admin/approve-organization', methods=['POST'])
+@require_role('SUPER_ADMIN')
+def approve_org(current_user, org_id=None):
+    """Platform Owner / SUPER_ADMIN approves an organization application."""
+    if org_id is None:
+        data = request.get_json(silent=True) or {}
+        org_id = data.get('organization_id') or data.get('org_id') or request.args.get('organization_id') or request.args.get('org_id')
+    if not org_id:
+        return jsonify({'success': False, 'error': 'organization_id is required.'}), 400
+    try:
+        org_id = int(org_id)
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Invalid organization_id format.'}), 400
+
     org = InstitutionModel.get_by_id(org_id)
     if not org:
         return jsonify({'success': False, 'error': 'Organization not found.'}), 404
@@ -145,15 +159,32 @@ def approve_org(current_user, org_id):
     InstitutionModel.update_status(org_id, 'ACTIVE')
     from ..database.connection import execute_query
     execute_query(
-        "UPDATE users SET status = 'ACTIVE', role = 'org_admin' WHERE institution_id = %s AND status = 'PENDING_ADMIN_APPROVAL'",
-        (org_id,)
+        "UPDATE users SET status = 'ACTIVE', role = 'org_admin', institution_id = %s WHERE (institution_id = %s OR (institution_id IS NULL AND requested_institution_domain = %s)) AND status IN ('PENDING_ADMIN_APPROVAL', 'ACTIVE')",
+        (org_id, org_id, org.get('domain'))
     )
-    return jsonify({'success': True, 'message': f"Organization '{org.get('name')}' approved and activated successfully."})
+    return jsonify({
+        'success': True,
+        'message': f"Organization '{org.get('name')}' approved and activated successfully.",
+        'organization_id': org_id,
+        'status': 'APPROVED'
+    })
 
 @admin_bp.route('/api/admin/reject-org/<int:org_id>', methods=['POST'])
-@require_role('platform_owner')
-def reject_org(current_user, org_id):
-    """Platform Owner rejects an organization application."""
+@admin_bp.route('/reject-organization', methods=['POST'])
+@admin_bp.route('/api/admin/reject-organization', methods=['POST'])
+@require_role('SUPER_ADMIN')
+def reject_org(current_user, org_id=None):
+    """Platform Owner / SUPER_ADMIN rejects an organization application."""
+    if org_id is None:
+        data = request.get_json(silent=True) or {}
+        org_id = data.get('organization_id') or data.get('org_id') or request.args.get('organization_id') or request.args.get('org_id')
+    if not org_id:
+        return jsonify({'success': False, 'error': 'organization_id is required.'}), 400
+    try:
+        org_id = int(org_id)
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Invalid organization_id format.'}), 400
+
     org = InstitutionModel.get_by_id(org_id)
     if not org:
         return jsonify({'success': False, 'error': 'Organization not found.'}), 404
@@ -161,10 +192,15 @@ def reject_org(current_user, org_id):
     InstitutionModel.update_status(org_id, 'REJECTED')
     from ..database.connection import execute_query
     execute_query(
-        "UPDATE users SET status = 'REJECTED' WHERE institution_id = %s",
-        (org_id,)
+        "UPDATE users SET status = 'REJECTED' WHERE institution_id = %s OR (institution_id IS NULL AND requested_institution_domain = %s)",
+        (org_id, org.get('domain'))
     )
-    return jsonify({'success': True, 'message': f"Organization '{org.get('name')}' rejected."})
+    return jsonify({
+        'success': True,
+        'message': f"Organization '{org.get('name')}' rejected.",
+        'organization_id': org_id,
+        'status': 'REJECTED'
+    })
 
 @admin_bp.route('/api/admin/platform-overview', methods=['GET'])
 @require_role('platform_owner')

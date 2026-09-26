@@ -44,11 +44,12 @@ def _resolve_member_inst_id(current_user, req_inst_id=None):
 # =========================================================================
 
 @members_bp.route('/api/members', methods=['GET'])
+@members_bp.route('/api/organizations/<int:org_id>/members', methods=['GET'])
 @require_role('platform_owner', 'org_admin')
-def list_members(current_user):
+def list_members(current_user, org_id=None):
     """Lists members belonging strictly to current_user['institution_id']."""
     try:
-        req_inst = request.args.get('institution_id')
+        req_inst = org_id if org_id is not None else (request.args.get('organization_id') or request.args.get('institution_id'))
         inst_id, err = _resolve_member_inst_id(current_user, req_inst)
         if err:
             msg, code = err
@@ -56,7 +57,7 @@ def list_members(current_user):
 
         search = request.args.get('search')
         dept = request.args.get('department')
-        m_type = request.args.get('member_type')
+        m_type = request.args.get('member_type') or request.args.get('role')
         status = request.args.get('status')
 
         try:
@@ -94,28 +95,30 @@ def list_members(current_user):
             'total': total,
             'page': page,
             'limit': limit,
+            'organization_id': inst_id,
             'institution_id': inst_id
         })
     except Exception as e:
         return jsonify({'success': False, 'error': f"Failed to list members: {e}"}), 500
 
 @members_bp.route('/api/members', methods=['POST'])
+@members_bp.route('/api/organizations/<int:org_id>/members', methods=['POST'])
 @require_role('platform_owner', 'org_admin')
-def add_member(current_user):
+def add_member(current_user, org_id=None):
     """Adds a new member to the organization."""
     try:
-        data = request.get_json() or {}
-        req_inst = data.get('institution_id')
+        data = request.get_json(silent=True) or {}
+        req_inst = org_id if org_id is not None else (data.get('organization_id') or data.get('institution_id') or request.args.get('organization_id') or request.args.get('institution_id'))
         inst_id, err = _resolve_member_inst_id(current_user, req_inst)
         if err:
             msg, code = err
             return jsonify({'success': False, 'error': msg}), code
 
-        full_name = data.get('full_name')
-        email = data.get('email')
+        full_name = (data.get('name') or data.get('full_name') or '').strip()
+        email = (data.get('email') or '').strip()
         member_id = data.get('member_id') or data.get('identifier')
         department = data.get('department')
-        member_type = data.get('member_type', 'member')
+        member_type = data.get('role') or data.get('member_type') or 'member'
         status = data.get('status', 'ACTIVE')
 
         if not full_name or not email:
@@ -133,7 +136,10 @@ def add_member(current_user):
         return jsonify({
             'success': True,
             'message': 'Member added successfully.',
-            'member_id': new_id
+            'member_id': new_id,
+            'id': new_id,
+            'organization_id': inst_id,
+            'institution_id': inst_id
         }), 201
     except ValueError as ve:
         return jsonify({'success': False, 'error': str(ve)}), 400

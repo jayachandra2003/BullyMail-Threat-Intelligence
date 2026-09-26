@@ -15,6 +15,13 @@ def dashboard():
     if not user:
         session.clear()
         return redirect(url_for('auth.login'))
+
+    if user.get('institution_id') and not session.get('institution_name'):
+        from ..models.institution import InstitutionModel
+        inst = InstitutionModel.get_by_id(user['institution_id'])
+        if inst:
+            session['institution_name'] = inst.get('name')
+
     return render_template('dashboard.html')
 
 @main_bp.route('/login')

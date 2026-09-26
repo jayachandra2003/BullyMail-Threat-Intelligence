@@ -22,14 +22,25 @@ class OrganizationMemberModel:
             return False
         return bool(EMAIL_REGEX.match(email.strip()))
 
+    @staticmethod
+    def _format_member(row):
+        if row and isinstance(row, dict):
+            row['identifier'] = row.get('member_id')
+            row['organization_id'] = row.get('institution_id')
+            row['name'] = row.get('full_name')
+            row['role'] = row.get('member_type')
+        return row
+
     @classmethod
-    def add_member(cls, institution_id: int, full_name: str, email: str,
+    def add_member(cls, institution_id: int = None, full_name: str = None, email: str = None,
                    member_id: str = None, department: str = None,
                    member_type: str = 'member', status: str = 'ACTIVE',
-                   identifier: str = None) -> int:
-        if not institution_id:
+                   identifier: str = None, organization_id: int = None,
+                   name: str = None, role: str = None) -> int:
+        target_inst = organization_id if organization_id is not None else institution_id
+        if not target_inst:
             raise ValueError("Institution ID is required.")
-        clean_name = (full_name or '').strip()
+        clean_name = (name or full_name or '').strip()
         if not clean_name:
             raise ValueError("Member full name cannot be empty.")
         clean_email = cls.normalize_email(email)
@@ -38,12 +49,12 @@ class OrganizationMemberModel:
 
         clean_mid = (identifier or member_id or '').strip() or None
         clean_dept = (department or '').strip() or None
-        clean_type = (member_type or 'member').strip().lower()
+        clean_type = (role or member_type or 'member').strip().lower()
         clean_status = (status or 'ACTIVE').strip().upper()
 
         existing = fetch_one(
             "SELECT id FROM organization_members WHERE institution_id = %s AND email = %s",
-            (institution_id, clean_email)
+            (target_inst, clean_email)
         )
         if existing:
             raise ValueError(f"A member with email '{clean_email}' already exists in this organization.")
@@ -52,7 +63,7 @@ class OrganizationMemberModel:
             "INSERT INTO organization_members "
             "(institution_id, member_id, full_name, email, department, member_type, status) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (institution_id, clean_mid, clean_name, clean_email, clean_dept, clean_type, clean_status)
+            (target_inst, clean_mid, clean_name, clean_email, clean_dept, clean_type, clean_status)
         )
 
     @classmethod
@@ -71,9 +82,7 @@ class OrganizationMemberModel:
                 "FROM organization_members WHERE id = %s",
                 (member_pk,)
             )
-        if row and isinstance(row, dict):
-            row['identifier'] = row.get('member_id')
-        return row
+        return cls._format_member(row)
 
     @classmethod
     def get_by_email(cls, email: str, institution_id: int):
@@ -85,9 +94,7 @@ class OrganizationMemberModel:
             "FROM organization_members WHERE institution_id = %s AND email = %s",
             (institution_id, clean_email)
         )
-        if row and isinstance(row, dict):
-            row['identifier'] = row.get('member_id')
-        return row
+        return cls._format_member(row)
 
     @classmethod
     def list_members(cls, institution_id: int, search: str = None,
@@ -124,8 +131,7 @@ class OrganizationMemberModel:
         params.extend([limit, offset])
         rows = fetch_all(sql, tuple(params))
         for r in rows:
-            if isinstance(r, dict):
-                r['identifier'] = r.get('member_id')
+            cls._format_member(r)
         return rows
 
     @classmethod

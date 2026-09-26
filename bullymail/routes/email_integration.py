@@ -78,6 +78,7 @@ def get_institutions(current_user):
     return jsonify({'success': True, 'institutions': insts})
 
 @email_bp.route('/api/institutions/<int:inst_id>/stats', methods=['GET'])
+@email_bp.route('/api/organizations/<int:inst_id>/stats', methods=['GET'])
 @require_role('admin', 'analyst')
 def get_institution_stats(current_user, inst_id):
     target_id, err_resp = _resolve_target_institution_id(current_user, inst_id, strict_403=True)
@@ -90,10 +91,12 @@ def get_institution_stats(current_user, inst_id):
     return jsonify({
         'success': True,
         'institution': inst,
+        'organization': inst,
         'stats': stats
     })
 
 @email_bp.route('/api/institutions/<int:inst_id>/mailboxes', methods=['GET'])
+@email_bp.route('/api/organizations/<int:inst_id>/mailboxes', methods=['GET'])
 @require_role('admin', 'analyst')
 def get_institution_mailboxes(current_user, inst_id):
     target_id, err_resp = _resolve_target_institution_id(current_user, inst_id, strict_403=True)
@@ -364,11 +367,14 @@ def sync_mailbox(current_user, mailbox_id):
         email_service.release_sync_lease(mailbox_id, lease_id, final_status=final_status, last_error=last_err)
 
 @email_bp.route('/api/institutions/<int:inst_id>/sync-all', methods=['POST'])
-@require_role('admin')
+@email_bp.route('/api/organizations/<int:inst_id>/sync-all', methods=['POST'])
+@require_role('admin', 'org_admin')
 def sync_all_institution_mailboxes(current_user, inst_id):
-    user_inst = current_user.get('institution_id') or 1
-    if user_inst != inst_id and current_user.get('role') != 'admin':
-        return jsonify({'success': False, 'error': 'Unauthorized institution access'}), 403
+    target_id, err_resp = _resolve_target_institution_id(current_user, inst_id, strict_403=True)
+    if err_resp:
+        msg, code = err_resp
+        return jsonify({'success': False, 'error': msg}), code
+    inst_id = target_id
 
     mailboxes = email_service.get_mailboxes_for_institution(inst_id)
     active_mailboxes = [m for m in mailboxes if m.get('status') == 'active']

@@ -145,7 +145,7 @@ def test_platform_owner_can_access_governance_endpoints(client, multi_tenant_fix
     f = multi_tenant_fixture
     login_as(client, f['owner_id'], 'jayachandra', 'platform_owner', full_name="Jaya Chandra Vennam")
 
-    # 1. Pending registrations
+    # 1. Pending registrations & alias /pending-approvals
     res = client.get('/api/admin/pending-registrations')
     assert res.status_code == 200
     data = res.get_json()
@@ -153,6 +153,10 @@ def test_platform_owner_can_access_governance_endpoints(client, multi_tenant_fix
     assert 'pending_users' in data
     assert 'pending_orgs' in data
     assert any(o['id'] == f['inst_gamma_id'] for o in data['pending_orgs'])
+
+    res_alias = client.get('/pending-approvals')
+    assert res_alias.status_code == 200
+    assert res_alias.get_json()['success'] is True
 
     # 2. Platform overview metrics
     res_ov = client.get('/api/admin/platform-overview')
@@ -162,8 +166,8 @@ def test_platform_owner_can_access_governance_endpoints(client, multi_tenant_fix
     assert 'stats' in ov_data
     assert ov_data['stats']['total_institutions'] >= 3
 
-    # 3. Approve Organization Application
-    res_app = client.post(f"/api/admin/approve-org/{f['inst_gamma_id']}")
+    # 3. Approve Organization Application via POST /approve-organization with JSON payload
+    res_app = client.post('/approve-organization', json={'organization_id': f['inst_gamma_id']})
     assert res_app.status_code == 200
     app_data = res_app.get_json()
     assert app_data['success'] is True
@@ -171,27 +175,44 @@ def test_platform_owner_can_access_governance_endpoints(client, multi_tenant_fix
     gamma = InstitutionModel.get_by_id(f['inst_gamma_id'])
     assert gamma['status'] == 'ACTIVE'
 
+    # 4. Reject Organization Application via POST /reject-organization with JSON payload
+    with client.application.app_context():
+        inst_delta_id = InstitutionModel.create_institution("Delta Org", "delta.io", org_type="company")
+    res_rej = client.post('/reject-organization', json={'organization_id': inst_delta_id})
+    assert res_rej.status_code == 200
+    delta = InstitutionModel.get_by_id(inst_delta_id)
+    assert delta['status'] == 'REJECTED'
+
 
 def test_org_admin_cannot_access_platform_owner_endpoints(client, multi_tenant_fixture):
     """Org Admin cannot access pending approvals, org approvals, or platform overview (Fail Closed 403)."""
     f = multi_tenant_fixture
     login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'], full_name="VIT Admin")
 
-    # 1. Cannot view pending registrations
+    # 1. Cannot view pending registrations or /pending-approvals
     res1 = client.get('/api/admin/pending-registrations')
     assert res1.status_code == 403
+
+    res1_alias = client.get('/pending-approvals')
+    assert res1_alias.status_code == 403
 
     # 2. Cannot view platform overview
     res2 = client.get('/api/admin/platform-overview')
     assert res2.status_code == 403
 
-    # 3. Cannot approve organization
+    # 3. Cannot approve organization (both path and payload endpoints)
     res3 = client.post(f"/api/admin/approve-org/{f['inst_gamma_id']}")
     assert res3.status_code == 403
 
-    # 4. Cannot reject organization
+    res3_payload = client.post('/approve-organization', json={'organization_id': f['inst_gamma_id']})
+    assert res3_payload.status_code == 403
+
+    # 4. Cannot reject organization (both path and payload endpoints)
     res4 = client.post(f"/api/admin/reject-org/{f['inst_gamma_id']}")
     assert res4.status_code == 403
+
+    res4_payload = client.post('/reject-organization', json={'organization_id': f['inst_gamma_id']})
+    assert res4_payload.status_code == 403
 
     # 5. Cannot approve pending users
     res5 = client.post('/api/admin/approve-user', json={'user_id': f['pending_user_id'], 'action': 'approve'})
@@ -221,7 +242,7 @@ def test_analyst_cannot_access_platform_or_admin_endpoints(client, multi_tenant_
 # =========================================================================
 
 def test_cross_tenant_stats_access_forbidden(client, multi_tenant_fixture):
-    """Org Admin A attempting to access stats of Institution B must fail with 403 Forbidden."""
+    """Org Admin A attempting to access stats or sync of Institution B must fail with 403 Forbidden."""
     f = multi_tenant_fixture
     login_as(client, f['admin_a_id'], 'vit_admin', 'org_admin', institution_id=f['inst_a_id'])
 
@@ -229,9 +250,23 @@ def test_cross_tenant_stats_access_forbidden(client, multi_tenant_fixture):
     res_own = client.get(f"/api/institutions/{f['inst_a_id']}/stats")
     assert res_own.status_code == 200
 
+    res_own_org = client.get(f"/api/organizations/{f['inst_a_id']}/stats")
+    assert res_own_org.status_code == 200
+
     # Cross-tenant access to Institution B -> 403 Forbidden
     res_cross = client.get(f"/api/institutions/{f['inst_b_id']}/stats")
     assert res_cross.status_code == 403
+
+    res_cross_org = client.get(f"/api/organizations/{f['inst_b_id']}/stats")
+    assert res_cross_org.status_code == 403
+
+    # Cross-tenant sync-all -> 403 Forbidden
+    res_cross_sync = client.post(f"/api/organizations/{f['inst_b_id']}/sync-all")
+    assert res_cross_sync.status_code == 403
+
+    # Own tenant sync-all -> 200 OK
+    res_own_sync = client.post(f"/api/organizations/{f['inst_a_id']}/sync-all")
+    assert res_own_sync.status_code == 200
 
 
 def test_cross_tenant_analysis_history_tampering(client, multi_tenant_fixture):

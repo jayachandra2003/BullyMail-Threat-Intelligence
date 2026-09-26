@@ -230,10 +230,10 @@
                     </button>
                     <div>
                         <h1 class="page-title text-primary-soc mb-0 d-flex align-items-center flex-wrap">
-                            <span><i class="fas fa-shield-alt text-accent me-2"></i>Security Operations Center</span>
+                            <span><i class="fas fa-shield-alt text-accent me-2"></i>{% if session.get('role') in ('platform_owner', 'super_admin') %}BullyMail Platform / Super Admin Command Center{% else %}{{ session.get('institution_name') or 'Organization' }} Security Operations Center{% endif %}</span>
                             <span class="badge soc-title-badge ms-2">ENTERPRISE SOC PRO v2.4.1</span>
                         </h1>
-                        <p class="text-muted small mb-0">Multi-vector email threat detection, ML powered analysis & link safety analytics.</p>
+                        <p class="text-muted small mb-0">{% if session.get('role') in ('platform_owner', 'super_admin') %}Platform-wide tenant administration, registration governance & threat intelligence.{% else %}Multi-vector email threat detection, ML powered analysis & member protection for {{ session.get('institution_name') or 'your organization' }}.{% endif %}</p>
                     </div>
                 </div>
 
