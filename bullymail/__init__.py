@@ -35,6 +35,7 @@ def create_app(config_class=Config):
     from .routes.email_integration import email_bp
     from .routes.reports import reports_bp
     from .routes.admin import admin_bp
+    from .routes.members import members_bp
     
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
@@ -44,6 +45,7 @@ def create_app(config_class=Config):
     app.register_blueprint(email_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(members_bp)
     
     # Initialize Database Schema
     try:

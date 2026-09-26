@@ -105,7 +105,9 @@ class AnalysisModel:
 
     @staticmethod
     def get_by_id(analysis_id, institution_id=1, user_id=None, role=None):
-        if role == 'admin' or user_id is None:
+        user_role = (role or '').lower().strip()
+        is_admin_role = user_role in ('admin', 'org_admin', 'organization_admin', 'platform_owner', 'super_admin')
+        if is_admin_role or user_id is None:
             if institution_id is not None:
                 row = fetch_one("SELECT * FROM analyzed_emails WHERE id = %s AND institution_id = %s", (analysis_id, institution_id))
             else:
@@ -311,7 +313,9 @@ class AnalysisModel:
         conditions.append("institution_id = %s")
         params.append(inst_id)
 
-        if role != 'admin' and user_id is not None:
+        user_role = (role or '').lower().strip()
+        is_admin_role = user_role in ('admin', 'org_admin', 'organization_admin', 'platform_owner', 'super_admin')
+        if not is_admin_role and user_id is not None:
             conditions.append("user_id = %s")
             params.append(user_id)
 
@@ -399,7 +403,9 @@ class AnalysisModel:
     def get_dashboard_stats(institution_id=1, user_id=None, role=None):
         inst_id = institution_id if institution_id is not None else 1
 
-        if role != 'admin' and user_id is not None:
+        user_role = (role or '').lower().strip()
+        is_admin_role = user_role in ('admin', 'org_admin', 'organization_admin', 'platform_owner', 'super_admin')
+        if not is_admin_role and user_id is not None:
             inst_clause = "WHERE institution_id = %s AND user_id = %s"
             params_base = (inst_id, user_id)
         else:
@@ -573,7 +579,9 @@ class AnalysisModel:
         inst_clause = "WHERE institution_id = %s"
         params = [institution_id or 1]
 
-        if role != 'admin' and user_id is not None:
+        user_role = (role or '').lower().strip()
+        is_admin_role = user_role in ('admin', 'org_admin', 'organization_admin', 'platform_owner', 'super_admin')
+        if not is_admin_role and user_id is not None:
             inst_clause += " AND user_id = %s"
             params.append(user_id)
 

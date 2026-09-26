@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, session
 from ..database.connection import fetch_one
-from ..services.email_service import EmailService
+from ..services.email_service import EmailService, email_service
 from ..services.risk_engine import UnifiedRiskEngine
 from ..models.analysis import AnalysisModel
 from ..worker.processor import MailboxProcessor
@@ -9,21 +9,25 @@ from .auth import get_current_user, require_role
 from ..models.institution import InstitutionModel
 
 email_bp = Blueprint('email', __name__)
-email_service = EmailService()
 risk_engine = UnifiedRiskEngine()
 mailbox_processor = MailboxProcessor(risk_engine=risk_engine)
 
 def _resolve_target_institution_id(current_user, requested_inst_id=None, strict_403=False):
     """
-    Validates institution access for current user.
-    Admin can access any valid institution_id (or requests specific inst_id).
-    Analyst/Operator is strictly locked to their assigned user['institution_id'].
-    If strict_403 is True and an explicit cross-tenant requested_inst_id is passed by a non-admin, returns 403 Forbidden.
-    Otherwise, tampered parameters are safely ignored and scoped to user['institution_id'].
+    Validates institution access for current user with strict tenant isolation.
+    - Platform Owner ('platform_owner') can access any valid institution_id (or requests specific inst_id).
+    - Organization Admin ('org_admin') and Analysts ('analyst') are strictly locked to current_user['institution_id'].
+    - If user has no assigned institution_id and is not platform_owner: returns 403 Forbidden.
+    - If an explicit cross-tenant requested_inst_id is passed by a non-platform_owner:
+      - If strict_403 is True: returns 403 Forbidden.
+      - If strict_403 is False: safely ignores client tampering and enforces user's authentic institution_id.
+    - Never defaults or falls back to institution_id = 1 for non-platform_owners.
     """
-    user_role = current_user.get('role', 'analyst')
-    user_inst_id = current_user.get('institution_id') or 1
-    if user_role == 'admin':
+    user_role = (current_user.get('role') or 'analyst').lower().strip()
+    user_inst_id = current_user.get('institution_id')
+    is_platform_level = (user_role in ('platform_owner', 'super_admin') or (user_role == 'admin' and not user_inst_id))
+
+    if is_platform_level:
         if requested_inst_id is not None:
             try:
                 target_id = int(requested_inst_id)
@@ -33,15 +37,25 @@ def _resolve_target_institution_id(current_user, requested_inst_id=None, strict_
                 return target_id, None
             except (ValueError, TypeError):
                 return None, ("Invalid institution ID", 400)
-        return user_inst_id, None
-    else:
-        if strict_403 and requested_inst_id is not None:
-            try:
-                if int(requested_inst_id) != user_inst_id:
-                    return None, ("Forbidden: Access to specified institution is denied", 403)
-            except (ValueError, TypeError):
-                return None, ("Invalid institution ID", 400)
-        return user_inst_id, None
+        return user_inst_id or 1, None
+
+    # Org Admin, Analyst, Operator:
+    if not user_inst_id:
+        return None, ("Forbidden: Account is not associated with an approved organization", 403)
+
+    user_inst_id = int(user_inst_id)
+    if requested_inst_id is not None:
+        try:
+            req_id = int(requested_inst_id)
+            if req_id != user_inst_id:
+                if strict_403:
+                    return None, ("Forbidden: Access to specified organization is denied", 403)
+                # Safely ignore client tampering and enforce authentic tenant
+                return user_inst_id, None
+        except (ValueError, TypeError):
+            return None, ("Invalid institution ID", 400)
+
+    return user_inst_id, None
 
 def _iso(val):
     if not val:
@@ -49,12 +63,13 @@ def _iso(val):
     return val.isoformat() if hasattr(val, 'isoformat') else str(val)
 
 @email_bp.route('/api/institutions', methods=['GET'])
-@require_role('admin', 'analyst')
+@email_bp.route('/api/organizations', methods=['GET'])
+@require_role('admin', 'org_admin', 'platform_owner', 'analyst')
 def get_institutions(current_user):
-    user_role = current_user.get('role', 'analyst')
+    user_role = (current_user.get('role') or 'analyst').lower().strip()
     user_inst_id = current_user.get('institution_id') or 1
 
-    if user_role == 'admin':
+    if user_role in ('platform_owner', 'super_admin'):
         insts = InstitutionModel.list_all()
     else:
         inst = InstitutionModel.get_by_id(user_inst_id)
@@ -63,6 +78,7 @@ def get_institutions(current_user):
     return jsonify({'success': True, 'institutions': insts})
 
 @email_bp.route('/api/institutions/<int:inst_id>/stats', methods=['GET'])
+@email_bp.route('/api/organizations/<int:inst_id>/stats', methods=['GET'])
 @require_role('admin', 'analyst')
 def get_institution_stats(current_user, inst_id):
     target_id, err_resp = _resolve_target_institution_id(current_user, inst_id, strict_403=True)
@@ -75,10 +91,12 @@ def get_institution_stats(current_user, inst_id):
     return jsonify({
         'success': True,
         'institution': inst,
+        'organization': inst,
         'stats': stats
     })
 
 @email_bp.route('/api/institutions/<int:inst_id>/mailboxes', methods=['GET'])
+@email_bp.route('/api/organizations/<int:inst_id>/mailboxes', methods=['GET'])
 @require_role('admin', 'analyst')
 def get_institution_mailboxes(current_user, inst_id):
     target_id, err_resp = _resolve_target_institution_id(current_user, inst_id, strict_403=True)
@@ -262,15 +280,27 @@ def test_new_mailbox_connection(current_user):
     return jsonify({'success': success, 'message': message})
 
 @email_bp.route('/api/mailbox/<int:mailbox_id>/test', methods=['POST'])
-@require_role('admin')
+@email_bp.route('/api/mailboxes/<int:mailbox_id>/test', methods=['POST'])
+@require_role('admin', 'org_admin', 'platform_owner')
 def test_existing_mailbox_connection(current_user, mailbox_id):
-    inst_id = current_user.get('institution_id') or 1
+    user_role = (current_user.get('role') or '').lower().strip()
+    inst_id = current_user.get('institution_id')
+
+    if user_role in ('platform_owner', 'super_admin') and not inst_id:
+        mb_row = fetch_one("SELECT institution_id FROM email_config WHERE id = %s", (mailbox_id,))
+        inst_id = mb_row['institution_id'] if mb_row else 1
+    elif not inst_id:
+        return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
 
     mb = email_service.get_mailbox_by_id(mailbox_id, inst_id)
     if not mb:
         return jsonify({'success': False, 'error': 'Mailbox not found'}), 404
 
-    success, message = email_service.test_connection(institution_id=inst_id)
+    email_addr, app_pw, smtp_host, smtp_p, imap_host = email_service._get_credentials(mailbox_id=mailbox_id, institution_id=inst_id)
+    if not email_addr or not app_pw:
+        return jsonify({'success': False, 'error': 'Mailbox credentials not found or unreadable.'}), 400
+
+    success, message = email_service.test_preflight_connection(email_addr, app_pw, imap_server=imap_host)
     return jsonify({'success': success, 'message': message})
 
 @email_bp.route('/api/mailbox', methods=['POST'])
@@ -314,13 +344,18 @@ def create_mailbox(current_user):
 
 @email_bp.route('/api/mailbox/<int:mailbox_id>/sync', methods=['POST'])
 @email_bp.route('/api/mailboxes/<int:mailbox_id>/sync', methods=['POST'])
-@require_role('admin')
+@require_role('admin', 'org_admin', 'platform_owner')
 def sync_mailbox(current_user, mailbox_id):
     mb = fetch_one("SELECT * FROM email_config WHERE id = %s", (mailbox_id,))
     if not mb:
         return jsonify({'success': False, 'error': 'Mailbox not found'}), 404
 
     inst_id = mb.get('institution_id') or 1
+    user_inst = current_user.get('institution_id')
+    user_role = (current_user.get('role') or '').lower().strip()
+    if user_role not in ('platform_owner', 'super_admin') and user_inst != inst_id:
+        return jsonify({'success': False, 'error': 'Forbidden: Access to specified mailbox is denied'}), 403
+
     if mb.get('status') == 'disabled':
         return jsonify({'success': False, 'error': 'Cannot sync a disabled mailbox.'}), 400
 
@@ -349,11 +384,14 @@ def sync_mailbox(current_user, mailbox_id):
         email_service.release_sync_lease(mailbox_id, lease_id, final_status=final_status, last_error=last_err)
 
 @email_bp.route('/api/institutions/<int:inst_id>/sync-all', methods=['POST'])
-@require_role('admin')
+@email_bp.route('/api/organizations/<int:inst_id>/sync-all', methods=['POST'])
+@require_role('admin', 'org_admin')
 def sync_all_institution_mailboxes(current_user, inst_id):
-    user_inst = current_user.get('institution_id') or 1
-    if user_inst != inst_id and current_user.get('role') != 'admin':
-        return jsonify({'success': False, 'error': 'Unauthorized institution access'}), 403
+    target_id, err_resp = _resolve_target_institution_id(current_user, inst_id, strict_403=True)
+    if err_resp:
+        msg, code = err_resp
+        return jsonify({'success': False, 'error': msg}), code
+    inst_id = target_id
 
     mailboxes = email_service.get_mailboxes_for_institution(inst_id)
     active_mailboxes = [m for m in mailboxes if m.get('status') == 'active']
@@ -400,15 +438,17 @@ def sync_all_institution_mailboxes(current_user, inst_id):
     })
 
 @email_bp.route('/api/mailbox/<int:mailbox_id>/enable', methods=['POST'])
-@require_role('admin')
+@email_bp.route('/api/mailboxes/<int:mailbox_id>/enable', methods=['POST'])
+@require_role('admin', 'org_admin', 'platform_owner')
 def enable_mailbox(current_user, mailbox_id):
     mb = fetch_one("SELECT institution_id FROM email_config WHERE id = %s", (mailbox_id,))
     if not mb:
         return jsonify({'success': False, 'error': 'Mailbox not found'}), 404
     inst_id = mb.get('institution_id')
     user_inst = current_user.get('institution_id')
-    if user_inst and user_inst != inst_id and current_user.get('role') != 'admin':
-        return jsonify({'success': False, 'error': 'Unauthorized institution access'}), 403
+    user_role = (current_user.get('role') or '').lower().strip()
+    if user_inst and user_inst != inst_id and user_role not in ('platform_owner', 'super_admin'):
+        return jsonify({'success': False, 'error': 'Forbidden: Access to specified mailbox is denied'}), 403
 
     ok = email_service.update_mailbox_status(mailbox_id, inst_id, 'active')
     if not ok:
@@ -416,20 +456,48 @@ def enable_mailbox(current_user, mailbox_id):
     return jsonify({'success': True, 'message': 'Mailbox enabled successfully.'})
 
 @email_bp.route('/api/mailbox/<int:mailbox_id>/disable', methods=['POST'])
-@require_role('admin')
+@email_bp.route('/api/mailboxes/<int:mailbox_id>/disable', methods=['POST'])
+@require_role('admin', 'org_admin', 'platform_owner')
 def disable_mailbox(current_user, mailbox_id):
     mb = fetch_one("SELECT institution_id FROM email_config WHERE id = %s", (mailbox_id,))
     if not mb:
         return jsonify({'success': False, 'error': 'Mailbox not found'}), 404
     inst_id = mb.get('institution_id')
     user_inst = current_user.get('institution_id')
-    if user_inst and user_inst != inst_id and current_user.get('role') != 'admin':
-        return jsonify({'success': False, 'error': 'Unauthorized institution access'}), 403
+    user_role = (current_user.get('role') or '').lower().strip()
+    if user_inst and user_inst != inst_id and user_role not in ('platform_owner', 'super_admin'):
+        return jsonify({'success': False, 'error': 'Forbidden: Access to specified mailbox is denied'}), 403
 
     ok = email_service.update_mailbox_status(mailbox_id, inst_id, 'disabled')
     if not ok:
         return jsonify({'success': False, 'error': 'Mailbox not found'}), 404
     return jsonify({'success': True, 'message': 'Mailbox disabled successfully.'})
+
+@email_bp.route('/api/mailbox/<int:mailbox_id>', methods=['DELETE'])
+@email_bp.route('/api/mailboxes/<int:mailbox_id>', methods=['DELETE'])
+@require_role('admin', 'org_admin', 'platform_owner')
+def delete_mailbox_endpoint(current_user, mailbox_id):
+    """Deletes/removes a tenant-owned mailbox (Tenant Scoped)."""
+    try:
+        user_role = (current_user.get('role') or '').lower().strip()
+        inst_id = current_user.get('institution_id')
+
+        if user_role in ('platform_owner', 'super_admin') and not inst_id:
+            mb_row = fetch_one("SELECT institution_id FROM email_config WHERE id = %s", (mailbox_id,))
+            if not mb_row:
+                return jsonify({'success': False, 'error': 'Mailbox not found.'}), 404
+            inst_id = mb_row['institution_id']
+        elif not inst_id:
+            return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
+
+        success, message = email_service.delete_mailbox(mailbox_id, inst_id)
+        if not success:
+            status_code = 404 if 'not found' in message.lower() else 400
+            return jsonify({'success': False, 'error': message}), status_code
+
+        return jsonify({'success': True, 'message': message})
+    except Exception as e:
+        return jsonify({'success': False, 'error': f"Failed to delete mailbox: {e}"}), 500
 
 @email_bp.route('/api/configure-email', methods=['POST'])
 @require_role('admin')

@@ -36,7 +36,15 @@ def _safe_execute(cursor, engine, sql, params=None):
     On PostgreSQL, wraps the query in a SAVEPOINT so that if an optional query fails,
     the transaction is not left in an aborted state ('InFailedSqlTransaction').
     """
-    if engine == 'postgres':
+    if engine == 'sqlite':
+        from .connection import _adapt_query_for_sqlite
+        sql = _adapt_query_for_sqlite(sql)
+        try:
+            cursor.execute(sql, params or ())
+            return True
+        except Exception:
+            return False
+    elif engine == 'postgres':
         try:
             cursor.execute("SAVEPOINT migration_sp")
             cursor.execute(sql, params or ())
@@ -69,19 +77,29 @@ def apply_migrations(cursor, engine):
             _safe_execute(cursor, engine, "ALTER TABLE institutions ADD COLUMN code VARCHAR(30) NULL")
         if 'status' not in inst_cols:
             _safe_execute(cursor, engine, "ALTER TABLE institutions ADD COLUMN status VARCHAR(20) DEFAULT 'ACTIVE'")
+        if 'org_type' not in inst_cols:
+            _safe_execute(cursor, engine, "ALTER TABLE institutions ADD COLUMN org_type VARCHAR(50) DEFAULT 'university'")
+        if 'contact_name' not in inst_cols:
+            _safe_execute(cursor, engine, "ALTER TABLE institutions ADD COLUMN contact_name VARCHAR(100) NULL")
+        if 'contact_email' not in inst_cols:
+            _safe_execute(cursor, engine, "ALTER TABLE institutions ADD COLUMN contact_email VARCHAR(100) NULL")
+        if 'settings' not in inst_cols:
+            _safe_execute(cursor, engine, "ALTER TABLE institutions ADD COLUMN settings TEXT NULL")
         if 'updated_at' not in inst_cols:
             _safe_execute(cursor, engine, "ALTER TABLE institutions ADD COLUMN updated_at TIMESTAMP NULL")
 
         _safe_execute(cursor, engine, "UPDATE institutions SET code = 'BM-DEMO' WHERE (code IS NULL OR code = '') AND id = 1")
         _safe_execute(cursor, engine, "UPDATE institutions SET status = 'ACTIVE' WHERE status IS NULL OR status = ''")
+        _safe_execute(cursor, engine, "UPDATE institutions SET org_type = 'university' WHERE org_type IS NULL OR org_type = ''")
+        _safe_execute(cursor, engine, "UPDATE institutions SET settings = '{}' WHERE settings IS NULL OR settings = ''")
 
     # Ensure default institution exists
     if engine == 'sqlite':
-        _safe_execute(cursor, engine, "INSERT OR IGNORE INTO institutions (id, name, domain, code, status) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE')")
+        _safe_execute(cursor, engine, "INSERT OR IGNORE INTO institutions (id, name, domain, code, status, org_type, settings) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE', 'university', '{}')")
     elif engine == 'postgres':
-        _safe_execute(cursor, engine, "INSERT INTO institutions (id, name, domain, code, status) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE') ON CONFLICT DO NOTHING")
+        _safe_execute(cursor, engine, "INSERT INTO institutions (id, name, domain, code, status, org_type, settings) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE', 'university', '{}') ON CONFLICT DO NOTHING")
     else:
-        _safe_execute(cursor, engine, "INSERT IGNORE INTO institutions (id, name, domain, code, status) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE')")
+        _safe_execute(cursor, engine, "INSERT IGNORE INTO institutions (id, name, domain, code, status, org_type, settings) VALUES (1, 'BullyMail Demo Institution', 'bullymail.local', 'BM-DEMO', 'ACTIVE', 'university', '{}')")
 
     # -------------------------------------------------------------------------
     # 1. Users Table Migrations
@@ -101,6 +119,9 @@ def apply_migrations(cursor, engine):
 
         if 'password' in user_cols:
             _safe_execute(cursor, engine, "UPDATE users SET password_hash = password WHERE (password_hash IS NULL OR password_hash = '') AND password IS NOT NULL")
+
+        if 'full_name' not in user_cols:
+            _safe_execute(cursor, engine, "ALTER TABLE users ADD COLUMN full_name VARCHAR(100) NULL")
 
         if 'status' not in user_cols:
             _safe_execute(cursor, engine, "ALTER TABLE users ADD COLUMN status VARCHAR(30) DEFAULT 'ACTIVE'")
@@ -127,6 +148,16 @@ def apply_migrations(cursor, engine):
 
         if 'requested_institution_domain' not in user_cols:
             _safe_execute(cursor, engine, "ALTER TABLE users ADD COLUMN requested_institution_domain VARCHAR(100) NULL")
+
+        # Migrate legacy admin accounts:
+        # Platform Owner (Jaya Chandra Vennam / primary admin) -> 'platform_owner'
+        # Institutional admins -> 'org_admin'
+        try:
+            admin_uname = (getattr(Config, 'ADMIN_USERNAME', None) or 'admin').strip()
+            _safe_execute(cursor, engine, "UPDATE users SET role = 'platform_owner', full_name = 'Jaya Chandra Vennam' WHERE username = %s AND (role = 'admin' OR role = 'platform_owner')", (admin_uname,))
+            _safe_execute(cursor, engine, "UPDATE users SET role = 'org_admin' WHERE role = 'admin' AND username != %s", (admin_uname,))
+        except Exception:
+            pass
 
         # Backfill active status for legacy accounts without altering pending registrations
         _safe_execute(cursor, engine, "UPDATE users SET status = 'ACTIVE' WHERE status IS NULL OR status = ''")
@@ -381,6 +412,67 @@ def apply_migrations(cursor, engine):
             col_type = "INTEGER DEFAULT 0" if engine == 'sqlite' else "INT DEFAULT 0"
             _safe_execute(cursor, engine, f"ALTER TABLE dataset_history ADD COLUMN neutral_samples {col_type}")
 
+    # -------------------------------------------------------------------------
+    # 7. Organization Members Table Migration
+    # -------------------------------------------------------------------------
+    if engine == 'sqlite':
+        _safe_execute(cursor, engine, '''
+            CREATE TABLE IF NOT EXISTS organization_members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                institution_id INTEGER NOT NULL,
+                member_id VARCHAR(50) NULL,
+                full_name VARCHAR(100) NOT NULL,
+                email VARCHAR(100) NOT NULL,
+                department VARCHAR(100) NULL,
+                member_type VARCHAR(50) DEFAULT 'member',
+                status VARCHAR(30) DEFAULT 'ACTIVE',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE,
+                UNIQUE (institution_id, email)
+            )
+        ''')
+        _safe_execute(cursor, engine, "CREATE INDEX IF NOT EXISTS idx_members_inst ON organization_members(institution_id)")
+        _safe_execute(cursor, engine, "CREATE INDEX IF NOT EXISTS idx_members_email ON organization_members(email)")
+    elif engine == 'postgres':
+        _safe_execute(cursor, engine, '''
+            CREATE TABLE IF NOT EXISTS organization_members (
+                id SERIAL PRIMARY KEY,
+                institution_id INT NOT NULL,
+                member_id VARCHAR(50) NULL,
+                full_name VARCHAR(100) NOT NULL,
+                email VARCHAR(100) NOT NULL,
+                department VARCHAR(100) NULL,
+                member_type VARCHAR(50) DEFAULT 'member',
+                status VARCHAR(30) DEFAULT 'ACTIVE',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE,
+                CONSTRAINT uq_member_inst_email UNIQUE (institution_id, email)
+            )
+        ''')
+        _safe_execute(cursor, engine, "CREATE INDEX IF NOT EXISTS idx_members_inst ON organization_members(institution_id)")
+        _safe_execute(cursor, engine, "CREATE INDEX IF NOT EXISTS idx_members_email ON organization_members(email)")
+    else:
+        _safe_execute(cursor, engine, '''
+            CREATE TABLE IF NOT EXISTS organization_members (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                institution_id INT NOT NULL,
+                member_id VARCHAR(50) NULL,
+                full_name VARCHAR(100) NOT NULL,
+                email VARCHAR(100) NOT NULL,
+                department VARCHAR(100) NULL,
+                member_type VARCHAR(50) DEFAULT 'member',
+                status VARCHAR(30) DEFAULT 'ACTIVE',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_members_inst (institution_id),
+                INDEX idx_members_email (email),
+                UNIQUE KEY uq_member_inst_email (institution_id, email),
+                FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ''')
+
 
 def setup_database():
     """Sets up all required database tables with UTF-8 support and idempotent secure administrator initialization."""
@@ -398,6 +490,10 @@ def setup_database():
                     domain VARCHAR(100) UNIQUE NOT NULL,
                     code VARCHAR(30) NULL,
                     status VARCHAR(20) DEFAULT 'ACTIVE',
+                    org_type VARCHAR(50) DEFAULT 'university',
+                    contact_name VARCHAR(100) NULL,
+                    contact_email VARCHAR(100) NULL,
+                    settings TEXT DEFAULT '{}',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -411,6 +507,7 @@ def setup_database():
                     username VARCHAR(50) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
                     role VARCHAR(20) DEFAULT 'analyst',
+                    full_name VARCHAR(100) NULL,
                     email VARCHAR(100) UNIQUE,
                     status VARCHAR(30) DEFAULT 'PENDING_EMAIL_VERIFICATION',
                     requested_institution_name VARCHAR(100) NULL,
@@ -629,6 +726,10 @@ def setup_database():
                     domain VARCHAR(100) UNIQUE NOT NULL,
                     code VARCHAR(30) NULL,
                     status VARCHAR(20) DEFAULT 'ACTIVE',
+                    org_type VARCHAR(50) DEFAULT 'university',
+                    contact_name VARCHAR(100) NULL,
+                    contact_email VARCHAR(100) NULL,
+                    settings TEXT DEFAULT '{}',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -641,6 +742,7 @@ def setup_database():
                     username VARCHAR(50) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
                     role VARCHAR(20) DEFAULT 'analyst',
+                    full_name VARCHAR(100) NULL,
                     email VARCHAR(100) UNIQUE,
                     status VARCHAR(30) DEFAULT 'PENDING_EMAIL_VERIFICATION',
                     requested_institution_name VARCHAR(100) NULL,
@@ -846,6 +948,10 @@ def setup_database():
                     domain VARCHAR(100) UNIQUE NOT NULL,
                     code VARCHAR(30) NULL,
                     status VARCHAR(20) DEFAULT 'ACTIVE',
+                    org_type VARCHAR(50) DEFAULT 'university',
+                    contact_name VARCHAR(100) NULL,
+                    contact_email VARCHAR(100) NULL,
+                    settings TEXT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -858,6 +964,7 @@ def setup_database():
                     username VARCHAR(50) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
                     role VARCHAR(20) DEFAULT 'analyst',
+                    full_name VARCHAR(100) NULL,
                     email VARCHAR(100) UNIQUE,
                     status VARCHAR(30) DEFAULT 'PENDING_EMAIL_VERIFICATION',
                     requested_institution_name VARCHAR(100) NULL,
@@ -1120,27 +1227,35 @@ def setup_database():
     except Exception:
         default_inst_id = 1
 
+    # Auto-heal any admin / org_admin user records where institution_id is NULL or 0
+    try:
+        execute_query(
+            "UPDATE users SET institution_id = %s WHERE role IN ('platform_owner', 'org_admin', 'admin') AND (institution_id IS NULL OR institution_id = 0)",
+            (default_inst_id,)
+        )
+    except Exception:
+        pass
+
     from ..models.user import UserModel
-    admin_user = fetch_one("SELECT * FROM users WHERE role = 'admin' LIMIT 1")
+    admin_user = fetch_one("SELECT * FROM users WHERE role IN ('platform_owner', 'admin') ORDER BY CASE WHEN role = 'platform_owner' THEN 0 ELSE 1 END, id ASC LIMIT 1")
     if not admin_user:
         hashed_pw = UserModel.hash_password(admin_password)
         execute_query(
-            "INSERT INTO users (username, password_hash, role, email, status, institution_id) VALUES (%s, %s, %s, %s, %s, %s)",
-            (admin_username, hashed_pw, 'admin', admin_email, 'ACTIVE', default_inst_id)
+            "INSERT INTO users (username, password_hash, role, full_name, email, status, institution_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (admin_username, hashed_pw, 'platform_owner', 'Jaya Chandra Vennam', admin_email, 'ACTIVE', default_inst_id)
         )
     else:
-        # Auto-heal any admin user records where institution_id is NULL or 0
-        try:
-            execute_query(
-                "UPDATE users SET institution_id = %s WHERE role = 'admin' AND (institution_id IS NULL OR institution_id = 0)",
-                (default_inst_id,)
-            )
-        except Exception:
-            pass
-
-        # Admin user exists: synchronize credentials if environment parameters differ
+        # Platform owner exists: ensure role is platform_owner, full_name is set, and synchronize credentials
         sql_parts = []
         update_params = []
+
+        if admin_user.get('role') != 'platform_owner':
+            sql_parts.append("role = %s")
+            update_params.append('platform_owner')
+
+        if not admin_user.get('full_name') or admin_user.get('full_name') == 'BullyMail Administrator':
+            sql_parts.append("full_name = %s")
+            update_params.append('Jaya Chandra Vennam')
 
         if admin_username and admin_user.get('username') != admin_username:
             sql_parts.append("username = %s")

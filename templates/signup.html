@@ -51,7 +51,7 @@
         }
 
         .auth-card-v2 {
-            max-width: 410px;
+            max-width: 480px;
             width: 100%;
             background: var(--bg-surface);
             border: 1px solid var(--border-subtle);
@@ -125,13 +125,13 @@
         }
 
         .form-control-auth {
-            height: 44px;
-            font-size: 0.88rem;
+            height: 42px;
+            font-size: 0.86rem;
             border-radius: 6px;
             border: 1px solid var(--border-subtle);
             background: var(--bg-surface);
             color: var(--text-primary);
-            padding: 0 14px;
+            padding: 0 12px;
         }
 
         [data-theme="light"] .form-control-auth {
@@ -148,10 +148,10 @@
         }
 
         .auth-label {
-            font-size: 0.82rem;
-            font-weight: 500;
+            font-size: 0.80rem;
+            font-weight: 600;
             color: var(--text-secondary);
-            margin-bottom: 6px;
+            margin-bottom: 4px;
         }
 
         [data-theme="light"] .auth-label {
@@ -191,11 +191,11 @@
     <div class="auth-card-v2">
         <div class="auth-header-v2">
             <div class="auth-brand-logo">
-                <i class="fas fa-user-plus"></i>
+                <i class="fas fa-building-shield"></i>
             </div>
-            <div class="text-muted small fw-semibold mb-1" style="font-size: 0.76rem; letter-spacing: 0.04em;">BULLYMAIL V2 SOC</div>
-            <h1 class="auth-title">Create Operator Account</h1>
-            <p class="auth-subtitle">Register for access to the BullyMail security operations console.</p>
+            <div class="text-muted small fw-semibold mb-1" style="font-size: 0.74rem; letter-spacing: 0.05em;">BULLYMAIL MULTI-TENANT SOC</div>
+            <h1 class="auth-title">Register Organization</h1>
+            <p class="auth-subtitle">Apply for organizational access to the threat intelligence platform.</p>
         </div>
 
         {% if error %}
@@ -222,29 +222,64 @@
         {% endif %}
 
         <form method="POST" action="/signup">
-            <div class="mb-3">
-                <label class="auth-label" for="username">Username</label>
-                <input type="text" class="form-control form-control-auth" id="username" name="username" placeholder="e.g. jsmith" required autofocus>
+            <div class="row g-2 mb-2">
+                <div class="col-sm-7">
+                    <label class="auth-label" for="organization_name">Organization Name</label>
+                    <input type="text" class="form-control form-control-auth" id="organization_name" name="organization_name" placeholder="e.g. VIT University or ABC Corp" required autofocus>
+                </div>
+                <div class="col-sm-5">
+                    <label class="auth-label" for="organization_type">Type</label>
+                    <select id="organization_type" name="organization_type" class="form-select form-control-auth">
+                        <option value="university" selected>University / College</option>
+                        <option value="school">School / Institute</option>
+                        <option value="corporate">Corporate / Enterprise</option>
+                        <option value="other">Other Organization</option>
+                    </select>
+                </div>
             </div>
 
-            <div class="mb-3">
-                <label class="auth-label" for="email">Institutional Email</label>
-                <input type="email" class="form-control form-control-auth" id="email" name="email" placeholder="name@organization.com" required>
+            <div class="row g-2 mb-2">
+                <div class="col-sm-6">
+                    <label class="auth-label" for="organization_domain">Organization Domain</label>
+                    <input type="text" class="form-control form-control-auth" id="organization_domain" name="organization_domain" placeholder="vit.ac.in or abccorp.com">
+                </div>
+                <div class="col-sm-6">
+                    <label class="auth-label" for="full_name">Admin Full Name</label>
+                    <input type="text" class="form-control form-control-auth" id="full_name" name="full_name" placeholder="Dr. John Doe" required>
+                </div>
             </div>
 
-            <div class="mb-3">
-                <label class="auth-label" for="password">Password</label>
-                <input type="password" class="form-control form-control-auth" id="password" name="password" placeholder="••••••••••••" required>
+            <div class="row g-2 mb-2">
+                <div class="col-sm-6">
+                    <label class="auth-label" for="username">Admin Username</label>
+                    <input type="text" class="form-control form-control-auth" id="username" name="username" placeholder="jsmith" required>
+                </div>
+                <div class="col-sm-6">
+                    <label class="auth-label" for="email">Official Email</label>
+                    <input type="email" class="form-control form-control-auth" id="email" name="email" placeholder="admin@organization.edu" required>
+                </div>
             </div>
 
-            <div class="mb-3">
-                <label class="auth-label" for="confirm_password">Confirm Password</label>
-                <input type="password" class="form-control form-control-auth" id="confirm_password" name="confirm_password" placeholder="••••••••••••" required>
+            <div class="row g-2 mb-3">
+                <div class="col-sm-6">
+                    <label class="auth-label" for="password">Password</label>
+                    <input type="password" class="form-control form-control-auth" id="password" name="password" placeholder="••••••••••••" required>
+                </div>
+                <div class="col-sm-6">
+                    <label class="auth-label" for="confirm_password">Confirm Password</label>
+                    <input type="password" class="form-control form-control-auth" id="confirm_password" name="confirm_password" placeholder="••••••••••••" required>
+                </div>
             </div>
 
-            <button type="submit" class="btn btn-auth-primary w-100 mt-2">
-                Create Account
+            <button type="submit" class="btn btn-auth-primary w-100 mt-1">
+                <i class="fas fa-paper-plane me-1"></i> Submit Organization Application
             </button>
+
+            <div class="text-center mt-3 small text-muted" style="font-size: 0.82rem;">
+                Already registered? <a href="/login" class="text-decoration-none text-primary fw-medium">Sign in to SOC</a>
+            </div>
+        </form>
+    </div>
 
             <div class="text-center mt-3 small text-muted" style="font-size: 0.82rem;">
                 Already have an account? <a href="/login" class="text-decoration-none text-primary fw-medium">Sign in</a>

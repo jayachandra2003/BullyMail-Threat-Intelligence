@@ -7,7 +7,10 @@ class InstitutionModel:
     """
 
     @staticmethod
-    def create_institution(name: str, domain: str, code: str = None) -> int:
+    def create_institution(name: str, domain: str, code: str = None,
+                           org_type: str = 'university', contact_name: str = None,
+                           contact_email: str = None, status: str = 'ACTIVE',
+                           settings: str = '{}') -> int:
         """
         Creates a new institution with unique name and domain.
         Returns newly auto-incremented institution_id.
@@ -15,6 +18,11 @@ class InstitutionModel:
         clean_name = (name or '').strip()
         clean_domain = (domain or '').strip().lower()
         clean_code = (code or '').strip().upper()
+        clean_type = (org_type or 'university').strip().lower()
+        clean_cname = (contact_name or '').strip() or None
+        clean_cemail = (contact_email or '').strip().lower() or None
+        clean_status = (status or 'ACTIVE').strip().upper()
+        clean_settings = settings if isinstance(settings, str) else '{}'
 
         if not clean_name:
             raise ValueError("Institution name cannot be empty.")
@@ -34,8 +42,9 @@ class InstitutionModel:
             raise ValueError(f"An institution with domain '{clean_domain}' already exists.")
 
         inst_id = execute_query(
-            "INSERT INTO institutions (name, domain, code, status) VALUES (%s, %s, %s, %s)",
-            (clean_name, clean_domain, clean_code, 'ACTIVE')
+            "INSERT INTO institutions (name, domain, code, status, org_type, contact_name, contact_email, settings) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            (clean_name, clean_domain, clean_code, clean_status, clean_type, clean_cname, clean_cemail, clean_settings)
         )
         return inst_id
 
@@ -44,19 +53,153 @@ class InstitutionModel:
         """Retrieves institution record by ID."""
         if not inst_id:
             return None
-        return fetch_one("SELECT id, name, domain, code, status, created_at FROM institutions WHERE id = %s", (inst_id,))
+        return fetch_one(
+            "SELECT id, name, domain, code, status, org_type, contact_name, contact_email, settings, created_at, updated_at "
+            "FROM institutions WHERE id = %s",
+            (inst_id,)
+        )
 
     @staticmethod
     def get_by_domain(domain: str):
         """Retrieves institution record by domain."""
         if not domain:
             return None
-        return fetch_one("SELECT id, name, domain, code, status, created_at FROM institutions WHERE domain = %s", (domain.strip().lower(),))
+        return fetch_one(
+            "SELECT id, name, domain, code, status, org_type, contact_name, contact_email, settings, created_at, updated_at "
+            "FROM institutions WHERE domain = %s",
+            (domain.strip().lower(),)
+        )
 
     @staticmethod
     def list_all():
         """Lists all registered institutions."""
-        return fetch_all("SELECT id, name, domain, code, status, created_at FROM institutions ORDER BY id ASC")
+        return fetch_all(
+            "SELECT id, name, domain, code, status, org_type, contact_name, contact_email, created_at, updated_at "
+            "FROM institutions ORDER BY id ASC"
+        )
+
+    @staticmethod
+    def list_pending():
+        """Lists institutions pending platform owner approval."""
+        return fetch_all(
+            "SELECT id, name, domain, code, status, org_type, contact_name, contact_email, created_at "
+            "FROM institutions WHERE status = 'PENDING_APPROVAL' ORDER BY id ASC"
+        )
+
+    @staticmethod
+    def update_status(inst_id: int, status: str) -> bool:
+        """Updates organization approval status (e.g., ACTIVE, REJECTED, SUSPENDED)."""
+        if not inst_id:
+            return False
+        clean_status = (status or '').strip().upper()
+        return execute_query(
+            "UPDATE institutions SET status = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (clean_status, inst_id)
+        ) > 0
+
+    @staticmethod
+    def update_settings(inst_id: int, settings: str) -> bool:
+        """Updates organization settings JSON string."""
+        if not inst_id:
+            return False
+        import json
+        if isinstance(settings, dict):
+            settings_str = json.dumps(settings)
+        else:
+            settings_str = str(settings or '{}')
+        return execute_query(
+            "UPDATE institutions SET settings = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (settings_str, inst_id)
+        ) > 0
+
+    @staticmethod
+    def update_institution(inst_id: int, name: str = None, org_type: str = None,
+                           contact_name: str = None, contact_email: str = None) -> bool:
+        """Updates organization profile metadata."""
+        if not inst_id:
+            return False
+        updates = []
+        params = []
+        if name:
+            updates.append("name = %s")
+            params.append(name.strip())
+        if org_type:
+            updates.append("org_type = %s")
+            params.append(org_type.strip().lower())
+        if contact_name is not None:
+            updates.append("contact_name = %s")
+            params.append(contact_name.strip() or None)
+        if contact_email is not None:
+            updates.append("contact_email = %s")
+            params.append(contact_email.strip().lower() or None)
+
+        if not updates:
+            return False
+
+        params.append(inst_id)
+        return execute_query(
+            f"UPDATE institutions SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            tuple(params)
+        ) > 0
+
+    @staticmethod
+    def get_platform_stats() -> dict:
+        """Calculates platform-wide overview metrics for the Platform Owner."""
+        org_total = fetch_one("SELECT COUNT(*) AS cnt FROM institutions")
+        total_orgs = org_total['cnt'] if isinstance(org_total, dict) else (org_total[0] if org_total else 0)
+
+        org_act = fetch_one("SELECT COUNT(*) AS cnt FROM institutions WHERE status = 'ACTIVE'")
+        active_orgs = org_act['cnt'] if isinstance(org_act, dict) else (org_act[0] if org_act else 0)
+
+        org_pend = fetch_one("SELECT COUNT(*) AS cnt FROM institutions WHERE status = 'PENDING_APPROVAL'")
+        pending_orgs = org_pend['cnt'] if isinstance(org_pend, dict) else (org_pend[0] if org_pend else 0)
+
+        mem_total = fetch_one("SELECT COUNT(*) AS cnt FROM organization_members")
+        total_members = mem_total['cnt'] if isinstance(mem_total, dict) else (mem_total[0] if mem_total else 0)
+
+        mb_total = fetch_one("SELECT COUNT(*) AS cnt FROM email_config")
+        total_mailboxes = mb_total['cnt'] if isinstance(mb_total, dict) else (mb_total[0] if mb_total else 0)
+
+        an_total = fetch_one("SELECT COUNT(*) AS cnt FROM analyzed_emails")
+        total_emails = an_total['cnt'] if isinstance(an_total, dict) else (an_total[0] if an_total else 0)
+
+        threat_total = fetch_one("SELECT COUNT(*) AS cnt FROM analyzed_emails WHERE overall_risk_level != 'LOW'")
+        total_threats = threat_total['cnt'] if isinstance(threat_total, dict) else (threat_total[0] if threat_total else 0)
+
+        crit = fetch_one("SELECT COUNT(*) AS cnt FROM analyzed_emails WHERE overall_risk_level = 'CRITICAL'")
+        critical_count = crit['cnt'] if isinstance(crit, dict) else (crit[0] if crit else 0)
+
+        high = fetch_one("SELECT COUNT(*) AS cnt FROM analyzed_emails WHERE overall_risk_level = 'HIGH'")
+        high_count = high['cnt'] if isinstance(high, dict) else (high[0] if high else 0)
+
+        med = fetch_one("SELECT COUNT(*) AS cnt FROM analyzed_emails WHERE overall_risk_level = 'MEDIUM'")
+        medium_count = med['cnt'] if isinstance(med, dict) else (med[0] if med else 0)
+
+        cb = fetch_one("SELECT COUNT(*) AS cnt FROM analyzed_emails WHERE is_bullying = 1")
+        cb_count = cb['cnt'] if isinstance(cb, dict) else (cb[0] if cb else 0)
+
+        ph = fetch_one("SELECT COUNT(*) AS cnt FROM analyzed_emails WHERE phishing_risk_level != 'LOW'")
+        ph_count = ph['cnt'] if isinstance(ph, dict) else (ph[0] if ph else 0)
+
+        return {
+            'total_organizations': total_orgs,
+            'total_institutions': total_orgs,
+            'active_organizations': active_orgs,
+            'active_institutions': active_orgs,
+            'pending_organizations': pending_orgs,
+            'pending_institutions': pending_orgs,
+            'total_members': total_members,
+            'total_mailboxes': total_mailboxes,
+            'total_emails': total_emails,
+            'total_threats': total_threats,
+            'critical_count': critical_count,
+            'high_count': high_count,
+            'medium_count': medium_count,
+            'vector_breakdown': {
+                'cyberbullying': cb_count,
+                'phishing': ph_count
+            }
+        }
 
     @staticmethod
     def get_stats(inst_id: int) -> dict:

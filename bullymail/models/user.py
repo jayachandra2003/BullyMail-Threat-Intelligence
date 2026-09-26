@@ -185,7 +185,7 @@ class UserModel:
     def create_user(cls, username: str, password: str, role: str = 'analyst',
                     email: str = None, status: str = 'PENDING_EMAIL_VERIFICATION', enforce_policy: bool = True,
                     institution_id: int = None, requested_institution_name: str = None,
-                    requested_institution_domain: str = None) -> int:
+                    requested_institution_domain: str = None, full_name: str = None) -> int:
         """
         Creates a new user record with password hashing, email normalization, and policy enforcement.
         Default institution_id is None (must NEVER default to Institution 1).
@@ -194,6 +194,7 @@ class UserModel:
         if not username:
             raise ValueError("Username cannot be empty.")
 
+        clean_name = (full_name or '').strip() or None
         clean_email = cls.normalize_email(email) if email else None
         if clean_email and not cls.validate_email_format(clean_email):
             raise ValueError("Invalid email format.")
@@ -208,25 +209,25 @@ class UserModel:
         try:
             user_id = execute_query(
                 "INSERT INTO users "
-                "(username, password, password_hash, role, email, status, institution_id, requested_institution_name, requested_institution_domain) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                (username, hashed, hashed, role, clean_email, status, institution_id, requested_institution_name, requested_institution_domain)
+                "(username, password, password_hash, role, full_name, email, status, institution_id, requested_institution_name, requested_institution_domain) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (username, hashed, hashed, role, clean_name, clean_email, status, institution_id, requested_institution_name, requested_institution_domain)
             )
         except Exception:
             try:
                 user_id = execute_query(
                     "INSERT INTO users "
-                    "(username, password_hash, role, email, status, institution_id, requested_institution_name, requested_institution_domain) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                    (username, hashed, role, clean_email, status, institution_id, requested_institution_name, requested_institution_domain)
+                    "(username, password_hash, role, full_name, email, status, institution_id, requested_institution_name, requested_institution_domain) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (username, hashed, role, clean_name, clean_email, status, institution_id, requested_institution_name, requested_institution_domain)
                 )
             except Exception:
                 try:
                     user_id = execute_query(
                         "INSERT INTO users "
-                        "(username, password, password_hash, role, email, status, institution_id) "
-                        "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                        (username, hashed, hashed, role, clean_email, status, institution_id)
+                        "(username, password_hash, role, email, status, institution_id, requested_institution_name, requested_institution_domain) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                        (username, hashed, role, clean_email, status, institution_id, requested_institution_name, requested_institution_domain)
                     )
                 except Exception:
                     user_id = execute_query(
@@ -279,8 +280,12 @@ class UserModel:
         if not institution_id:
             raise ValueError("Institution ID must be specified for account provisioning.")
 
-        valid_roles = {'admin', 'analyst', 'operator'}
-        assigned_role = role if role in valid_roles else 'analyst'
+        valid_roles = {'platform_owner', 'org_admin', 'analyst', 'admin', 'operator'}
+        assigned_role = role if role in valid_roles else 'org_admin'
+        if assigned_role == 'admin':
+            assigned_role = 'org_admin'
+        elif assigned_role == 'operator':
+            assigned_role = 'analyst'
 
         execute_query(
             "UPDATE users "
@@ -307,7 +312,11 @@ class UserModel:
         if not user:
             return False
 
-        new_role = role or user.get('role', 'analyst')
+        new_role = role or user.get('role', 'org_admin')
+        if new_role == 'admin':
+            new_role = 'org_admin'
+        elif new_role == 'operator':
+            new_role = 'analyst'
         new_inst = institution_id if institution_id is not None else user.get('institution_id')
         if not new_inst:
             raise ValueError("Institution ID must be specified to approve user.")
@@ -321,10 +330,30 @@ class UserModel:
     @classmethod
     def get_pending_approval_users(cls, institution_id: int = None):
         """Retrieves users waiting for administrator approval."""
+        if institution_id:
+            return fetch_all(
+                "SELECT id, username, full_name, email, role, status, institution_id, requested_institution_name, "
+                "requested_institution_domain, created_at, email_verified_at "
+                "FROM users "
+                "WHERE status = 'PENDING_ADMIN_APPROVAL' AND institution_id = %s "
+                "ORDER BY id ASC",
+                (institution_id,)
+            )
         return fetch_all(
-            "SELECT id, username, email, role, status, requested_institution_name, "
+            "SELECT id, username, full_name, email, role, status, institution_id, requested_institution_name, "
             "requested_institution_domain, created_at, email_verified_at "
             "FROM users "
             "WHERE status = 'PENDING_ADMIN_APPROVAL' "
             "ORDER BY id ASC"
+        )
+
+    @classmethod
+    def get_users_by_institution(cls, institution_id: int):
+        """Retrieves active/all users belonging to a specific institution."""
+        if not institution_id:
+            return []
+        return fetch_all(
+            "SELECT id, username, full_name, email, role, status, created_at, last_login_at "
+            "FROM users WHERE institution_id = %s ORDER BY id ASC",
+            (institution_id,)
         )
