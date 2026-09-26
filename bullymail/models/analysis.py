@@ -104,16 +104,20 @@ class AnalysisModel:
         return execute_query(query, tuple(vals))
 
     @staticmethod
-    def get_by_id(analysis_id, institution_id=1, user_id=None, role=None):
+    def get_by_id(analysis_id, institution_id=None, user_id=None, role=None):
         user_role = (role or '').lower().strip()
         is_admin_role = user_role in ('admin', 'org_admin', 'organization_admin', 'platform_owner', 'super_admin')
-        if is_admin_role or user_id is None:
-            if institution_id is not None:
+        is_platform = user_role in ('platform_owner', 'super_admin') or (user_role == 'admin' and institution_id is None)
+        
+        if is_platform and institution_id is None:
+            row = fetch_one("SELECT * FROM analyzed_emails WHERE id = %s", (analysis_id,))
+        elif institution_id is not None:
+            if is_admin_role or user_id is None:
                 row = fetch_one("SELECT * FROM analyzed_emails WHERE id = %s AND institution_id = %s", (analysis_id, institution_id))
             else:
-                row = fetch_one("SELECT * FROM analyzed_emails WHERE id = %s", (analysis_id,))
+                row = fetch_one("SELECT * FROM analyzed_emails WHERE id = %s AND institution_id = %s AND user_id = %s", (analysis_id, institution_id, user_id))
         else:
-            row = fetch_one("SELECT * FROM analyzed_emails WHERE id = %s AND institution_id = %s AND user_id = %s", (analysis_id, institution_id or 1, user_id))
+            return None
 
         if not row:
             return None
@@ -317,8 +321,7 @@ class AnalysisModel:
             conditions.append("institution_id = %s")
             params.append(int(institution_id))
         elif not is_platform_role:
-            conditions.append("institution_id = %s")
-            params.append(1)
+            conditions.append("1=0")
 
         if not is_admin_role and user_id is not None:
             conditions.append("user_id = %s")
@@ -365,11 +368,21 @@ class AnalysisModel:
         return rows
 
     @staticmethod
-    def get_mailbox_emails(mailbox_id, institution_id=1, limit=50, search=None, risk_filter=None):
+    def get_mailbox_emails(mailbox_id, institution_id=None, limit=50, search=None, risk_filter=None):
         """Retrieves emails belonging strictly to the specified mailbox (Mailbox Isolation Enforced)."""
         query = "SELECT * FROM analyzed_emails"
-        conditions = ["institution_id = %s"]
-        params = [institution_id or 1]
+        conditions = []
+        params = []
+
+        if institution_id is not None:
+            conditions.append("institution_id = %s")
+            params.append(int(institution_id))
+        else:
+            mb_row = fetch_one("SELECT institution_id FROM email_config WHERE id = %s", (mailbox_id,))
+            if not mb_row:
+                return []
+            conditions.append("institution_id = %s")
+            params.append(int(mb_row['institution_id']))
 
         # Mailbox isolation filter: match direct email_config_id OR linked ingested_messages email_config_id
         conditions.append("(email_config_id = %s OR id IN (SELECT analysis_id FROM ingested_messages WHERE email_config_id = %s AND analysis_id IS NOT NULL))")
@@ -421,8 +434,8 @@ class AnalysisModel:
             inst_clause = "WHERE 1=1"
             params_base = ()
         else:
-            inst_clause = "WHERE institution_id = 1"
-            params_base = (1,)
+            inst_clause = "WHERE 1=0"
+            params_base = ()
 
         existing_cols = AnalysisModel._get_table_columns()
 
@@ -537,6 +550,7 @@ class AnalysisModel:
 
         return {
             'total_analyses': total,
+            'total_analyzed': total,
             'bullying_detected': b_count,
             'phishing_detected': p_count,
             'suspicious_urls': u_count,
@@ -602,8 +616,8 @@ class AnalysisModel:
             inst_clause = "WHERE 1=1"
             params = []
         else:
-            inst_clause = "WHERE institution_id = 1"
-            params = [1]
+            inst_clause = "WHERE 1=0"
+            params = []
 
         start_str = start_time.strftime('%Y-%m-%d %H:%M:%S')
         query = f"SELECT created_at, overall_risk_level, is_bullying FROM analyzed_emails {inst_clause} AND created_at >= %s ORDER BY created_at ASC"

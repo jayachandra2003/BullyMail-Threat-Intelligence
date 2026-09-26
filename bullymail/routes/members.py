@@ -2,42 +2,13 @@ import json
 from flask import Blueprint, request, jsonify, Response
 from ..models.member import OrganizationMemberModel
 from ..models.institution import InstitutionModel
-from .auth import require_role
+from .auth import require_role, resolve_tenant_id
 
 members_bp = Blueprint('members', __name__)
 
-def _resolve_member_inst_id(current_user, req_inst_id=None):
-    """
-    Enforces strict tenant isolation for member operations.
-    Returns: (institution_id, error_tuple_or_None)
-    """
-    user_role = (current_user.get('role') or 'analyst').lower().strip()
-    user_inst = current_user.get('institution_id')
-
-    if user_role in ('platform_owner', 'super_admin'):
-        if req_inst_id is not None:
-            try:
-                t_id = int(req_inst_id)
-                inst = InstitutionModel.get_by_id(t_id)
-                if not inst:
-                    return None, ("Organization not found", 404)
-                return t_id, None
-            except (ValueError, TypeError):
-                return None, ("Invalid organization ID", 400)
-        return user_inst, None
-
-    if not user_inst:
-        return None, ("Forbidden: Account is not associated with an approved organization", 403)
-
-    user_inst = int(user_inst)
-    if req_inst_id is not None:
-        try:
-            if int(req_inst_id) != user_inst:
-                return None, ("Forbidden: Access to specified organization is denied", 403)
-        except (ValueError, TypeError):
-            return None, ("Invalid organization ID", 400)
-
-    return user_inst, None
+def _resolve_member_inst_id(current_user, req_inst_id=None, allow_global=True):
+    """Delegates to canonical resolve_tenant_id for consistent tenant isolation."""
+    return resolve_tenant_id(current_user, req_inst_id, allow_global=allow_global, strict_403=True)
 
 # =========================================================================
 # 1. MEMBER CRUD & LISTING
@@ -227,6 +198,39 @@ def delete_member(current_user, member_id, org_id=None):
         return jsonify({'success': success, 'message': 'Member deleted successfully.' if success else 'Failed to delete member.'})
     except Exception as e:
         return jsonify({'success': False, 'error': f"Failed to delete member: {e}"}), 500
+
+@members_bp.route('/api/members/<int:member_id>/status', methods=['POST', 'PATCH'])
+@members_bp.route('/api/organizations/<int:org_id>/members/<int:member_id>/status', methods=['POST', 'PATCH'])
+@require_role('platform_owner', 'org_admin')
+def toggle_member_status(current_user, member_id, org_id=None):
+    """Toggles or sets active/inactive status for a member (Tenant Scoped)."""
+    try:
+        data = request.get_json(silent=True) or {}
+        req_inst = org_id if org_id is not None else data.get('institution_id') or request.args.get('institution_id')
+        inst_id, err = _resolve_member_inst_id(current_user, req_inst, allow_global=False)
+        if err:
+            msg, code = err
+            return jsonify({'success': False, 'error': msg}), code
+
+        existing = OrganizationMemberModel.get_by_id(member_id, institution_id=inst_id)
+        if not existing:
+            return jsonify({'success': False, 'error': 'Member not found.'}), 404
+
+        new_status = data.get('status')
+        if not new_status:
+            curr = (existing.get('status') or 'ACTIVE').upper()
+            new_status = 'INACTIVE' if curr == 'ACTIVE' else 'ACTIVE'
+        else:
+            new_status = new_status.strip().upper()
+
+        success = OrganizationMemberModel.update_member(member_id, inst_id, status=new_status)
+        return jsonify({
+            'success': success,
+            'status': new_status,
+            'message': f"Member status updated to '{new_status}'."
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': f"Failed to update member status: {e}"}), 500
 
 # =========================================================================
 # 2. BATCH CSV IMPORT & TEMPLATE

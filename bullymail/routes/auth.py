@@ -250,11 +250,97 @@ def signup():
 # =========================================================================
 from functools import wraps
 
+def normalize_role(role, has_organization=False):
+    """Normalizes role strings to canonical names supporting SUPER_ADMIN, ORGANIZATION_ADMIN, etc."""
+    r = str(role or '').lower().strip()
+    if r in ('super_admin', 'platform_owner', 'superadmin'):
+        return 'platform_owner'
+    if r in ('organization_admin', 'org_admin', 'orgadmin'):
+        return 'org_admin'
+    if r == 'admin':
+        return 'org_admin' if has_organization else 'platform_owner'
+    if r in ('organization_analyst', 'analyst', 'operator', 'staff'):
+        return 'analyst'
+    if r in ('organization_member', 'member', 'student', 'faculty', 'employee'):
+        return 'analyst'
+    return r
+
+class AuthUser(dict):
+    """
+    Canonical authenticated user context representation.
+    Provides standard object-attribute access (current_user.id, current_user.role, current_user.organization_id)
+    as well as full dictionary backward compatibility (current_user['institution_id'], etc.).
+    """
+    def __init__(self, data=None, **kwargs):
+        super().__init__(data or {}, **kwargs)
+        org_id = self.get('organization_id') or self.get('institution_id')
+        if org_id is not None:
+            try:
+                org_id = int(org_id)
+            except (ValueError, TypeError):
+                pass
+        self['organization_id'] = org_id
+        self['institution_id'] = org_id
+
+        raw_role = self.get('role')
+        canonical = normalize_role(raw_role, has_organization=(org_id is not None))
+        self['role'] = canonical
+
+    @property
+    def id(self):
+        return self.get('id')
+
+    @property
+    def username(self):
+        return self.get('username')
+
+    @property
+    def email(self):
+        return self.get('email')
+
+    @property
+    def full_name(self):
+        return self.get('full_name') or self.get('username')
+
+    @property
+    def role(self):
+        return self.get('role')
+
+    @property
+    def organization_id(self):
+        return self.get('organization_id')
+
+    @property
+    def institution_id(self):
+        return self.get('organization_id')
+
+    @property
+    def is_super_admin(self):
+        return self.get('role') in ('platform_owner', 'super_admin')
+
+    @property
+    def is_platform_owner(self):
+        return self.is_super_admin
+
+    @property
+    def is_org_admin(self):
+        return self.get('role') in ('org_admin', 'organization_admin')
+
+    @property
+    def is_analyst(self):
+        return not self.is_super_admin and not self.is_org_admin and not self.is_member
+
+    @property
+    def is_member(self):
+        raw_role = str(self.get('role') or '').lower().strip()
+        return raw_role in ('member', 'organization_member', 'student', 'faculty', 'staff', 'employee')
+
+
 def get_current_user():
     """
     Retrieves fresh user data from DB using session['user_id'].
-    Prevents stale role vulnerabilities and immediately blocks disabled/unapproved users.
-    Returns user dict or None.
+    Prevents stale role vulnerabilities and immediately blocks disabled/unapproved/suspended users.
+    Returns AuthUser or None.
     """
     user_id = session.get('user_id')
     if not user_id:
@@ -262,7 +348,17 @@ def get_current_user():
     user = UserModel.get_by_id(user_id)
     if not user or user.get('status') != 'ACTIVE':
         return None
-    return user
+
+    auth_user = AuthUser(user)
+
+    # For tenant users, verify organization is also ACTIVE
+    if not auth_user.is_super_admin and auth_user.organization_id:
+        from ..models.institution import InstitutionModel
+        inst = InstitutionModel.get_by_id(auth_user.organization_id)
+        if not inst or (inst.get('status') or '').upper() not in ('ACTIVE', 'APPROVED'):
+            return None
+
+    return auth_user
 
 def require_auth(f):
     @wraps(f)
@@ -276,16 +372,9 @@ def require_auth(f):
         return f(user, *args, **kwargs)
     return decorated
 
-def normalize_role(role):
-    """Normalizes role strings to canonical names supporting SUPER_ADMIN, ORGANIZATION_ADMIN, etc."""
-    r = str(role or '').lower().strip()
-    if r in ('super_admin', 'platform_owner'):
-        return 'platform_owner'
-    if r in ('organization_admin', 'org_admin'):
-        return 'org_admin'
-    if r in ('organization_member', 'member', 'analyst', 'operator'):
-        return 'analyst'
-    return r
+def require_authenticated_user(f):
+    """Requires an authenticated active user context (Alias for require_auth)."""
+    return require_auth(f)
 
 def require_platform_owner(f):
     """Restricts endpoint access STRICTLY to the Platform Owner (Jaya Chandra Vennam) / Super Admin."""
@@ -297,31 +386,123 @@ def require_platform_owner(f):
                 return jsonify({'success': False, 'error': 'Unauthorized'}), 401
             session.clear()
             return redirect(url_for('auth.login'))
-        if normalize_role(user.get('role')) != 'platform_owner':
+        if not (user.is_super_admin if hasattr(user, 'is_super_admin') else (normalize_role(user.get('role')) == 'platform_owner')):
             if request.is_json or request.path.startswith('/api/'):
                 return jsonify({'success': False, 'error': 'Forbidden: Platform Owner access required'}), 403
             return render_template('login.html', error="Forbidden: Platform Owner access required."), 403
         return f(user, *args, **kwargs)
     return decorated
 
+def require_super_admin(f):
+    """Restricts endpoint access STRICTLY to the Platform Owner (Jaya Chandra Vennam) / Super Admin."""
+    return require_platform_owner(f)
+
+def require_organization_admin(f):
+    """Restricts endpoint access strictly to Organization Admin or Super Admin."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = get_current_user()
+        if not user:
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+            session.clear()
+            return redirect(url_for('auth.login'))
+        is_allowed = (user.is_org_admin or user.is_super_admin) if hasattr(user, 'is_org_admin') else (
+            normalize_role(user.get('role')) in ('platform_owner', 'super_admin', 'org_admin', 'organization_admin', 'admin')
+        )
+        if not is_allowed:
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Forbidden: Organization Administrator access required'}), 403
+            return render_template('login.html', error="Forbidden: Organization Administrator access required."), 403
+        return f(user, *args, **kwargs)
+    return decorated
+
+def require_organization_access(resource_org_id, current_user):
+    """
+    Validates if current_user has authorized access to resource_org_id.
+    Returns True if allowed, False if cross-tenant violation.
+    """
+    if not current_user:
+        return False
+    is_super = current_user.is_super_admin if hasattr(current_user, 'is_super_admin') else (
+        normalize_role(current_user.get('role')) in ('platform_owner', 'super_admin')
+    )
+    if is_super:
+        return True
+    user_org = current_user.organization_id if hasattr(current_user, 'organization_id') else (
+        current_user.get('organization_id') or current_user.get('institution_id')
+    )
+    if not user_org:
+        return False
+    try:
+        return int(user_org) == int(resource_org_id)
+    except (ValueError, TypeError):
+        return False
+
+def resolve_tenant_id(current_user, requested_org_id=None, allow_global=True, strict_403=True):
+    """
+    Canonical Tenant Resolution Function.
+    Determines tenant scope strictly from the authenticated identity/session.
+    
+    Returns: (target_organization_id, error_tuple_or_None)
+    - For SUPER_ADMIN:
+        - If requested_org_id is provided: validates existence of organization, returns (target_id, None).
+        - If requested_org_id is None:
+            - If allow_global is True: returns (None, None) signifying platform-wide global scope.
+            - If allow_global is False: returns (None, ("organization_id is required for this operation.", 400)).
+    - For ORGANIZATION_ADMIN and below:
+        - If user has no organization_id: returns (None, ("Forbidden: Account is not associated with an approved organization.", 403)).
+        - If requested_org_id is provided and int(requested_org_id) != int(user_org_id):
+            RETURNS (None, ("Forbidden: Access to specified organization is denied.", 403)) ALWAYS.
+            Direct API tampering across tenants is immediately rejected.
+        - Returns (int(user_org_id), None).
+    """
+    if not current_user:
+        return None, ("Unauthorized", 401)
+
+    is_super = current_user.is_super_admin if hasattr(current_user, 'is_super_admin') else (
+        normalize_role(current_user.get('role')) in ('platform_owner', 'super_admin')
+    )
+    user_org_id = current_user.organization_id if hasattr(current_user, 'organization_id') else (
+        current_user.get('organization_id') or current_user.get('institution_id')
+    )
+
+    if is_super:
+        if requested_org_id is not None:
+            try:
+                target_id = int(requested_org_id)
+                from ..models.institution import InstitutionModel
+                inst = InstitutionModel.get_by_id(target_id)
+                if not inst:
+                    return None, ("Organization not found", 404)
+                return target_id, None
+            except (ValueError, TypeError):
+                return None, ("Invalid organization ID format", 400)
+        if allow_global:
+            return None, None
+        return None, ("organization_id is required for this action.", 400)
+
+    # Tenant users (org_admin, analyst, member):
+    if not user_org_id:
+        return None, ("Forbidden: Account is not associated with an approved organization", 403)
+
+    user_org_id = int(user_org_id)
+    if requested_org_id is not None:
+        try:
+            req_id = int(requested_org_id)
+            if req_id != user_org_id:
+                return None, ("Forbidden: Access to specified organization is denied", 403)
+        except (ValueError, TypeError):
+            return None, ("Invalid organization ID format", 400)
+
+    return user_org_id, None
+
 def require_role(*roles):
     """
     Role-based access control decorator.
     Supports 'super_admin' / 'platform_owner', 'organization_admin' / 'org_admin', 'organization_member' / 'analyst'.
     """
-    req = {normalize_role(r) for r in roles}
-    allowed_roles = set(req)
-
-    # Role hierarchy:
-    # 1. 'analyst' / 'operator' requirement allows all authenticated roles
-    if 'analyst' in req or 'operator' in req:
-        allowed_roles.update({'platform_owner', 'org_admin', 'admin', 'analyst', 'operator'})
-    # 2. 'org_admin' or 'admin' requirement allows org_admin, admin, and platform_owner
-    if 'org_admin' in req or 'admin' in req:
-        allowed_roles.update({'platform_owner', 'org_admin', 'admin'})
-    # 3. 'platform_owner' requirement strictly allows platform_owner and legacy admin
-    if 'platform_owner' in req and 'org_admin' not in req and 'analyst' not in req and 'admin' not in req:
-        allowed_roles = {'platform_owner', 'admin'}
+    allowed = {str(r).lower().strip() for r in roles}
 
     def decorator(f):
         @wraps(f)
@@ -332,12 +513,29 @@ def require_role(*roles):
                     return jsonify({'success': False, 'error': 'Unauthorized'}), 401
                 session.clear()
                 return redirect(url_for('auth.login'))
-            user_role = normalize_role(user.get('role', 'analyst'))
-            if user_role not in allowed_roles:
-                if request.is_json or request.path.startswith('/api/'):
-                    return jsonify({'success': False, 'error': 'Forbidden: Insufficient privileges'}), 403
-                return render_template('login.html', error="Forbidden: Insufficient privileges for this action."), 403
-            return f(user, *args, **kwargs)
+
+            # 1. Platform Owner / Super Admin has unrestricted access
+            if user.is_super_admin:
+                return f(user, *args, **kwargs)
+
+            # 2. Org Admin is allowed if org_admin, admin, or any operational role is in allowed
+            if user.is_org_admin:
+                if any(r in allowed for r in ('org_admin', 'organization_admin', 'admin', 'analyst', 'operator', 'staff', 'member', 'organization_member')):
+                    return f(user, *args, **kwargs)
+
+            # 3. Analyst is allowed if analyst, operator, staff, or member is in allowed
+            if user.is_analyst:
+                if any(r in allowed for r in ('analyst', 'operator', 'staff', 'member', 'organization_member')):
+                    return f(user, *args, **kwargs)
+
+            # 4. Member is allowed if member is in allowed
+            if user.is_member:
+                if any(r in allowed for r in ('member', 'organization_member')):
+                    return f(user, *args, **kwargs)
+
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Forbidden: Insufficient privileges'}), 403
+            return render_template('login.html', error="Forbidden: Insufficient privileges for this action."), 403
         return decorated
     return decorator
 

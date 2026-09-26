@@ -205,6 +205,83 @@ def reject_org(current_user, org_id=None):
         'status': 'REJECTED'
     })
 
+@admin_bp.route('/api/admin/organizations/<int:org_id>/suspend', methods=['POST'])
+@admin_bp.route('/api/admin/suspend-org/<int:org_id>', methods=['POST'])
+@admin_bp.route('/suspend-organization', methods=['POST'])
+@admin_bp.route('/api/admin/suspend-organization', methods=['POST'])
+@require_role('SUPER_ADMIN')
+def suspend_org(current_user, org_id=None):
+    """Platform Owner / SUPER_ADMIN suspends an active organization."""
+    if org_id is None:
+        data = request.get_json(silent=True) or {}
+        org_id = data.get('organization_id') or data.get('org_id') or request.args.get('organization_id') or request.args.get('org_id')
+    if not org_id:
+        return jsonify({'success': False, 'error': 'organization_id is required.'}), 400
+    try:
+        org_id = int(org_id)
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Invalid organization_id format.'}), 400
+
+    org = InstitutionModel.get_by_id(org_id)
+    if not org:
+        return jsonify({'success': False, 'error': 'Organization not found.'}), 404
+
+    InstitutionModel.update_status(org_id, 'SUSPENDED')
+    from ..database.connection import execute_query
+    execute_query("UPDATE users SET status = 'SUSPENDED' WHERE institution_id = %s", (org_id,))
+    return jsonify({
+        'success': True,
+        'message': f"Organization '{org.get('name')}' has been suspended.",
+        'organization_id': org_id,
+        'status': 'SUSPENDED'
+    })
+
+@admin_bp.route('/api/admin/organizations/<int:org_id>/activate', methods=['POST'])
+@admin_bp.route('/api/admin/activate-org/<int:org_id>', methods=['POST'])
+@admin_bp.route('/activate-organization', methods=['POST'])
+@admin_bp.route('/api/admin/activate-organization', methods=['POST'])
+@require_role('SUPER_ADMIN')
+def activate_org(current_user, org_id=None):
+    """Platform Owner / SUPER_ADMIN activates a suspended organization."""
+    if org_id is None:
+        data = request.get_json(silent=True) or {}
+        org_id = data.get('organization_id') or data.get('org_id') or request.args.get('organization_id') or request.args.get('org_id')
+    if not org_id:
+        return jsonify({'success': False, 'error': 'organization_id is required.'}), 400
+    try:
+        org_id = int(org_id)
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Invalid organization_id format.'}), 400
+
+    org = InstitutionModel.get_by_id(org_id)
+    if not org:
+        return jsonify({'success': False, 'error': 'Organization not found.'}), 404
+
+    InstitutionModel.update_status(org_id, 'ACTIVE')
+    from ..database.connection import execute_query
+    execute_query("UPDATE users SET status = 'ACTIVE' WHERE institution_id = %s AND status = 'SUSPENDED'", (org_id,))
+    return jsonify({
+        'success': True,
+        'message': f"Organization '{org.get('name')}' has been activated.",
+        'organization_id': org_id,
+        'status': 'ACTIVE'
+    })
+
+@admin_bp.route('/api/admin/organizations', methods=['GET'])
+@admin_bp.route('/api/admin/institutions', methods=['GET'])
+@require_role('SUPER_ADMIN')
+def list_admin_organizations(current_user):
+    """Platform Owner lists all organizations across the platform."""
+    try:
+        orgs = InstitutionModel.list_all()
+        return jsonify({
+            'success': True,
+            'organizations': orgs,
+            'institutions': orgs
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': f"Failed to list organizations: {e}"}), 500
+
 @admin_bp.route('/api/admin/platform-overview', methods=['GET'])
 @require_role('platform_owner')
 def get_platform_overview(current_user):
@@ -224,22 +301,18 @@ def get_platform_overview(current_user):
 def list_admin_mailboxes(current_user):
     """Lists mailboxes belonging strictly to current_user['institution_id'] or all for platform_owner."""
     try:
-        user_role = (current_user.get('role') or '').lower().strip()
-        is_platform = user_role in ('platform_owner', 'super_admin')
-        req_inst = request.args.get('institution_id')
+        from .auth import resolve_tenant_id
+        req_inst = request.args.get('organization_id') or request.args.get('institution_id')
+        target_id, err = resolve_tenant_id(current_user, req_inst, allow_global=True)
+        if err:
+            msg, code = err
+            return jsonify({'success': False, 'error': msg}), code
 
         from ..services.email_service import email_service
-        if is_platform:
-            if req_inst:
-                mailboxes = email_service.get_mailboxes_for_institution(int(req_inst))
-            else:
-                mailboxes = email_service.list_all_mailboxes()
-            return jsonify({'success': True, 'mailboxes': mailboxes})
-
-        inst_id = current_user.get('institution_id')
-        if not inst_id:
-            return jsonify({'success': False, 'error': 'Forbidden: Account is not associated with an organization.'}), 403
-        mailboxes = email_service.get_mailboxes_for_institution(int(inst_id))
+        if target_id is not None:
+            mailboxes = email_service.get_mailboxes_for_institution(target_id)
+        else:
+            mailboxes = email_service.list_all_mailboxes()
         return jsonify({'success': True, 'mailboxes': mailboxes})
     except Exception as e:
         return jsonify({'success': False, 'error': f"Failed to list mailboxes: {e}"}), 500

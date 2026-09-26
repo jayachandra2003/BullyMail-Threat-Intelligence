@@ -164,9 +164,9 @@ def test_role_changes_immediately_affect_authorization(client, app):
     res1 = client.get('/api/admin/pending-users')
     assert res1.status_code == 403
 
-    # Upgrade role in DB
+    # Upgrade role in DB to super_admin
     with app.app_context():
-        execute_query("UPDATE users SET role = 'admin' WHERE id = %s", (u_id,))
+        execute_query("UPDATE users SET role = 'super_admin' WHERE id = %s", (u_id,))
 
     # Next request immediately checks fresh user state from DB
     res2 = client.get('/api/admin/pending-users')
@@ -201,12 +201,10 @@ def test_parameter_tampering_ignored(client, app):
 
     client.post('/login', json={'username': 'tamper_user', 'password': 'TestPassword123!'})
 
-    # Client sends query parameter institution_id=2
+    # Client sends query parameter institution_id=2 -> strictly rejected with 403 Forbidden
     res = client.get('/api/analysis-history?institution_id=2')
-    assert res.status_code == 200
-    # Response must still be scoped to user's DB institution_id=1
-    stats = client.get('/api/system-stats?institution_id=2').get_json()['stats']
-    assert stats is not None
+    assert res.status_code == 403
+    assert 'Forbidden' in res.get_json()['error']
 
 def test_session_invalidation_on_institution_or_status_change(client, app):
     with app.app_context():
@@ -521,8 +519,8 @@ def test_phase_1c_admin_provisioning_and_tenant_isolation(client, app):
         # Insert test analysis into Inst 1
         a1 = AnalysisModel.save_analysis({'bullying_analysis': {'is_bullying': False, 'confidence': 0.0, 'rule_based_matches': [], 'rule_based_score': 0, 'ml_prediction': 0, 'ml_confidence': 0.0, 'model_used': 'test', 'combined_score': 0.0}, 'overall_risk_level': 'LOW', 'threat_score': 0.0}, institution_id=1)
         
-        # Create admin user for Inst 1
-        admin_id = UserModel.create_user('admin_p1c', 'StrongPassword123!', role='admin', email='admin_p1c@inst1.com', status='ACTIVE', institution_id=1)
+        # Create super admin user (Platform Owner)
+        admin_id = UserModel.create_user('admin_p1c', 'StrongPassword123!', role='super_admin', email='admin_p1c@bullymail.io', status='ACTIVE', institution_id=None)
         
         # Create pending user
         pending_id = UserModel.create_user('user_p1c', 'StrongPassword123!', role='analyst', email='user_p1c@new.com', status='PENDING_EMAIL_VERIFICATION', requested_institution_name='New Univ', requested_institution_domain='newuniv.edu')
@@ -581,20 +579,16 @@ def test_phase_1c_parameter_tampering_defense(client, app):
 
     client.post('/login', json={'username': 'tamper_user', 'password': 'StrongPassword123!'})
 
-    # Attempt to tamper institution_id during analysis submission
+    # Attempt to tamper institution_id during analysis submission -> strictly rejected with 403 Forbidden
     res_tamper = client.post('/api/analyze-email', json={
         'email_text': 'Testing parameter tampering defense.',
         'institution_id': 999,  # Attempted override
         'role': 'admin'         # Attempted role escalation
     })
-    assert res_tamper.status_code == 200
-    saved_analysis_id = res_tamper.get_json()['report']['id']
+    assert res_tamper.status_code == 403
+    assert 'Forbidden' in res_tamper.get_json()['error']
 
     with app.app_context():
-        # Verify saved analysis belonged to user's real session institution_id (1), NOT 999
-        analysis_rec = fetch_one("SELECT institution_id FROM analyzed_emails WHERE id = %s", (saved_analysis_id,))
-        assert analysis_rec['institution_id'] == 1
-        
         # Verify user role in DB remained 'analyst'
         user_rec = UserModel.get_by_id(user_id)
         assert user_rec['role'] == 'analyst'

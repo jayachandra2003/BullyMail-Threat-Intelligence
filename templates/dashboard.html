@@ -797,12 +797,19 @@
                             </div>
                             <div class="soc-workspace-control-bar d-flex gap-2 align-items-center flex-wrap">
                                 <!-- Workspace Institution Selector -->
+                                {% if is_platform_owner %}
                                 <div class="d-flex align-items-center gap-2 font-mono">
                                     <label for="socInstitutionSelect" class="text-muted small mb-0 text-uppercase fw-semibold" style="font-size: 0.75rem; white-space: nowrap;">WORKSPACE:</label>
                                     <select id="socInstitutionSelect" class="form-select form-select-sm soc-input font-mono fw-bold" style="min-width: 220px;" onchange="handleInstitutionChange(this.value)">
-                                        <option value="1">Loading Institutions...</option>
+                                        <option value="">Platform Command (Global Scope)</option>
                                     </select>
                                 </div>
+                                {% else %}
+                                <div class="d-flex align-items-center gap-2 font-mono">
+                                    <span class="text-muted small mb-0 text-uppercase fw-semibold" style="font-size: 0.75rem; white-space: nowrap;">ORGANIZATION:</span>
+                                    <span class="badge bg-secondary font-mono px-2 py-1" style="font-size: 0.85rem;" id="orgAdminStaticBadge">{{ institution_name or 'BullyMail Demo Institution' }}</span>
+                                </div>
+                                {% endif %}
                                 <button type="button" class="btn-soc-outline btn-sm font-mono" id="btnSyncAllMailboxes" onclick="handleSyncAllMailboxes()">
                                     <i class="fas fa-arrows-rotate me-1"></i> Sync All
                                 </button>

@@ -757,6 +757,42 @@ async function executeRejectOrgSubmit(forcedId) {
     }
 }
 
+async function confirmSuspendOrg(orgId, orgName) {
+    if (!confirm(`Are you sure you want to suspend organization '${orgName}'? All associated accounts will be immediately blocked from platform access.`)) {
+        return;
+    }
+    try {
+        const res = await fetch(`/api/admin/organizations/${orgId}/suspend`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            if (window.SOCToast) SOCToast.warning(data.message || 'Organization suspended.', 'Platform Administration');
+            loadPlatformOrganizations();
+        } else {
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to suspend organization.', 'Platform Error');
+        }
+    } catch (e) {
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Platform Error');
+    }
+}
+
+async function confirmActivateOrg(orgId, orgName) {
+    if (!confirm(`Are you sure you want to activate organization '${orgName}'?`)) {
+        return;
+    }
+    try {
+        const res = await fetch(`/api/admin/organizations/${orgId}/activate`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            if (window.SOCToast) SOCToast.success(data.message || 'Organization activated.', 'Platform Administration');
+            loadPlatformOrganizations();
+        } else {
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to activate organization.', 'Platform Error');
+        }
+    } catch (e) {
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Platform Error');
+    }
+}
+
 function applyPendingFilters() {
     const container = document.getElementById('pendingRegistrationsContainer');
     if (!container) return;
@@ -3040,6 +3076,13 @@ async function loadInstitutions() {
 }
 
 function renderInstitutionSelect(institutions) {
+    if (!isPlatformOwner()) {
+        const badge = document.getElementById('orgAdminStaticBadge');
+        if (badge && window.institutionName) {
+            badge.textContent = window.institutionName;
+        }
+        return;
+    }
     const sel = document.getElementById('socInstitutionSelect');
     if (!sel) return;
 
@@ -3215,15 +3258,14 @@ async function handleSyncAllMailboxes() {
 }
 
 function handleInstitutionChange(newId) {
-    const instId = newId ? parseInt(newId, 10) : null;
-    if (isPlatformOwner()) {
-        window.platformSelectedOrgId = instId;
-        window.activeInstitutionId = instId;
-        const instObj = (window.cachedInstitutions || []).find(i => i.id === instId);
-        updateWorkspaceInspectionBanner(instObj ? instObj.name : '');
-    } else {
-        window.activeInstitutionId = instId || window.currentInstitutionId || null;
+    if (!isPlatformOwner()) {
+        return; // Guard: non-platform owners cannot switch workspaces
     }
+    const instId = newId ? parseInt(newId, 10) : null;
+    window.platformSelectedOrgId = instId;
+    window.activeInstitutionId = instId;
+    const instObj = (window.cachedInstitutions || []).find(i => i.id === instId);
+    updateWorkspaceInspectionBanner(instObj ? instObj.name : '');
     stopMailboxAutoSync();
     updateInstitutionBanner(instId);
     loadSecureMailboxes();
@@ -4409,6 +4451,8 @@ function renderPlatformOrgsTable(orgs) {
             statusBadge = `<span class="badge bg-warning text-dark font-mono"><i class="fas fa-clock me-1"></i>PENDING</span>`;
         } else if (org.status === 'REJECTED') {
             statusBadge = `<span class="badge bg-danger font-mono"><i class="fas fa-ban me-1"></i>REJECTED</span>`;
+        } else if (org.status === 'SUSPENDED') {
+            statusBadge = `<span class="badge bg-secondary font-mono"><i class="fas fa-pause-circle me-1"></i>SUSPENDED</span>`;
         }
 
         let actionBtns = `<span class="text-muted font-mono small">—</span>`;
@@ -4423,8 +4467,17 @@ function renderPlatformOrgsTable(orgs) {
             `;
         } else if (org.status === 'ACTIVE') {
             actionBtns = `
-                <button class="btn-soc-secondary btn-sm font-mono" onclick="inspectOrganizationWorkspace(${org.id}, '${safeName}')" title="Inspect Organization Workspace">
-                    <i class="fas fa-arrow-up-right-from-square me-1"></i> Open Workspace
+                <button class="btn-soc-secondary btn-sm font-mono me-1" onclick="inspectOrganizationWorkspace(${org.id}, '${safeName}')" title="Inspect Organization Workspace">
+                    <i class="fas fa-arrow-up-right-from-square me-1"></i> Open
+                </button>
+                <button class="btn-soc-danger btn-sm font-mono" onclick="confirmSuspendOrg(${org.id}, '${safeName}')" title="Suspend Organization Access">
+                    <i class="fas fa-pause me-1"></i> Suspend
+                </button>
+            `;
+        } else if (org.status === 'SUSPENDED') {
+            actionBtns = `
+                <button class="btn-soc-primary btn-sm font-mono" onclick="confirmActivateOrg(${org.id}, '${safeName}')" title="Activate Organization Access">
+                    <i class="fas fa-play me-1"></i> Activate
                 </button>
             `;
         }
@@ -4683,6 +4736,9 @@ function renderMembersTable(members) {
                     <button type="button" class="btn-soc-secondary btn-sm me-1 font-mono p-1 px-2" title="Edit Member" onclick="openEditMemberModal(${m.id})">
                         <i class="fas fa-pen small"></i>
                     </button>
+                    <button type="button" class="btn-soc-outline btn-sm me-1 font-mono p-1 px-2" title="${m.status === 'ACTIVE' ? 'Disable Member' : 'Activate Member'}" onclick="toggleMemberStatus(${m.id}, '${m.status}')">
+                        <i class="fas ${m.status === 'ACTIVE' ? 'fa-user-slash text-warning' : 'fa-user-check text-success'} small"></i>
+                    </button>
                     <button type="button" class="btn-soc-danger btn-sm font-mono p-1 px-2" title="Delete Member" onclick="confirmDeleteMember(${m.id}, '${safeName}')">
                         <i class="fas fa-trash small"></i>
                     </button>
@@ -4918,6 +4974,26 @@ async function executeDeleteMemberSubmit(forcedId) {
             loadMembers(window.membersCurrentPage);
         } else {
             if (window.SOCToast) SOCToast.error(data.error || 'Failed to delete member.', 'Directory Error');
+        }
+    } catch (e) {
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Directory Error');
+    }
+}
+
+async function toggleMemberStatus(memberId, currentStatus) {
+    const targetStatus = (currentStatus === 'ACTIVE') ? 'INACTIVE' : 'ACTIVE';
+    try {
+        const res = await fetch(`/api/members/${memberId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: targetStatus })
+        });
+        const data = await res.json();
+        if (data.success) {
+            if (window.SOCToast) SOCToast.success(data.message || `Member marked as ${targetStatus}.`, 'Member Directory');
+            loadMembers(window.membersCurrentPage);
+        } else {
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to update member status.', 'Directory Error');
         }
     } catch (e) {
         if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Directory Error');
