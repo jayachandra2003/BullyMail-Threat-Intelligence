@@ -18,7 +18,17 @@
     --bg-surface-hover: #16223b;
     --bg-input: #090e1a;
     --bg-inset: #050810;
-    --bg-glass: rgba(12, 18, 32, 0.92);
+    --bg-glass: rgba(12, 18, 32, 0.76);
+    --bg-glass-elevated: rgba(17, 26, 45, 0.82);
+    --bg-glass-input: rgba(9, 14, 26, 0.72);
+
+    /* Liquid Glass Specular & Refraction System */
+    --glass-blur: 16px;
+    --glass-specular: rgba(255, 255, 255, 0.12);
+    --glass-specular-bright: rgba(255, 255, 255, 0.24);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+    --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+    --glass-border-hover: 1px solid rgba(99, 102, 241, 0.45);
 
     /* Borders */
     --border-subtle: rgba(255, 255, 255, 0.08);
@@ -40,12 +50,12 @@
     --accent-primary: #6366f1;
     --accent-hover: #4f46e5;
     --accent-light: #818cf8;
-    --accent-glow: rgba(99, 102, 241, 0.25);
+    --accent-glow: rgba(99, 102, 241, 0.28);
     
     --cyan: #0284c7;
-    --cyan-glow: rgba(2, 132, 199, 0.2);
+    --cyan-glow: rgba(2, 132, 199, 0.25);
     --purple: #8b5cf6;
-    --purple-glow: rgba(139, 92, 246, 0.2);
+    --purple-glow: rgba(139, 92, 246, 0.25);
 
     /* Threat Severity Spectrum */
     --threat-safe: #10b981;
@@ -70,22 +80,22 @@
 
     /* Shadows */
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
-    --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.42);
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.55);
+    --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 4px 20px rgba(0, 0, 0, 0.38);
 
     /* Form Controls */
-    --input-bg: #090e1a;
+    --input-bg: rgba(9, 14, 26, 0.72);
     --input-border: rgba(255, 255, 255, 0.12);
     --input-color: #f8fafc;
     --input-placeholder: #64748b;
 
     /* Toggle Button */
-    --toggle-bg: #111a2d;
-    --toggle-border: rgba(255, 255, 255, 0.12);
+    --toggle-bg: rgba(17, 26, 45, 0.7);
+    --toggle-border: rgba(255, 255, 255, 0.14);
     --toggle-icon-color: #fbbf24;
     --toggle-hover-border: #6366f1;
-    --toggle-hover-glow: rgba(99, 102, 241, 0.2);
+    --toggle-hover-glow: rgba(99, 102, 241, 0.25);
 
     /* Radii & Transitions */
     --radius-sm: 6px;
@@ -93,29 +103,39 @@
     --radius-lg: 12px;
     --radius-xl: 16px;
     --radius-full: 9999px;
-    --transition-fast: 0.15s ease;
-    --transition-base: 0.25s ease;
+    --transition-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    --transition-base: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Light Theme Specification (Calibrated Enterprise Design System) */
 [data-theme="light"] {
     /* Backgrounds: Layered Professional Light Surfaces */
-    --bg-app: #f5f7fa;
-    --bg-void: #eef2f6;
+    --bg-app: #f4f6fa;
+    --bg-void: #edf0f5;
     --bg-sidebar: #ffffff;
     --bg-surface: #ffffff;
     --bg-surface-elevated: #f8fafc;
     --bg-surface-hover: #f1f5f9;
     --bg-input: #ffffff;
     --bg-inset: #f8fafc;
-    --bg-glass: #ffffff;
+    --bg-glass: rgba(255, 255, 255, 0.84);
+    --bg-glass-elevated: rgba(255, 255, 255, 0.92);
+    --bg-glass-input: rgba(255, 255, 255, 0.9);
+
+    /* Liquid Glass Specular & Refraction System (Light Mode) */
+    --glass-blur: 16px;
+    --glass-specular: rgba(255, 255, 255, 0.85);
+    --glass-specular-bright: #ffffff;
+    --glass-shadow: 0 4px 24px 0 rgba(15, 23, 42, 0.08);
+    --glass-border: 1px solid rgba(226, 232, 240, 0.85);
+    --glass-border-hover: 1px solid rgba(79, 70, 229, 0.45);
 
     /* Borders: Crisp Slate Definitions */
     --border-subtle: #d9e1ea;
     --border-medium: #cbd5e1;
     --border-highlight: #94a3b8;
     --border-focus: #3b82f6;
-    --border-glow: rgba(59, 130, 246, 0.12);
+    --border-glow: rgba(59, 130, 246, 0.14);
 
     /* High-Contrast Enterprise Typography */
     --text-primary: #172033;
@@ -127,15 +147,15 @@
     --text-link: #2563eb;
 
     /* Brand Accents */
-    --accent-primary: #3b82f6;
-    --accent-hover: #2563eb;
-    --accent-light: #60a5fa;
-    --accent-glow: rgba(59, 130, 246, 0.12);
+    --accent-primary: #4f46e5;
+    --accent-hover: #4338ca;
+    --accent-light: #6366f1;
+    --accent-glow: rgba(79, 70, 229, 0.18);
     
     --cyan: #0284c7;
-    --cyan-glow: rgba(2, 132, 199, 0.12);
+    --cyan-glow: rgba(2, 132, 199, 0.14);
     --purple: #7c3aed;
-    --purple-glow: rgba(124, 58, 237, 0.12);
+    --purple-glow: rgba(124, 58, 237, 0.14);
 
     /* Threat Severity Spectrum (Light Mode Calibrated) */
     --threat-safe: #16a34a;
@@ -160,9 +180,9 @@
 
     /* Shadows */
     --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-    --shadow-md: 0 2px 8px rgba(15, 23, 42, 0.06);
-    --shadow-lg: 0 4px 14px rgba(15, 23, 42, 0.08);
-    --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.05);
+    --shadow-md: 0 3px 10px rgba(15, 23, 42, 0.07);
+    --shadow-lg: 0 6px 18px rgba(15, 23, 42, 0.1);
+    --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 8px rgba(15, 23, 42, 0.06);
 
     /* Form Controls */
     --input-bg: #ffffff;
@@ -171,11 +191,11 @@
     --input-placeholder: #7a8799;
 
     /* Toggle Button */
-    --toggle-bg: #ffffff;
+    --toggle-bg: rgba(255, 255, 255, 0.9);
     --toggle-border: #d9e1ea;
     --toggle-icon-color: #3b82f6;
     --toggle-hover-border: #3b82f6;
-    --toggle-hover-glow: rgba(59, 130, 246, 0.1);
+    --toggle-hover-glow: rgba(59, 130, 246, 0.15);
 }
 
 /* ==========================================================================
@@ -189,6 +209,7 @@
 
 html {
     overflow-x: hidden;
+    overflow-x: clip;
     max-width: 100vw;
     -webkit-text-size-adjust: 100%;
 }
@@ -200,13 +221,22 @@ body {
     min-height: 100vh;
     line-height: 1.55;
     overflow-x: hidden;
+    overflow-x: clip;
     max-width: 100vw;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     transition: background-color var(--transition-base), color var(--transition-base);
     background-image: 
-        radial-gradient(circle at 100% 0%, rgba(99, 102, 241, 0.04) 0%, transparent 40%),
-        radial-gradient(circle at 0% 100%, rgba(6, 182, 212, 0.03) 0%, transparent 40%);
+        radial-gradient(circle at 100% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 45%),
+        radial-gradient(circle at 0% 100%, rgba(6, 182, 212, 0.06) 0%, transparent 45%),
+        radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.03) 0%, transparent 60%);
+    background-attachment: fixed;
+}
+
+[data-theme="light"] body {
+    background-image: 
+        radial-gradient(circle at 100% 0%, rgba(79, 70, 229, 0.04) 0%, transparent 45%),
+        radial-gradient(circle at 0% 100%, rgba(2, 132, 199, 0.03) 0%, transparent 45%);
 }
 
 button, a, input, select, textarea {
@@ -254,13 +284,15 @@ code, pre, .font-mono {
 ::-webkit-scrollbar-thumb:hover { background: var(--accent-primary); }
 
 /* ==========================================================================
-   4. Single-Click Theme Toggle Button
+   4. Single-Click Theme Toggle Button (Liquid Glass Floating Control)
    ========================================================================== */
 .soc-theme-toggle-btn {
     width: 36px;
     height: 36px;
     min-width: 36px;
     background: var(--toggle-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--toggle-border);
     border-radius: var(--radius-md);
     display: inline-flex;
@@ -269,15 +301,15 @@ code, pre, .font-mono {
     color: var(--toggle-icon-color);
     font-size: 1rem;
     cursor: pointer;
-    transition: var(--transition-fast);
-    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-fast);
+    box-shadow: inset 0 1px 0 var(--glass-specular), var(--shadow-sm);
     outline: none;
     position: relative;
 }
 
 .soc-theme-toggle-btn:hover {
     border-color: var(--toggle-hover-border);
-    box-shadow: 0 0 12px var(--toggle-hover-glow);
+    box-shadow: inset 0 1px 0 var(--glass-specular-bright), 0 0 16px var(--toggle-hover-glow);
     transform: translateY(-1px);
 }
 
@@ -302,31 +334,40 @@ code, pre, .font-mono {
    5. Workstation Panels, Cards & Glassmorphic Surfaces
    ========================================================================== */
 .soc-panel {
-    background: var(--bg-surface);
+    background: var(--bg-glass);
+    backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
-    transition: var(--transition-base);
+    box-shadow: inset 0 1px 0 var(--glass-specular), var(--shadow-card);
+    transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
     position: relative;
 }
 
 .soc-panel:hover {
     border-color: var(--border-medium);
+    box-shadow: inset 0 1px 0 var(--glass-specular-bright), var(--shadow-md);
 }
 
 .soc-panel.interactive:hover {
-    border-color: var(--accent-primary);
-    box-shadow: var(--shadow-card), var(--shadow-md);
+    border-color: var(--border-highlight);
+    box-shadow: inset 0 1px 0 var(--glass-specular-bright), 0 8px 24px -4px rgba(99, 102, 241, 0.22);
     transform: translateY(-2px);
 }
 
 .glass-card {
     background: var(--bg-glass);
-    backdrop-filter: blur(16px);
+    backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
-    transition: var(--transition-base);
+    box-shadow: inset 0 1px 0 var(--glass-specular), var(--shadow-card);
+    transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.glass-card:hover {
+    border-color: var(--border-medium);
+    box-shadow: inset 0 1px 0 var(--glass-specular-bright), var(--shadow-md);
 }
 
 /* ==========================================================================
@@ -391,154 +432,189 @@ code, pre, .font-mono {
 }
 
 /* ==========================================================================
-   7. Enterprise Button Suites
+   7. Enterprise Button Suites (Tactile Liquid Glass Engine)
    ========================================================================== */
 .btn-soc-primary {
-    background: var(--accent-primary);
+    background: linear-gradient(180deg, #6366f1 0%, #4f46e5 100%);
     color: #ffffff !important;
-    border: 1px solid var(--accent-primary);
-    padding: 8px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    padding: 8px 18px;
     border-radius: var(--radius-md);
     font-weight: 600;
     font-size: 0.85rem;
+    letter-spacing: 0.01em;
     cursor: pointer;
-    transition: var(--transition-fast);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
     text-decoration: none;
-    box-shadow: var(--shadow-sm);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.32), 0 3px 12px -2px rgba(79, 70, 229, 0.45);
+    position: relative;
+    overflow: hidden;
 }
 
 .btn-soc-primary:hover:not(:disabled) {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
+    background: linear-gradient(180deg, #7175f5 0%, #4338ca 100%);
+    border-color: rgba(255, 255, 255, 0.3);
     color: #ffffff !important;
     transform: translateY(-1px);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.45), 0 6px 20px -2px rgba(99, 102, 241, 0.55);
 }
 
 .btn-soc-primary:active:not(:disabled) {
-    transform: translateY(0);
+    transform: translateY(1px) scale(0.98);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25), 0 1px 4px rgba(79, 70, 229, 0.3);
 }
 
 .btn-soc-secondary {
     background: var(--bg-surface-elevated);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     color: var(--text-primary) !important;
     border: 1px solid var(--border-medium);
-    padding: 7px 15px;
+    padding: 7px 16px;
     border-radius: var(--radius-md);
     font-weight: 600;
     font-size: 0.84rem;
     cursor: pointer;
-    transition: var(--transition-fast);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
     text-decoration: none;
+    box-shadow: inset 0 1px 0 0 var(--glass-specular), var(--shadow-sm);
 }
 
 .btn-soc-secondary:hover:not(:disabled) {
     background: var(--bg-surface-hover);
     border-color: var(--border-highlight);
     color: var(--text-primary) !important;
+    transform: translateY(-1px);
+    box-shadow: inset 0 1px 0 0 var(--glass-specular-bright), 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+.btn-soc-secondary:active:not(:disabled) {
+    transform: translateY(1px) scale(0.98);
 }
 
 .btn-soc-outline {
-    background: transparent;
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     color: var(--text-secondary) !important;
     border: 1px solid var(--border-medium);
-    padding: 7px 15px;
+    padding: 7px 16px;
     border-radius: var(--radius-md);
     font-weight: 600;
     font-size: 0.84rem;
     cursor: pointer;
-    transition: var(--transition-fast);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
     text-decoration: none;
+    box-shadow: inset 0 1px 0 0 var(--glass-specular);
 }
 
 .btn-soc-outline:hover:not(:disabled) {
-    background: var(--bg-surface-hover);
-    border-color: var(--border-highlight);
+    background: rgba(99, 102, 241, 0.12);
+    border-color: var(--accent-primary);
     color: var(--text-primary) !important;
+    transform: translateY(-1px);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18), 0 4px 14px rgba(99, 102, 241, 0.25);
+}
+
+.btn-soc-outline:active:not(:disabled) {
+    transform: translateY(1px) scale(0.98);
 }
 
 .btn-soc-danger {
-    background: var(--threat-critical-bg);
-    color: var(--threat-critical) !important;
-    border: 1px solid var(--threat-critical-border);
-    padding: 7px 15px;
+    background: linear-gradient(180deg, rgba(239, 68, 68, 0.22) 0%, rgba(220, 38, 38, 0.28) 100%);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: #ef4444 !important;
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    padding: 7px 16px;
     border-radius: var(--radius-md);
     font-weight: 600;
     font-size: 0.84rem;
     cursor: pointer;
-    transition: var(--transition-fast);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
     text-decoration: none;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18), 0 2px 8px rgba(239, 68, 68, 0.2);
 }
 
 .btn-soc-danger:hover:not(:disabled) {
-    background: var(--threat-critical);
+    background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+    border-color: #ef4444;
     color: #ffffff !important;
+    transform: translateY(-1px);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.35), 0 4px 16px rgba(239, 68, 68, 0.45);
+}
+
+.btn-soc-danger:active:not(:disabled) {
+    transform: translateY(1px) scale(0.98);
 }
 
 .btn-soc-warning {
-    background: var(--threat-medium-bg, rgba(245, 158, 11, 0.12));
-    color: var(--threat-medium, #f59e0b) !important;
-    border: 1px solid var(--threat-medium-border, rgba(245, 158, 11, 0.35));
-    padding: 7px 15px;
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.2) 0%, rgba(217, 119, 6, 0.26) 100%);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: #fbbf24 !important;
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    padding: 7px 16px;
     border-radius: var(--radius-md);
     font-weight: 600;
     font-size: 0.84rem;
     cursor: pointer;
-    transition: var(--transition-fast);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
     text-decoration: none;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18), 0 2px 8px rgba(245, 158, 11, 0.2);
 }
 
 .btn-soc-warning:hover:not(:disabled) {
-    background: var(--threat-medium, #f59e0b);
+    background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+    border-color: #f59e0b;
     color: #070b14 !important;
+    transform: translateY(-1px);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.35), 0 4px 16px rgba(245, 158, 11, 0.45);
 }
 
-[data-theme="light"] .btn-soc-warning {
-    background: #fef3c7;
-    border-color: #fde68a;
-    color: #b45309 !important;
-}
-
-[data-theme="light"] .btn-soc-warning:hover:not(:disabled) {
-    background: #f59e0b;
-    color: #ffffff !important;
+.btn-soc-warning:active:not(:disabled) {
+    transform: translateY(1px) scale(0.98);
 }
 
 /* ==========================================================================
-   8. Form Controls
+   8. Form Controls (Frosted Translucent Glass Style)
    ========================================================================== */
 .form-control, .form-select, .soc-input {
     background-color: var(--input-bg) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--input-border) !important;
     color: var(--input-color) !important;
     border-radius: var(--radius-md) !important;
     padding: 9px 13px !important;
     font-size: 0.88rem !important;
-    transition: var(--transition-fast) !important;
+    transition: all var(--transition-fast) !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .form-control:focus, .form-select:focus, .soc-input:focus {
     border-color: var(--accent-primary) !important;
-    box-shadow: 0 0 0 3px var(--border-glow) !important;
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.1), 0 0 0 3px var(--border-glow), 0 0 16px var(--accent-glow) !important;
     outline: none !important;
 }
 
@@ -562,7 +638,9 @@ code, pre, .font-mono {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     z-index: 2000;
     opacity: 0;
     visibility: hidden;
@@ -583,18 +661,26 @@ code, pre, .font-mono {
     width: 800px;
     max-width: 92vw;
     max-height: 88vh;
-    background: var(--bg-surface, #0f172a);
-    border: 1px solid var(--border-medium, #334155);
-    border-radius: 12px;
-    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+    background: var(--bg-glass);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid var(--border-medium, rgba(255, 255, 255, 0.15));
+    border-radius: 14px;
+    box-shadow: inset 0 1px 0 0 var(--glass-specular-bright), 0 25px 70px rgba(0, 0, 0, 0.7);
     z-index: 2010;
     opacity: 0;
     visibility: hidden;
     transform: scale(0.95);
-    transition: transform 0.2s ease, opacity 0.2s ease;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+}
+
+[data-theme="light"] .soc-drawer {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: #cbd5e1;
+    box-shadow: inset 0 1px 0 0 #ffffff, 0 20px 60px rgba(15, 23, 42, 0.18);
 }
 
 @media (max-width: 768px) {
@@ -643,8 +729,8 @@ code, pre, .font-mono {
     position: sticky;
     top: 0;
     z-index: 10;
-    border-top-left-radius: 10px;
-    border-top-right-radius: 10px;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
 }
 
 .soc-drawer-body {
@@ -666,7 +752,7 @@ body:has(.soc-action-modal.show) .modal-backdrop {
 }
 
 /* ==========================================================================
-   10. Toast Notifications
+   10. Toast Notifications (Frosted Glass Floating Toasts)
    ========================================================================== */
 #socToastContainer {
     position: fixed;
@@ -690,11 +776,13 @@ body:has(.soc-action-modal.show) .modal-backdrop {
 }
 
 .soc-toast {
-    background: var(--bg-surface);
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px) saturate(170%);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
     border: 1px solid var(--border-medium);
     border-radius: var(--radius-md);
     padding: 12px 16px;
-    box-shadow: var(--shadow-lg);
+    box-shadow: inset 0 1px 0 0 var(--glass-specular), var(--shadow-lg);
     color: var(--text-secondary);
     display: flex;
     align-items: flex-start;
@@ -734,44 +822,70 @@ body:has(.soc-action-modal.show) .modal-backdrop {
    11. Scoped Light Mode Contrast & Element Overrides
    ========================================================================== */
 [data-theme="light"] .btn-soc-primary {
-    background: #4f46e5 !important;
-    border-color: #4f46e5 !important;
+    background: linear-gradient(180deg, #4f46e5 0%, #4338ca 100%) !important;
+    border-color: rgba(79, 70, 229, 0.5) !important;
     color: #ffffff !important;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.35), 0 3px 10px rgba(79, 70, 229, 0.3) !important;
 }
 
 [data-theme="light"] .btn-soc-primary:hover:not(:disabled) {
-    background: #3730a3 !important;
-    border-color: #3730a3 !important;
+    background: linear-gradient(180deg, #4338ca 0%, #3730a3 100%) !important;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.45), 0 6px 18px rgba(79, 70, 229, 0.4) !important;
 }
 
 [data-theme="light"] .btn-soc-secondary {
-    background: #ffffff !important;
+    background: rgba(255, 255, 255, 0.85) !important;
     border-color: #cbd5e1 !important;
     color: #1e293b !important;
+    box-shadow: inset 0 1px 0 0 #ffffff, 0 1px 3px rgba(0, 0, 0, 0.05) !important;
 }
 
 [data-theme="light"] .btn-soc-secondary:hover:not(:disabled) {
-    background: #f8fafc !important;
+    background: #ffffff !important;
     border-color: #94a3b8 !important;
     color: #0f172a !important;
+    box-shadow: inset 0 1px 0 0 #ffffff, 0 4px 12px rgba(0, 0, 0, 0.08) !important;
 }
 
 [data-theme="light"] .btn-soc-outline {
-    background: #ffffff !important;
+    background: rgba(255, 255, 255, 0.75) !important;
     border-color: #cbd5e1 !important;
     color: #1e293b !important;
+    box-shadow: inset 0 1px 0 0 #ffffff, 0 1px 3px rgba(0, 0, 0, 0.04) !important;
 }
 
 [data-theme="light"] .btn-soc-outline:hover:not(:disabled) {
-    background: #f1f5f9 !important;
-    border-color: #94a3b8 !important;
-    color: #0f172a !important;
+    background: #eff6ff !important;
+    border-color: #93c5fd !important;
+    color: #1e40af !important;
 }
 
 [data-theme="light"] .btn-soc-danger {
     background: #fef2f2 !important;
     border-color: #fca5a5 !important;
     color: #b91c1c !important;
+    box-shadow: inset 0 1px 0 0 #ffffff, 0 1px 3px rgba(239, 68, 68, 0.1) !important;
+}
+
+[data-theme="light"] .btn-soc-danger:hover:not(:disabled) {
+    background: #dc2626 !important;
+    border-color: #dc2626 !important;
+    color: #ffffff !important;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.35), 0 4px 14px rgba(220, 38, 38, 0.35) !important;
+}
+
+[data-theme="light"] .btn-soc-warning {
+    background: #fffbeb !important;
+    border-color: #fde68a !important;
+    color: #b45309 !important;
+    box-shadow: inset 0 1px 0 0 #ffffff, 0 1px 3px rgba(245, 158, 11, 0.1) !important;
+}
+
+[data-theme="light"] .btn-soc-warning:hover:not(:disabled) {
+    background: #f59e0b !important;
+    border-color: #f59e0b !important;
+    color: #ffffff !important;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.35), 0 4px 14px rgba(245, 158, 11, 0.35) !important;
 }
 
 [data-theme="light"] .badge.bg-success,

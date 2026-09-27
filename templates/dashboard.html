@@ -30,13 +30,13 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
     <!-- BullyMail V2 Cyber SOC Stylesheets (Cache-Busted) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.4.3">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=2.4.3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.5.2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=2.5.2">
     
     <!-- Chart.js 4 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Theme Core -->
-    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.4.1"></script>
+    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.5.2"></script>
 </head>
 <body>
     <div class="dashboard-layout">
@@ -201,7 +201,7 @@
                         {{ (session.get('full_name') or session.get('username', 'A'))[0].upper() }}
                     </div>
                     <div class="user-meta">
-                        <div class="user-name text-truncate" style="max-width: 130px;" title="{{ session.get('full_name') or session.get('username') }}">
+                        <div class="user-name text-truncate" style="max-width: 110px;" title="{{ session.get('full_name') or session.get('username') }}">
                             {{ session.get('full_name') or session.get('username', 'Administrator') }}
                         </div>
                         <div class="user-role font-mono">
@@ -2062,7 +2062,7 @@
         window.isAnalystUser = {{ 'true' if is_analyst else 'false' }};
         window.institutionName = {{ ((institution_name or session.get('institution_name', '')) | tojson) }};
     </script>
-    <script src="{{ url_for('static', filename='js/core/toast.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=2.4.3"></script>
+    <script src="{{ url_for('static', filename='js/core/toast.js') }}?v=2.5.2"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=2.5.2"></script>
 </body>
 </html>
