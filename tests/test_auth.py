@@ -51,8 +51,10 @@ def test_no_hardcoded_admin123_in_codebase():
             if f.endswith('.py'):
                 py_files.append(os.path.join(root, f))
                 
-    py_files.append(os.path.join(codebase_dir, 'app.py'))
-    py_files.append(os.path.join(codebase_dir, 'run.py'))
+    for extra_file in ['app.py', 'wsgi.py']:
+        target_path = os.path.join(codebase_dir, extra_file)
+        if os.path.exists(target_path):
+            py_files.append(target_path)
     
     for filepath in py_files:
         with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
