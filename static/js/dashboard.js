@@ -812,9 +812,9 @@ function applyPendingFilters() {
     const filtered = rawUsers.filter(u => {
         const username = (u.username || '').toLowerCase();
         const email = (u.email || '').toLowerCase();
-        const inst = (u.institution_name || u.institution_code || 'Default Workspace').toLowerCase();
-        const role = (u.role || 'analyst').toLowerCase();
-        const isVerified = Boolean(u.email_verified_at);
+        const inst = (u.institution_name || u.institution_code || u.requested_institution_name || 'Default Workspace').toLowerCase();
+        const role = (u.role || 'org_admin').toLowerCase();
+        const isVerified = Boolean(u.email_verified_at) || u.status === 'PENDING_ADMIN_APPROVAL';
 
         // Search match across name, email, institution
         if (searchVal && !username.includes(searchVal) && !email.includes(searchVal) && !inst.includes(searchVal)) {
@@ -863,13 +863,13 @@ function applyPendingFilters() {
         filtered.forEach(u => {
             const safeUser = escapeHtml(u.username);
             const safeEmail = escapeHtml(u.email || 'N/A');
-            const safeInst = escapeHtml(u.institution_name || u.institution_code || 'Default Workspace');
-            const safeRole = escapeHtml(u.role || 'analyst');
+            const safeInst = escapeHtml(u.institution_name || u.institution_code || u.requested_institution_name || 'Default Workspace');
+            const safeRole = escapeHtml(u.role || 'org_admin');
             const safeDate = u.created_at ? new Date(u.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A';
-            const isVerified = Boolean(u.email_verified_at);
+            const isVerified = Boolean(u.email_verified_at) || u.status === 'PENDING_ADMIN_APPROVAL';
             const verBadge = isVerified
-                ? `<span class="badge bg-success font-mono" style="font-size: 0.68rem;"><i class="fas fa-check-circle me-1"></i>VERIFIED</span>`
-                : `<span class="badge bg-warning text-dark font-mono" style="font-size: 0.68rem;"><i class="fas fa-clock me-1"></i>UNVERIFIED</span>`;
+                ? `<span class="badge bg-success font-mono" style="font-size: 0.68rem;"><i class="fas fa-check-circle me-1"></i>EMAIL VERIFIED</span>`
+                : `<span class="badge bg-warning text-dark font-mono" style="font-size: 0.68rem;"><i class="fas fa-clock me-1"></i>EMAIL UNVERIFIED</span>`;
 
             html += `
                 <tr>
@@ -1039,12 +1039,18 @@ async function handleUserApproval(userId, action, username) {
         return;
     }
 
+    const u = (window.pendingUsersRawData || []).find(x => x.id === userId) || {};
+    const targetInstId = u.institution_id || undefined;
+    const requestedRole = u.role || 'org_admin';
+
     const payload = {
         user_id: userId,
         action: 'approve',
-        provision_type: 'assign_existing',
-        institution_id: 1,
-        role: 'analyst'
+        provision_type: targetInstId ? 'assign_existing' : (u.requested_institution_name ? 'create_new' : 'assign_existing'),
+        institution_id: targetInstId || 1,
+        institution_name: u.requested_institution_name || undefined,
+        institution_domain: u.requested_institution_domain || undefined,
+        role: requestedRole
     };
 
     try {

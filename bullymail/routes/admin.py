@@ -25,7 +25,9 @@ def get_pending_registrations(current_user):
         
         app_cnt = approved_res['count'] if (approved_res and 'count' in approved_res) else 0
         rej_cnt = rejected_res['count'] if (rejected_res and 'count' in rejected_res) else 0
-        pnd_cnt = len(pending_users)
+        pnd_users_cnt = len(pending_users)
+        pnd_orgs_cnt = len(pending_orgs)
+        pnd_cnt = pnd_users_cnt + pnd_orgs_cnt
         tot_cnt = pnd_cnt + app_cnt + rej_cnt
 
         return jsonify({
@@ -33,6 +35,8 @@ def get_pending_registrations(current_user):
             'pending_users': pending_users,
             'pending_orgs': pending_orgs,
             'pending_count': pnd_cnt,
+            'pending_users_count': pnd_users_cnt,
+            'pending_orgs_count': pnd_orgs_cnt,
             'approved_count': app_cnt,
             'rejected_count': rej_cnt,
             'total_count': tot_cnt
@@ -74,7 +78,7 @@ def approve_user(current_user):
     if not target_user:
         return jsonify({'success': False, 'error': 'Target user record not found.'}), 404
 
-    if target_user.get('status') != 'PENDING_ADMIN_APPROVAL':
+    if target_user.get('status') not in ('PENDING_ADMIN_APPROVAL', 'PENDING_EMAIL_VERIFICATION'):
         return jsonify({'success': False, 'error': f"User account is not pending approval (Current status: {target_user.get('status')})."}), 400
 
     # Rejection workflow
@@ -105,17 +109,37 @@ def approve_user(current_user):
     elif provision_type == 'assign_existing':
         inst_id = data.get('institution_id') or target_user.get('institution_id')
         if not inst_id:
-            return jsonify({'success': False, 'error': 'Institution ID must be specified for existing institution assignment.'}), 400
-
-        existing_inst = InstitutionModel.get_by_id(inst_id)
-        if not existing_inst:
-            return jsonify({'success': False, 'error': f"Target institution ID {inst_id} does not exist."}), 404
-
-        target_inst_id = inst_id
+            req_name = (target_user.get('requested_institution_name') or '').strip()
+            req_dom = (target_user.get('requested_institution_domain') or '').strip()
+            if req_name and req_dom:
+                existing_req = InstitutionModel.get_by_domain(req_dom)
+                if existing_req:
+                    target_inst_id = existing_req['id']
+                else:
+                    try:
+                        target_inst_id = InstitutionModel.create_institution(
+                            name=req_name,
+                            domain=req_dom,
+                            contact_name=target_user.get('full_name') or target_user.get('username'),
+                            contact_email=target_user.get('email'),
+                            status='ACTIVE'
+                        )
+                    except Exception:
+                        inst_id = 1
+                        target_inst_id = 1
+            else:
+                return jsonify({'success': False, 'error': 'Institution ID must be specified for existing institution assignment.'}), 400
+        else:
+            existing_inst = InstitutionModel.get_by_id(inst_id)
+            if not existing_inst:
+                return jsonify({'success': False, 'error': f"Target institution ID {inst_id} does not exist."}), 404
+            target_inst_id = inst_id
 
     # Activate account with provisioned institution_id and assigned role
     valid_roles = {'platform_owner', 'org_admin', 'analyst', 'admin', 'operator'}
-    assigned_role = role if role in valid_roles else 'org_admin'
+    assigned_role = role or target_user.get('role') or 'org_admin'
+    if assigned_role not in valid_roles:
+        assigned_role = 'org_admin'
     if assigned_role == 'admin':
         assigned_role = 'org_admin'
 
@@ -161,7 +185,7 @@ def approve_org(current_user, org_id=None):
     from ..database.connection import execute_query
     org_domain = (org.get('domain') or '').strip().lower()
     execute_query(
-        "UPDATE users SET status = 'ACTIVE', role = 'org_admin', institution_id = %s WHERE (institution_id = %s OR (institution_id IS NULL AND LOWER(TRIM(requested_institution_domain)) = %s)) AND status IN ('PENDING_ADMIN_APPROVAL', 'ACTIVE', 'PENDING_EMAIL_VERIFICATION')",
+        "UPDATE users SET status = 'ACTIVE', role = 'org_admin', institution_id = %s, email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP) WHERE (institution_id = %s OR (institution_id IS NULL AND LOWER(TRIM(requested_institution_domain)) = %s)) AND status IN ('PENDING_ADMIN_APPROVAL', 'ACTIVE', 'PENDING_EMAIL_VERIFICATION')",
         (org_id, org_id, org_domain)
     )
     return jsonify({

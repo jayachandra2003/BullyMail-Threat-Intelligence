@@ -290,6 +290,7 @@ class UserModel:
         execute_query(
             "UPDATE users "
             "SET status = 'ACTIVE', role = %s, institution_id = %s, "
+            "email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP), "
             "requested_institution_name = NULL, requested_institution_domain = NULL "
             "WHERE id = %s",
             (assigned_role, institution_id, user_id)
@@ -322,29 +323,36 @@ class UserModel:
             raise ValueError("Institution ID must be specified to approve user.")
 
         execute_query(
-            "UPDATE users SET status = 'ACTIVE', role = %s, institution_id = %s WHERE id = %s",
+            "UPDATE users SET status = 'ACTIVE', role = %s, institution_id = %s, "
+            "email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP) WHERE id = %s",
             (new_role, new_inst, user_id)
         )
         return True
 
     @classmethod
     def get_pending_approval_users(cls, institution_id: int = None):
-        """Retrieves users waiting for administrator approval."""
+        """Retrieves users waiting for administrator approval (both email-verified and pending verification)."""
         if institution_id:
             return fetch_all(
-                "SELECT id, username, full_name, email, role, status, institution_id, requested_institution_name, "
-                "requested_institution_domain, created_at, email_verified_at "
-                "FROM users "
-                "WHERE status = 'PENDING_ADMIN_APPROVAL' AND institution_id = %s "
-                "ORDER BY id ASC",
+                "SELECT u.id, u.username, u.full_name, u.email, u.role, u.status, u.institution_id, "
+                "u.requested_institution_name, u.requested_institution_domain, u.created_at, u.email_verified_at, "
+                "COALESCE(i.name, u.requested_institution_name, 'Default Workspace') as institution_name, "
+                "i.code as institution_code "
+                "FROM users u "
+                "LEFT JOIN institutions i ON u.institution_id = i.id "
+                "WHERE u.status IN ('PENDING_ADMIN_APPROVAL', 'PENDING_EMAIL_VERIFICATION') AND u.institution_id = %s "
+                "ORDER BY u.id DESC",
                 (institution_id,)
             )
         return fetch_all(
-            "SELECT id, username, full_name, email, role, status, institution_id, requested_institution_name, "
-            "requested_institution_domain, created_at, email_verified_at "
-            "FROM users "
-            "WHERE status = 'PENDING_ADMIN_APPROVAL' "
-            "ORDER BY id ASC"
+            "SELECT u.id, u.username, u.full_name, u.email, u.role, u.status, u.institution_id, "
+            "u.requested_institution_name, u.requested_institution_domain, u.created_at, u.email_verified_at, "
+            "COALESCE(i.name, u.requested_institution_name, 'Default Workspace') as institution_name, "
+            "i.code as institution_code "
+            "FROM users u "
+            "LEFT JOIN institutions i ON u.institution_id = i.id "
+            "WHERE u.status IN ('PENDING_ADMIN_APPROVAL', 'PENDING_EMAIL_VERIFICATION') "
+            "ORDER BY u.id DESC"
         )
 
     @classmethod

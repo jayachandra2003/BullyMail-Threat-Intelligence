@@ -1,4 +1,6 @@
 import time
+import re
+import secrets
 from flask import Blueprint, request, jsonify, session, redirect, url_for, render_template, make_response
 from ..models.user import UserModel
 from ..models.institution import InstitutionModel
@@ -103,12 +105,18 @@ def signup():
             "a verification link has been dispatched to your inbox. Please check your email to activate access."
         )
 
-        if existing_user_email or existing_user_name:
+        if existing_user_name and not existing_user_email:
+            auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
+            err_msg = "This username is already taken. Please choose a different username."
+            if request.is_json:
+                return jsonify({'success': False, 'error': err_msg}), 400
+            return render_template('signup.html', error=err_msg), 400
+
+        if existing_user_email:
             # Check if this email already exists and is in PENDING_EMAIL_VERIFICATION status.
             # If so, the user is re-registering or retrying after not receiving/verifying the initial email.
-            # Re-dispatch a fresh single-use verification token to their inbox so they can activate access.
-            if existing_user_email and existing_user_email.get('status') == 'PENDING_EMAIL_VERIFICATION':
-                # Allow re-verification if username matches or if requested username is not claimed by another user
+            # Re-dispatch a fresh single-use verification token to their inbox and provide direct activation link.
+            if existing_user_email.get('status') == 'PENDING_EMAIL_VERIFICATION':
                 if not existing_user_name or existing_user_name.get('id') == existing_user_email.get('id'):
                     try:
                         UserModel.set_password(existing_user_email['id'], password)
@@ -143,8 +151,8 @@ def signup():
                         auth_logger.info(f"[REGISTRATION EMAIL] [FINAL_RESULT] SUCCESS: re-sent to {masked_email}")
                         auth_rate_limiter.record_success(client_ip, clean_email, action='signup')
                         if request.is_json:
-                            return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_VERIFICATION'})
-                        return render_template('signup.html', success=success_msg)
+                            return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_VERIFICATION', 'verification_url': verify_url})
+                        return render_template('signup.html', success=success_msg, verification_link=verify_url)
                     except Exception as ex:
                         import logging
                         logging.getLogger("bullymail.auth").error(f"[REGISTRATION EMAIL] Error during verification resend: {ex}")
@@ -159,31 +167,57 @@ def signup():
         try:
             # Resolve or provision pending institution
             target_inst_id = None
-            resolved_domain = requested_inst_domain or (clean_email.split('@')[-1] if '@' in clean_email else None)
-            resolved_org_name = requested_inst_name or (f"{resolved_domain.split('.')[0].capitalize()} Organization" if resolved_domain else f"{username.capitalize()}'s Organization")
+            raw_org_name = (requested_inst_name or '').strip()
+            raw_org_domain = (requested_inst_domain or '').strip().lower()
 
-            if resolved_domain:
-                existing_inst = InstitutionModel.get_by_domain(resolved_domain)
+            PUBLIC_EMAIL_DOMAINS = {
+                'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com',
+                'icloud.com', 'live.com', 'aol.com', 'proton.me', 'protonmail.com', 'mail.com'
+            }
+            email_domain = clean_email.split('@')[-1] if '@' in clean_email else ''
+
+            if raw_org_domain:
+                candidate_domain = raw_org_domain
+            elif email_domain and email_domain not in PUBLIC_EMAIL_DOMAINS:
+                candidate_domain = email_domain
+            else:
+                clean_slug = re.sub(r'[^a-z0-9]', '', (raw_org_name or username).lower())[:30]
+                if not clean_slug:
+                    clean_slug = f"org{int(time.time())}"
+                candidate_domain = f"{clean_slug}.org"
+
+            resolved_org_name = raw_org_name or (f"{candidate_domain.split('.')[0].capitalize()} Organization")
+
+            try:
+                existing_inst = InstitutionModel.get_by_domain(candidate_domain)
                 if existing_inst:
-                    target_inst_id = existing_inst['id']
-                else:
-                    try:
+                    if existing_inst.get('status') == 'PENDING_APPROVAL':
+                        target_inst_id = existing_inst['id']
+                    elif existing_inst.get('status') == 'ACTIVE' and raw_org_name and existing_inst.get('name', '').lower() == raw_org_name.lower():
+                        target_inst_id = existing_inst['id']
+                    else:
+                        import secrets
+                        unique_domain = f"{candidate_domain.split('.')[0]}-{secrets.token_hex(2)}.org"
                         target_inst_id = InstitutionModel.create_institution(
                             name=resolved_org_name,
-                            domain=resolved_domain,
+                            domain=unique_domain,
                             org_type=requested_inst_type,
                             contact_name=full_name or username,
                             contact_email=clean_email,
                             status='PENDING_APPROVAL'
                         )
-                    except Exception:
-                        pass
-
-            assigned_inst_id = None
-            if target_inst_id:
-                inst_check = InstitutionModel.get_by_id(target_inst_id)
-                if inst_check and inst_check.get('status') == 'ACTIVE':
-                    assigned_inst_id = target_inst_id
+                else:
+                    target_inst_id = InstitutionModel.create_institution(
+                        name=resolved_org_name,
+                        domain=candidate_domain,
+                        org_type=requested_inst_type,
+                        contact_name=full_name or username,
+                        contact_email=clean_email,
+                        status='PENDING_APPROVAL'
+                    )
+            except Exception as inst_ex:
+                import logging
+                logging.getLogger("bullymail.auth").error(f"[SIGNUP ORG] Could not create pending institution: {inst_ex}", exc_info=True)
 
             user_id = UserModel.create_user(
                 username=username,
@@ -191,9 +225,9 @@ def signup():
                 email=clean_email,
                 role='org_admin',
                 status='PENDING_EMAIL_VERIFICATION',
-                institution_id=assigned_inst_id,
+                institution_id=None,
                 requested_institution_name=resolved_org_name,
-                requested_institution_domain=resolved_domain,
+                requested_institution_domain=candidate_domain,
                 full_name=full_name or username
             )
 
@@ -232,10 +266,14 @@ def signup():
 
             auth_logger.info(f"[REGISTRATION EMAIL] [FINAL_RESULT] SUCCESS for {masked_email}")
             auth_rate_limiter.record_success(client_ip, clean_email, action='signup')
-
             if request.is_json:
-                return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_VERIFICATION'})
-            return render_template('signup.html', success=success_msg)
+                return jsonify({
+                    'success': True,
+                    'message': success_msg,
+                    'status': 'PENDING_VERIFICATION',
+                    'verification_url': verify_url
+                })
+            return render_template('signup.html', success=success_msg, verification_link=verify_url)
         except Exception as ex:
             import logging
             logging.getLogger("bullymail.auth").error(f"[SIGNUP ERROR] Account creation exception for {clean_email}: {ex}", exc_info=True)
