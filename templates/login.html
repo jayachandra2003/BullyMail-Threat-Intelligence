@@ -30,7 +30,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 
     <!-- BullyMail V2 Core CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.4.3">
     <!-- Theme Core -->
     <script src="{{ url_for('static', filename='js/core/theme.js') }}"></script>
     
@@ -64,6 +64,16 @@
         [data-theme="light"] .auth-card-v2 {
             background: #ffffff;
             border-color: #e2e8f0;
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 16px 12px;
+            }
+            .auth-card-v2 {
+                padding: 24px 18px;
+                border-radius: 8px;
+            }
         }
 
         .auth-header-v2 {

@@ -30,8 +30,8 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
     <!-- BullyMail V2 Cyber SOC Stylesheets (Cache-Busted) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.4.1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=2.4.1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.4.3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=2.4.3">
     
     <!-- Chart.js 4 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -268,18 +268,18 @@
                 <!-- Organization Tenant Operational Command Banner -->
                 <div class="soc-panel p-3 mb-4 bg-base border-subtle">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="brand-logo" style="width: 44px; height: 44px; border-radius: 8px; background: rgba(56, 189, 248, 0.1); display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 1.3rem;">
+                        <div class="d-flex align-items-center gap-3" style="min-width: 0; max-width: 100%;">
+                            <div class="brand-logo flex-shrink-0" style="width: 44px; height: 44px; border-radius: 8px; background: rgba(56, 189, 248, 0.1); display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 1.3rem;">
                                 <i class="fas fa-building-shield"></i>
                             </div>
-                            <div>
-                                <div class="d-flex align-items-center gap-2">
-                                    <h4 class="fw-bold mb-0 text-primary-soc font-mono" style="font-size: 1.15rem;" id="tenantBannerName">{{ session.get('institution_name') or 'Organization' }}</h4>
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle font-mono px-2 py-1" style="font-size: 0.7rem;">
+                            <div style="min-width: 0; flex: 1;">
+                                <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                    <h4 class="fw-bold mb-0 text-primary-soc font-mono" style="font-size: 1.15rem; word-break: break-word;" id="tenantBannerName">{{ session.get('institution_name') or 'Organization' }}</h4>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle font-mono px-2 py-1 text-wrap" style="font-size: 0.7rem; max-width: 100%;">
                                         <i class="fas fa-circle-check me-1"></i>ACTIVE TENANT
                                     </span>
                                 </div>
-                                <div class="text-muted small font-mono">Isolated Security Operations Center • Dedicated Mailbox Ingestion & Member Protection</div>
+                                <div class="text-muted small font-mono" style="word-break: break-word;">Isolated Security Operations Center • Dedicated Mailbox Ingestion & Member Protection</div>
                             </div>
                         </div>
                         <div class="d-flex gap-2 flex-wrap align-items-center">
@@ -302,18 +302,18 @@
                 <!-- Platform Owner Command Banner -->
                 <div class="soc-panel p-3 mb-4 bg-base border-subtle">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="brand-logo" style="width: 44px; height: 44px; border-radius: 8px; background: rgba(245, 158, 11, 0.1); display: flex; align-items: center; justify-content: center; color: var(--bs-warning, #f59e0b); font-size: 1.3rem;">
+                        <div class="d-flex align-items-center gap-3" style="min-width: 0; max-width: 100%;">
+                            <div class="brand-logo flex-shrink-0" style="width: 44px; height: 44px; border-radius: 8px; background: rgba(245, 158, 11, 0.1); display: flex; align-items: center; justify-content: center; color: var(--bs-warning, #f59e0b); font-size: 1.3rem;">
                                 <i class="fas fa-crown"></i>
                             </div>
-                            <div>
-                                <div class="d-flex align-items-center gap-2">
-                                    <h4 class="fw-bold mb-0 text-primary-soc font-mono" style="font-size: 1.15rem;">BullyMail Platform Command Center</h4>
-                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle font-mono px-2 py-1" style="font-size: 0.7rem;">
+                            <div style="min-width: 0; flex: 1;">
+                                <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                    <h4 class="fw-bold mb-0 text-primary-soc font-mono" style="font-size: 1.15rem; word-break: break-word;">BullyMail Platform Command Center</h4>
+                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle font-mono px-2 py-1 text-wrap" style="font-size: 0.7rem; max-width: 100%;">
                                         <i class="fas fa-shield me-1"></i>PLATFORM OWNER: JAYA CHANDRA VENNAM
                                     </span>
                                 </div>
-                                <div class="text-muted small font-mono">Global Multi-Tenant Administration, Registration Approvals & Security Governance</div>
+                                <div class="text-muted small font-mono" style="word-break: break-word;">Global Multi-Tenant Administration, Registration Approvals & Security Governance</div>
                             </div>
                         </div>
                         <div class="d-flex gap-2 flex-wrap align-items-center">
@@ -435,7 +435,7 @@
                                 <div class="sev-seg-med" id="sevSegMed" style="width: 0%;" title="Medium"></div>
                                 <div class="sev-seg-low" id="sevSegLow" style="width: 100%;" title="Clean/Low"></div>
                             </div>
-                            <div class="d-flex justify-content-between align-items-center mt-2 small font-mono">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2 small font-mono">
                                 <span class="sev-legend-crit" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>Critical: <strong id="sevNumCrit">0</strong></span>
                                 <span class="sev-legend-high" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>High: <strong id="sevNumHigh">0</strong></span>
                                 <span class="sev-legend-med" style="font-size: 0.7rem;"><i class="fas fa-circle me-1" style="font-size: 0.45rem;"></i>Medium: <strong id="sevNumMed">0</strong></span>
@@ -2063,6 +2063,6 @@
         window.institutionName = {{ ((institution_name or session.get('institution_name', '')) | tojson) }};
     </script>
     <script src="{{ url_for('static', filename='js/core/toast.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=2.4.3"></script>
 </body>
 </html>

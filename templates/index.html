@@ -39,7 +39,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
     <!-- BullyMail V2 Core CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.4.3">
     <!-- Theme Core -->
     <script src="{{ url_for('static', filename='js/core/theme.js') }}"></script>
     
@@ -137,6 +137,61 @@
         [data-theme="light"] .navbar-soc {
             background: #ffffff;
             border-color: #e2e8f0;
+        }
+
+        @media (max-width: 991px) {
+            .navbar-soc .navbar-collapse {
+                background: var(--bg-surface-elevated, #111a2d);
+                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+                border-radius: var(--radius-md, 8px);
+                padding: 14px 16px;
+                margin-top: 10px;
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            }
+            [data-theme="light"] .navbar-soc .navbar-collapse {
+                background: #ffffff;
+                border-color: #e2e8f0;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+            }
+            .navbar-soc .navbar-nav {
+                gap: 8px !important;
+                align-items: stretch !important;
+            }
+            .navbar-soc .nav-link {
+                padding: 8px 12px !important;
+                border-radius: 6px;
+                font-size: 0.9rem !important;
+            }
+            .navbar-soc .nav-link:hover {
+                background: rgba(255, 255, 255, 0.06);
+            }
+            [data-theme="light"] .navbar-soc .nav-link:hover {
+                background: #f1f5f9;
+            }
+            .navbar-soc .btn-soc-primary {
+                width: 100%;
+                text-align: center;
+                justify-content: center;
+                display: flex;
+                padding: 9px 14px !important;
+                margin-top: 4px;
+            }
+            .navbar-soc .soc-theme-toggle-btn {
+                margin: 4px 0;
+                align-self: flex-start;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .hero-v2-soc {
+                padding: 36px 0 28px;
+            }
+            .hero-v2-soc h1 {
+                font-size: 1.75rem !important;
+            }
+            .interactive-demo-card {
+                padding: 18px 16px;
+            }
         }
     </style>
 </head>
@@ -363,19 +418,19 @@
                             <i class="fas fa-shield-halved text-accent"></i> Severity Classification Tiers
                         </h5>
                         <div class="d-flex flex-column gap-2 small">
-                            <div class="p-2.5 border border-subtle rounded d-flex justify-content-between align-items-center" style="background: var(--bg-surface);">
+                            <div class="p-2.5 border border-subtle rounded d-flex justify-content-between align-items-center flex-wrap gap-2" style="background: var(--bg-surface);">
                                 <span class="badge soc-badge-critical">CRITICAL RISK</span>
                                 <span class="text-secondary small ms-2">Physical violence threats, executable malware payloads</span>
                             </div>
-                            <div class="p-2.5 border border-subtle rounded d-flex justify-content-between align-items-center" style="background: var(--bg-surface);">
+                            <div class="p-2.5 border border-subtle rounded d-flex justify-content-between align-items-center flex-wrap gap-2" style="background: var(--bg-surface);">
                                 <span class="badge soc-badge-high">HIGH RISK</span>
                                 <span class="text-secondary small ms-2">Compounding harassment, credential phishing traps</span>
                             </div>
-                            <div class="p-2.5 border border-subtle rounded d-flex justify-content-between align-items-center" style="background: var(--bg-surface);">
+                            <div class="p-2.5 border border-subtle rounded d-flex justify-content-between align-items-center flex-wrap gap-2" style="background: var(--bg-surface);">
                                 <span class="badge soc-badge-medium">MEDIUM RISK</span>
                                 <span class="text-secondary small ms-2">Single targeted insult, suspicious URL shorteners</span>
                             </div>
-                            <div class="p-2.5 border border-subtle rounded d-flex justify-content-between align-items-center" style="background: var(--bg-surface);">
+                            <div class="p-2.5 border border-subtle rounded d-flex justify-content-between align-items-center flex-wrap gap-2" style="background: var(--bg-surface);">
                                 <span class="badge soc-badge-safe">LOW / CLEAN</span>
                                 <span class="text-secondary small ms-2">Legitimate academic and administrative communications</span>
                             </div>

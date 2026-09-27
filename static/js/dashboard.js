@@ -162,6 +162,8 @@ function initSidebarToggle() {
             toggleBtn.innerHTML = '<i class="fas fa-angles-right"></i>';
             toggleBtn.setAttribute('title', 'Expand Navigation Rail');
         }
+    } else if (sidebar && window.innerWidth <= 992) {
+        sidebar.classList.remove('collapsed');
     }
 
     const performToggle = () => {
@@ -199,6 +201,7 @@ function initSidebarToggle() {
     if (mobileToggleBtn && sidebar) {
         mobileToggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            sidebar.classList.remove('collapsed');
             const isOpen = sidebar.classList.toggle('mobile-open');
             if (backdrop) backdrop.classList.toggle('show', isOpen);
         });
