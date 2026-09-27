@@ -112,58 +112,6 @@ def signup():
                 return jsonify({'success': False, 'error': err_msg}), 400
             return render_template('signup.html', error=err_msg), 400
 
-        if existing_user_email:
-            # Check if this email already exists and is in PENDING_EMAIL_VERIFICATION status.
-            # If so, the user is re-registering or retrying after not receiving/verifying the initial email.
-            # Re-dispatch a fresh single-use verification token to their inbox and provide direct activation link.
-            if existing_user_email.get('status') == 'PENDING_EMAIL_VERIFICATION':
-                if not existing_user_name or existing_user_name.get('id') == existing_user_email.get('id'):
-                    try:
-                        UserModel.set_password(existing_user_email['id'], password)
-                        raw_token = AuthTokenService.generate_email_verification_token(existing_user_email['id'])
-                        verify_url = auth_email_service.get_verification_url(raw_token)
-                        email_result = auth_email_service.send_verification_email(
-                            clean_email, raw_token, existing_user_email.get('username') or username
-                        )
-                        if isinstance(email_result, tuple):
-                            email_sent, email_message = email_result
-                        else:
-                            email_sent, email_message = bool(email_result), ""
-
-                        import logging
-                        auth_logger = logging.getLogger("bullymail.auth")
-                        masked_email = clean_email[:3] + "***@" + clean_email.split('@')[-1] if '@' in clean_email else "***"
-                        auth_logger.info(f"[REGISTRATION EMAIL] Re-attempting verification dispatch for existing pending user recipient={masked_email}")
-
-                        if not email_sent:
-                            auth_logger.error(
-                                f"[REGISTRATION EMAIL] [FINAL_RESULT] FAILED for {masked_email}: {email_message}"
-                            )
-                            auth_logger.info(
-                                f"[REGISTRATION EMAIL] [ACTIVATION_LINK] User {masked_email} activation URL: {verify_url}"
-                            )
-                            auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
-                            fail_msg = "Your account was created, but we could not send the verification email. Please try again."
-                            if request.is_json:
-                                return jsonify({'success': False, 'error': fail_msg, 'status': 'PENDING_EMAIL_VERIFICATION', 'verification_url': verify_url}), 500
-                            return render_template('signup.html', error=fail_msg, verification_link=verify_url), 500
-
-                        auth_logger.info(f"[REGISTRATION EMAIL] [FINAL_RESULT] SUCCESS: re-sent to {masked_email}")
-                        auth_rate_limiter.record_success(client_ip, clean_email, action='signup')
-                        if request.is_json:
-                            return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_VERIFICATION', 'verification_url': verify_url})
-                        return render_template('signup.html', success=success_msg, verification_link=verify_url)
-                    except Exception as ex:
-                        import logging
-                        logging.getLogger("bullymail.auth").error(f"[REGISTRATION EMAIL] Error during verification resend: {ex}")
-
-            # Simulate work to prevent timing enumeration for fully active or admin-pending accounts
-            UserModel.hash_password(password)
-            auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
-            if request.is_json:
-                return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_VERIFICATION'})
-            return render_template('signup.html', success=success_msg)
-
         try:
             # Resolve or provision pending institution
             target_inst_id = None
@@ -191,8 +139,9 @@ def signup():
             try:
                 existing_inst = InstitutionModel.get_by_domain(candidate_domain)
                 if existing_inst:
-                    if existing_inst.get('status') == 'PENDING_APPROVAL':
+                    if existing_inst.get('status') in ('PENDING_APPROVAL', 'REJECTED'):
                         target_inst_id = existing_inst['id']
+                        InstitutionModel.update_status(target_inst_id, 'PENDING_APPROVAL')
                     elif existing_inst.get('status') == 'ACTIVE' and raw_org_name and existing_inst.get('name', '').lower() == raw_org_name.lower():
                         target_inst_id = existing_inst['id']
                     else:
@@ -219,23 +168,63 @@ def signup():
                 import logging
                 logging.getLogger("bullymail.auth").error(f"[SIGNUP ORG] Could not create pending institution: {inst_ex}", exc_info=True)
 
-            user_id = UserModel.create_user(
-                username=username,
-                password=password,
-                email=clean_email,
-                role='org_admin',
-                status='PENDING_EMAIL_VERIFICATION',
-                institution_id=None,
-                requested_institution_name=resolved_org_name,
-                requested_institution_domain=candidate_domain,
-                full_name=full_name or username
-            )
+            user_id = None
 
-            # Ensure user_id was retrieved
-            if not user_id:
-                existing = UserModel.get_by_email(clean_email) or UserModel.get_by_username(username)
-                if existing:
-                    user_id = existing.get('id')
+            if existing_user_email:
+                user_status = (existing_user_email.get('status') or '').upper()
+
+                # If user is already active/approved, return uniform enumeration defense in JSON or helpful note in HTML
+                if user_status in ('ACTIVE', 'APPROVED'):
+                    UserModel.hash_password(password)
+                    auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
+                    if request.is_json:
+                        return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_VERIFICATION'})
+                    return render_template('signup.html', error="An active account with this email address already exists. Please sign in or reset your password.")
+
+                # If user has already verified email and is awaiting admin approval
+                if user_status == 'PENDING_ADMIN_APPROVAL':
+                    auth_rate_limiter.record_success(client_ip, clean_email, action='signup')
+                    pending_admin_msg = (
+                        "Your email has already been verified! Your organization application is currently "
+                        "pending administrator approval. You will receive access once approved by the platform owner."
+                    )
+                    if request.is_json:
+                        return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_ADMIN_APPROVAL'})
+                    return render_template('signup.html', success=pending_admin_msg)
+
+                # User is in PENDING_EMAIL_VERIFICATION or REJECTED:
+                # Check username collision with OTHER users
+                if existing_user_name and existing_user_name.get('id') != existing_user_email.get('id'):
+                    err_msg = "This username is already taken. Please choose a different username."
+                    if request.is_json:
+                        return jsonify({'success': False, 'error': err_msg}), 400
+                    return render_template('signup.html', error=err_msg), 400
+
+                user_id = existing_user_email['id']
+                UserModel.reapply_user_registration(
+                    user_id=user_id,
+                    new_password=password,
+                    username=username,
+                    full_name=full_name or username,
+                    requested_institution_name=resolved_org_name,
+                    requested_institution_domain=candidate_domain
+                )
+            else:
+                user_id = UserModel.create_user(
+                    username=username,
+                    password=password,
+                    email=clean_email,
+                    role='org_admin',
+                    status='PENDING_EMAIL_VERIFICATION',
+                    institution_id=None,
+                    requested_institution_name=resolved_org_name,
+                    requested_institution_domain=candidate_domain,
+                    full_name=full_name or username
+                )
+                if not user_id:
+                    existing = UserModel.get_by_email(clean_email) or UserModel.get_by_username(username)
+                    if existing:
+                        user_id = existing.get('id')
 
             # Generate single-use verification token
             raw_token = AuthTokenService.generate_email_verification_token(user_id)
@@ -243,7 +232,7 @@ def signup():
             import logging
             auth_logger = logging.getLogger("bullymail.auth")
             masked_email = clean_email[:3] + "***@" + clean_email.split('@')[-1] if '@' in clean_email else "***"
-            auth_logger.info(f"[REGISTRATION EMAIL] New account created (user_id={user_id}). Dispatching verification email to recipient={masked_email}")
+            auth_logger.info(f"[REGISTRATION EMAIL] Registration processed (user_id={user_id}). Dispatching verification email to recipient={masked_email}")
 
             email_result = auth_email_service.send_verification_email(clean_email, raw_token, username)
             if isinstance(email_result, tuple):

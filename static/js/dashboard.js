@@ -2745,7 +2745,7 @@ async function executeSendWarningSubmit() {
         }
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s client timeout
+        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s client timeout
 
         let res;
         try {
@@ -2796,7 +2796,7 @@ async function executeSendWarningSubmit() {
         }
     } catch (e) {
         const errMsg = (e.name === 'AbortError')
-            ? 'Warning delivery timed out after 15 seconds. The mail server did not respond in time.'
+            ? 'Warning delivery timed out after 25 seconds. The mail server did not respond in time.'
             : `Network error: ${e.message}`;
 
         if (errAlert) {

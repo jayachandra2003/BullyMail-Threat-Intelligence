@@ -142,9 +142,14 @@ class Config:
     SMTP_FROM_EMAIL = os.environ.get('SMTP_FROM_EMAIL', SMTP_USERNAME or EMAIL_ADDRESS or 'admin@bullymail.local')
     SMTP_FROM_NAME = os.environ.get('SMTP_FROM_NAME', 'BullyMail Administration')
 
-    # HTTP Transactional Email API (Alternative for cloud environments blocking outbound SMTP e.g. Render Free Tier)
+    # HTTP Transactional Email APIs (Alternative for cloud environments blocking outbound SMTP e.g. Render Free Tier)
     RESEND_API_KEY = os.environ.get('RESEND_API_KEY', None)
     RESEND_FROM_EMAIL = os.environ.get('RESEND_FROM_EMAIL', None)
+
+    # Brevo (formerly Sendinblue) Transactional Email API (HTTPS port 443 - free tier sends to ANY recipient without domain verification)
+    BREVO_API_KEY = os.environ.get('BREVO_API_KEY') or os.environ.get('SENDINBLUE_API_KEY', None)
+    BREVO_FROM_EMAIL = os.environ.get('BREVO_FROM_EMAIL') or os.environ.get('SENDINBLUE_FROM_EMAIL', None)
+    BREVO_FROM_NAME = os.environ.get('BREVO_FROM_NAME') or os.environ.get('SENDINBLUE_FROM_NAME', 'BullyMail Security')
 
 
     # Master Key for Fernet Credential Encryption (AES-128-CBC + HMAC-SHA256)

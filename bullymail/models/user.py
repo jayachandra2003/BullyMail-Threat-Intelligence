@@ -260,6 +260,42 @@ class UserModel:
         return True
 
     @classmethod
+    def reapply_user_registration(cls, user_id: int, new_password: str = None, username: str = None,
+                                  full_name: str = None, requested_institution_name: str = None,
+                                  requested_institution_domain: str = None) -> bool:
+        """
+        Re-applies / updates a pending or rejected user registration, resetting status to PENDING_EMAIL_VERIFICATION.
+        Ensures strict tenant isolation (institution_id = NULL) until Platform Owner approval.
+        """
+        updates = ["status = 'PENDING_EMAIL_VERIFICATION'", "institution_id = NULL"]
+        params = []
+        if new_password:
+            hashed = cls.hash_password(new_password)
+            updates.append("password_hash = %s")
+            params.append(hashed)
+            try:
+                execute_query("UPDATE users SET password = %s WHERE id = %s", (hashed, user_id))
+            except Exception:
+                pass
+        if username:
+            updates.append("username = %s")
+            params.append(username.strip())
+        if full_name:
+            updates.append("full_name = %s")
+            params.append(full_name.strip())
+        if requested_institution_name:
+            updates.append("requested_institution_name = %s")
+            params.append(requested_institution_name.strip())
+        if requested_institution_domain:
+            updates.append("requested_institution_domain = %s")
+            params.append(requested_institution_domain.strip())
+
+        sql = f"UPDATE users SET {', '.join(updates)} WHERE id = %s"
+        params.append(user_id)
+        execute_query(sql, tuple(params))
+        return True
+
+    @classmethod
     def activate_user_email(cls, user_id: int) -> bool:
         """Transitions user from PENDING_EMAIL_VERIFICATION to PENDING_ADMIN_APPROVAL."""
         execute_query(

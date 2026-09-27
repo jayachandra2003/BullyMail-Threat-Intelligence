@@ -95,6 +95,11 @@ def terms():
 
 @main_bp.route('/health')
 def health():
-    """Lightweight zero-overhead health check endpoint for cloud platform probes (e.g., Render)."""
+    """Lightweight health check endpoint for cloud platform probes (e.g., Render) with automated keep-alive."""
+    try:
+        from ..services.brevo_keepalive_service import brevo_keepalive_service
+        brevo_keepalive_service.check_and_ping_async()
+    except Exception:
+        pass
     return jsonify({'status': 'ok', 'service': 'BullyMail Threat Intelligence Platform'}), 200
 

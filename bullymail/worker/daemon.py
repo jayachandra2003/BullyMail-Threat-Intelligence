@@ -48,6 +48,13 @@ class WorkerDaemon:
         """
         logger.info("Executing ingestion daemon poll iteration...")
 
+        # 0. Background keep-alive check for transactional email APIs
+        try:
+            from ..services.brevo_keepalive_service import brevo_keepalive_service
+            brevo_keepalive_service.check_and_ping_async()
+        except Exception:
+            pass
+
         # 1. Recover stale processing claims older than 15 minutes
         try:
             recovered_count = IngestedMessageModel.recover_stale_processing(timeout_minutes=15)

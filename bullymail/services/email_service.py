@@ -592,11 +592,90 @@ class EmailService:
             except Exception:
                 pass
 
+        # Check if Brevo (formerly Sendinblue) HTTP API is configured (HTTPS port 443 - free tier sends to ANY recipient)
+        http_api_errors = []
+        brevo_key = os.environ.get('BREVO_API_KEY') or os.environ.get('SENDINBLUE_API_KEY') or getattr(Config, 'BREVO_API_KEY', None)
+        if brevo_key and brevo_key.strip():
+            import urllib.request
+            import urllib.error
+            import json
+
+            # Determine candidate sender addresses.
+            # On Brevo Free Tier, emails can only be sent from verified account senders.
+            # If an institutional mailbox is not verified, Brevo returns HTTP 400.
+            # We attempt explicit BREVO_FROM_EMAIL -> connected mailbox -> verified default account email.
+            candidates = []
+            explicit_from = os.environ.get('BREVO_FROM_EMAIL') or getattr(Config, 'BREVO_FROM_EMAIL', None)
+            if explicit_from and explicit_from.strip():
+                candidates.append(explicit_from.strip())
+            if from_email and from_email.strip() and from_email.strip() not in candidates:
+                candidates.append(from_email.strip())
+            if email_addr and email_addr.strip() and email_addr.strip() not in candidates:
+                candidates.append(email_addr.strip())
+            verified_default = 'jayachandravennam.jc@gmail.com'
+            if verified_default not in candidates:
+                candidates.append(verified_default)
+
+            brevo_name_str = (
+                from_name
+                or os.environ.get('BREVO_FROM_NAME')
+                or getattr(Config, 'BREVO_FROM_NAME', None)
+                or 'BullyMail Security'
+            )
+
+            for candidate_sender in candidates:
+                try:
+                    logger.info(f"{log_prefix} [HTTP_API] Dispatching via Brevo API (sender={candidate_sender})")
+                    payload = {
+                        'sender': {'name': brevo_name_str, 'email': candidate_sender},
+                        'to': [{'email': clean_to}],
+                        'subject': subject,
+                        'htmlContent': html_body or (body or '').replace('\n', '<br>')
+                    }
+                    if body:
+                        payload['textContent'] = body
+                    reply_target = from_email or email_addr
+                    if reply_target and reply_target.strip().lower() != candidate_sender.lower():
+                        payload['replyTo'] = {'name': brevo_name_str, 'email': reply_target.strip()}
+
+                    req = urllib.request.Request(
+                        'https://api.brevo.com/v3/smtp/email',
+                        data=json.dumps(payload).encode('utf-8'),
+                        headers={
+                            'api-key': brevo_key.strip(),
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'User-Agent': 'BullyMail-Security/2.0'
+                        }
+                    )
+                    with urllib.request.urlopen(req, timeout=timeout) as resp:
+                        if resp.status in (200, 201, 202):
+                            masked_recip = f"{clean_to[:3]}***@{clean_to.split('@')[-1]}" if ('@' in clean_to and len(clean_to) > 3) else '***'
+                            logger.info(f"{log_prefix} [FINAL_RESULT] SUCCESS: email delivered via Brevo API to {masked_recip} (sender={candidate_sender})")
+                            return True, "Email sent successfully via Brevo API."
+                except urllib.error.HTTPError as h_err:
+                    try:
+                        err_body = h_err.read().decode('utf-8', errors='ignore')
+                    except Exception:
+                        err_body = str(h_err)
+                    err_summary = f"Brevo HTTP {h_err.code} ({candidate_sender}): {err_body}"
+                    logger.error(f"{log_prefix} [HTTP_API] FAILED via Brevo API: {err_summary}")
+                    http_api_errors.append(err_summary)
+                    if h_err.code == 400 and candidate_sender != candidates[-1]:
+                        logger.info(f"{log_prefix} [HTTP_API] Sender {candidate_sender} not accepted by Brevo, falling back to verified sender {candidates[-1]}")
+                        continue
+                    elif h_err.code in (401, 403):
+                        break
+                except Exception as ex:
+                    logger.error(f"{log_prefix} [HTTP_API] FAILED via Brevo API ({candidate_sender}): {ex}")
+                    http_api_errors.append(f"Brevo: {ex}")
+
         # Check if HTTP-based transactional email API is configured (e.g. Resend for Render Free Tier)
         resend_key = os.environ.get('RESEND_API_KEY') or getattr(Config, 'RESEND_API_KEY', None)
         if resend_key and resend_key.strip():
             try:
                 import urllib.request
+                import urllib.error
                 import json
                 logger.info(f"{log_prefix} [HTTP_API] Dispatching via Resend API (HTTPS port 443)")
                 from_addr = from_email or os.environ.get('RESEND_FROM_EMAIL') or getattr(Config, 'RESEND_FROM_EMAIL', None) or 'BullyMail Security <onboarding@resend.dev>'
@@ -607,6 +686,9 @@ class EmailService:
                     'html': html_body or (body or '').replace('\n', '<br>'),
                     'text': body or ''
                 }
+                reply_target = from_email or email_addr
+                if reply_target and reply_target.strip():
+                    payload['reply_to'] = reply_target.strip()
                 req = urllib.request.Request(
                     'https://api.resend.com/emails',
                     data=json.dumps(payload).encode('utf-8'),
@@ -621,9 +703,17 @@ class EmailService:
                         masked_recip = f"{clean_to[:3]}***@{clean_to.split('@')[-1]}" if ('@' in clean_to and len(clean_to) > 3) else '***'
                         logger.info(f"{log_prefix} [FINAL_RESULT] SUCCESS: email delivered via Resend API to {masked_recip}")
                         return True, "Email sent successfully via Resend API."
+            except urllib.error.HTTPError as h_err:
+                try:
+                    err_body = h_err.read().decode('utf-8', errors='ignore')
+                except Exception:
+                    err_body = str(h_err)
+                err_summary = f"Resend HTTP {h_err.code}: {err_body}"
+                logger.error(f"{log_prefix} [HTTP_API] FAILED via Resend API: {err_summary}")
+                http_api_errors.append(err_summary)
             except Exception as ex:
                 logger.error(f"{log_prefix} [HTTP_API] FAILED via Resend API: {ex}")
-                # Continue to SMTP fallback
+                http_api_errors.append(f"Resend: {ex}")
 
         if not email_addr or not app_pw:
             logger.error(f"{log_prefix} [CONFIG] FAILED: Email integration is not configured in database or environment.")
@@ -760,6 +850,12 @@ class EmailService:
                 continue
 
         logger.error(f"{log_prefix} [FINAL_RESULT] FAILED: all ports exhausted ({last_error})")
+        if '101' in (last_error or '') or 'network is unreachable' in (last_error or '').lower() or 'network unreachable' in (last_error or '').lower():
+            if http_api_errors:
+                return False, f"Cloud mail delivery failed. HTTP API error: {'; '.join(http_api_errors)}. SMTP fallback blocked ([Errno 101] Network unreachable)."
+            elif not (brevo_key and brevo_key.strip()) and not (resend_key and resend_key.strip()):
+                return False, "Outbound SMTP is blocked on cloud hosting ([Errno 101] Network unreachable). Please configure BREVO_API_KEY in Render Environment Variables."
+
         return False, last_error or "Failed to deliver email through all configured SMTP ports."
 
 # Singleton EmailService instance for application export

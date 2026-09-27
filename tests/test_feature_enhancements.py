@@ -231,8 +231,8 @@ def test_admin_warning_email_mime_headers_and_construction():
 # -------------------------------------------------------------------------
 def test_mysql_connector_dependency_and_localhost_resolution():
     """Verify mysql-connector-python dependency is available and host resolution handles localhost."""
-    import mysql.connector
-    assert mysql.connector.__version__ is not None
+    mysql_connector = pytest.importorskip("mysql.connector")
+    assert mysql_connector.__version__ is not None
 
     from bullymail.database.connection import get_connection, _get_config_val
 

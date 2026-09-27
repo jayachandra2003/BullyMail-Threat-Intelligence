@@ -235,3 +235,83 @@ def test_direct_email_verification_token_flow(client):
     user = UserModel.get_by_email(email)
     assert user['status'] == 'PENDING_ADMIN_APPROVAL'
     assert user['email_verified_at'] is not None
+
+
+def test_reapplying_rejected_or_pending_user_resets_status_and_reappears_in_super_admin_queue(client, auth_client):
+    """
+    Verify that an applicant whose account was previously in REJECTED status can re-apply,
+    which resets status to PENDING_EMAIL_VERIFICATION, generates a fresh verification link,
+    provisions the pending organization, and ensures the user appears in the Super Admin's
+    pending approvals queue with institution_id = NULL.
+    """
+    email = "cocanvascontact@gmail.com"
+    pw = "StrongPass_2026_Key!"
+
+    # 1. Simulate previously rejected user account in the database
+    old_uid = UserModel.create_user(
+        username="cocanvas_old",
+        password=pw,
+        email=email,
+        role="org_admin",
+        status="REJECTED",
+        institution_id=None,
+        requested_institution_name="Old Canvas Corp",
+        requested_institution_domain="oldcanvas.org"
+    )
+    assert old_uid is not None
+    rejected_user = UserModel.get_by_email(email)
+    assert rejected_user['status'] == 'REJECTED'
+
+    # Super Admin should NOT see rejected users in pending approvals
+    admin_pending_before = auth_client.get('/api/admin/pending-registrations').get_json()
+    assert email not in [u['email'] for u in admin_pending_before.get('pending_users', [])]
+
+    # 2. Applicant re-applies through /signup with their official email
+    res = client.post('/signup', json={
+        'organization_name': 'CoCanvas Online',
+        'organization_type': 'university',
+        'organization_domain': 'cocanvas.org',
+        'full_name': 'CoCanvas Official Admin',
+        'username': 'cocanvascontact',
+        'email': email,
+        'password': pw,
+        'confirm_password': pw
+    })
+
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data['success'] is True
+    assert 'verification_url' in data
+    assert '/verify-email?token=' in data['verification_url']
+
+    # 3. Database user status is successfully reset to PENDING_EMAIL_VERIFICATION
+    updated_user = UserModel.get_by_email(email)
+    assert updated_user['id'] == old_uid
+    assert updated_user['status'] == 'PENDING_EMAIL_VERIFICATION'
+    assert updated_user['requested_institution_name'] == 'CoCanvas Online'
+    assert updated_user['requested_institution_domain'] == 'cocanvas.org'
+    assert updated_user['institution_id'] is None  # CRITICAL: Tenant boundary isolation preserved!
+
+    # 4. Super Admin now sees this applicant in /api/admin/pending-registrations
+    admin_pending_after = auth_client.get('/api/admin/pending-registrations').get_json()
+    pending_emails = [u['email'] for u in admin_pending_after.get('pending_users', [])]
+    assert email in pending_emails
+
+    pending_entry = next(u for u in admin_pending_after['pending_users'] if u['email'] == email)
+    assert pending_entry['status'] == 'PENDING_EMAIL_VERIFICATION'
+    assert pending_entry['institution_name'] == 'CoCanvas Online'
+
+    # 5. Super Admin can approve the re-applied user directly
+    approve_res = auth_client.post('/api/admin/approve-user', json={
+        'user_id': old_uid,
+        'action': 'approve',
+        'provision_type': 'assign_existing'
+    })
+    assert approve_res.status_code == 200
+    assert approve_res.get_json()['success'] is True
+
+    # User is now ACTIVE
+    final_user = UserModel.get_by_id(old_uid)
+    assert final_user['status'] == 'ACTIVE'
+    assert final_user['institution_id'] is not None
+

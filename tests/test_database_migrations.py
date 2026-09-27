@@ -28,7 +28,7 @@ def _create_legacy_v1_database(db_path):
     conn.commit()
     conn.close()
 
-def test_a_fresh_database_has_complete_schema(tmp_path):
+def test_a_fresh_database_has_complete_schema(tmp_path, app):
     """TEST A: Fresh database -> complete current schema exists."""
     db_file = str(tmp_path / "fresh_test.db")
     conn = sqlite3.connect(db_file)

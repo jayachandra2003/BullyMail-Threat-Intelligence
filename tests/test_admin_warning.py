@@ -699,3 +699,212 @@ def test_20_analyst_cannot_access_smtp_diagnostics(client, test_setup_incidents)
 
     res = client.get('/api/admin/diagnostics/smtp')
     assert res.status_code == 403
+
+
+def test_21_admin_warning_email_brevo_api_dispatch(monkeypatch):
+    """TEST 21: Verify that when BREVO_API_KEY is configured, AdminWarningService dispatches via HTTPS Brevo API."""
+    import urllib.request
+    import json
+    from bullymail.services.admin_warning_service import AdminWarningService
+
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.setenv("BREVO_API_KEY", "xkeysib-test-warning-brevo-key")
+    monkeypatch.setenv("BREVO_FROM_EMAIL", "security@bullymail.org")
+
+    captured_req = {}
+
+    class MockResponse:
+        status = 201
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    def mock_urlopen(req, timeout=None):
+        captured_req['url'] = req.full_url
+        captured_req['headers'] = dict(req.headers)
+        captured_req['data'] = json.loads(req.data.decode('utf-8'))
+        return MockResponse()
+
+    monkeypatch.setattr(urllib.request, 'urlopen', mock_urlopen)
+
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda **kw: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'admin_inst@gmail.com',
+        'password': 'test_app_password',
+        'use_tls': True,
+        'from_email': 'admin_inst@gmail.com',
+        'from_name': 'BullyMail Administration',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = AdminWarningService.send_warning_email(
+        recipient_email="cocanvascontact@gmail.com",
+        subject="Notice Regarding University Communication Guidelines",
+        body="This notification is intended as an advisory warning.",
+        institution_id=1
+    )
+
+    assert ok is True
+    assert "Brevo API" in msg
+    assert captured_req['url'] == 'https://api.brevo.com/v3/smtp/email'
+    assert captured_req['headers']['Api-key'] == 'xkeysib-test-warning-brevo-key'
+    assert captured_req['data']['to'] == [{'email': 'cocanvascontact@gmail.com'}]
+    assert captured_req['data']['subject'] == 'Notice Regarding University Communication Guidelines'
+    assert 'advisory warning' in captured_req['data']['textContent']
+
+
+def test_22_brevo_unverified_sender_retries_verified_default(monkeypatch):
+    """TEST 22: If mailbox sender returns Brevo HTTP 400 (unverified sender), automatically retry with verified default sender and replyTo."""
+    import urllib.request
+    import urllib.error
+    import json
+    import io
+    from bullymail.services.admin_warning_service import AdminWarningService
+
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.delenv("BREVO_FROM_EMAIL", raising=False)
+    monkeypatch.setenv("BREVO_API_KEY", "xkeysib-test-warning-retry-key")
+
+    calls = []
+
+    class MockResponse:
+        status = 201
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    def mock_urlopen(req, timeout=None):
+        data = json.loads(req.data.decode('utf-8'))
+        calls.append(data)
+        if data['sender']['email'] == 'unverified_mailbox@gmail.com':
+            # Simulate Brevo HTTP 400 for unverified sender
+            err_fp = io.BytesIO(b'{"code":"invalid_parameter","message":"Sender email is not valid or not verified"}')
+            raise urllib.error.HTTPError(
+                url=req.full_url,
+                code=400,
+                msg='Bad Request',
+                hdrs={'Content-Type': 'application/json'},
+                fp=err_fp
+            )
+        return MockResponse()
+
+    monkeypatch.setattr(urllib.request, 'urlopen', mock_urlopen)
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda **kw: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'unverified_mailbox@gmail.com',
+        'password': 'test_app_password',
+        'use_tls': True,
+        'from_email': 'unverified_mailbox@gmail.com',
+        'from_name': 'Denver Institute Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = AdminWarningService.send_warning_email(
+        recipient_email="cocanvascontact@gmail.com",
+        subject="Warning Notice",
+        body="Warning body text.",
+        institution_id=1
+    )
+
+    assert ok is True
+    assert "Brevo API" in msg
+    assert len(calls) == 2
+    # First attempt tried mailbox sender
+    assert calls[0]['sender']['email'] == 'unverified_mailbox@gmail.com'
+    # Second attempt fell back to verified default sender and set replyTo
+    assert calls[1]['sender']['email'] == 'jayachandravennam.jc@gmail.com'
+    assert calls[1]['replyTo']['email'] == 'unverified_mailbox@gmail.com'
+
+
+def test_23_brevo_failure_and_smtp_unreachable_reports_informative_error(monkeypatch):
+    """TEST 23: When Brevo HTTP API fails and SMTP is blocked with [Errno 101], returns informative cloud delivery error."""
+    import urllib.request
+    import urllib.error
+    import io
+    import smtplib
+    from bullymail.services.admin_warning_service import AdminWarningService
+
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.setenv("BREVO_API_KEY", "xkeysib-bad-key")
+
+    def mock_urlopen(req, timeout=None):
+        err_fp = io.BytesIO(b'{"code":"unauthorized","message":"Key not found"}')
+        raise urllib.error.HTTPError(
+            url=req.full_url,
+            code=401,
+            msg='Unauthorized',
+            hdrs={'Content-Type': 'application/json'},
+            fp=err_fp
+        )
+
+    monkeypatch.setattr(urllib.request, 'urlopen', mock_urlopen)
+
+    class MockSMTP_Unreachable:
+        def __init__(self, host, port, timeout=10):
+            raise OSError(101, 'Network is unreachable')
+
+    monkeypatch.setattr(smtplib, 'SMTP', MockSMTP_Unreachable)
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda **kw: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'inst_admin@gmail.com',
+        'password': 'test_app_password',
+        'use_tls': True,
+        'from_email': 'inst_admin@gmail.com',
+        'from_name': 'Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = AdminWarningService.send_warning_email(
+        recipient_email="cocanvascontact@gmail.com",
+        subject="Test Warning",
+        body="Test Body",
+        institution_id=1
+    )
+
+    assert ok is False
+    assert "Cloud delivery failed" in msg
+    assert "401" in msg or "Unauthorized" in msg
+
+
+def test_24_no_http_api_and_smtp_unreachable_guides_user_to_set_brevo_key(monkeypatch):
+    """TEST 24: When no HTTP API key is set and SMTP raises Errno 101, guide user to set BREVO_API_KEY in Render."""
+    import smtplib
+    from bullymail.services.admin_warning_service import AdminWarningService
+
+    monkeypatch.delenv("BREVO_API_KEY", raising=False)
+    monkeypatch.delenv("SENDINBLUE_API_KEY", raising=False)
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+
+    class MockSMTP_Unreachable:
+        def __init__(self, host, port, timeout=10):
+            raise OSError(101, 'Network is unreachable')
+
+    monkeypatch.setattr(smtplib, 'SMTP', MockSMTP_Unreachable)
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda **kw: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'inst_admin@gmail.com',
+        'password': 'test_app_password',
+        'use_tls': True,
+        'from_email': 'inst_admin@gmail.com',
+        'from_name': 'Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = AdminWarningService.send_warning_email(
+        recipient_email="cocanvascontact@gmail.com",
+        subject="Test Warning",
+        body="Test Body",
+        institution_id=1
+    )
+
+    assert ok is False
+    assert "Outbound SMTP is blocked on cloud hosting" in msg
+    assert "BREVO_API_KEY" in msg
+
+

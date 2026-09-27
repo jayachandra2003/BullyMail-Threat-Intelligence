@@ -1,3 +1,4 @@
+import os
 import ssl
 import smtplib
 import socket
@@ -370,7 +371,11 @@ class AdminWarningService:
             cfg = cls.get_smtp_config(institution_id=institution_id, mailbox_id=mailbox_id)
         else:
             cfg = cls.get_smtp_config(institution_id=institution_id)
-        if not cfg['host'] or not cfg['password'] or not (cfg['username'] or cfg['from_email']):
+        has_http_api = bool(
+            (os.environ.get('BREVO_API_KEY') or os.environ.get('SENDINBLUE_API_KEY') or getattr(Config, 'BREVO_API_KEY', None))
+            or (os.environ.get('RESEND_API_KEY') or getattr(Config, 'RESEND_API_KEY', None))
+        )
+        if not has_http_api and (not cfg['host'] or not cfg['password'] or not (cfg['username'] or cfg['from_email'])):
             logger.error("[WARN_DIAG] Warning email send failed: SMTP server credentials are not configured in environment or active mailbox.")
             return False, "SMTP server credentials are not configured. Please configure an active institutional mailbox."
 
@@ -380,9 +385,9 @@ class AdminWarningService:
         # Gmail SMTP requires From header to match authenticated username
         auth_user = cfg['username']
         auth_pw = cfg['password']
-        sender_email = auth_user if ('gmail.com' in cfg['host'].lower() or not cfg['from_email']) else cfg['from_email']
+        sender_email = auth_user if ('gmail.com' in (cfg.get('host') or '').lower() or not cfg.get('from_email')) else cfg['from_email']
         sender_name = cfg['from_name'] or 'BullyMail Administration'
-        sender_matches_username = (sender_email.lower() == auth_user.lower())
+        sender_matches_username = (sender_email.lower() == auth_user.lower()) if auth_user else False
 
         port_to_use = int(target_port or cfg.get('port') or 587)
         timeout = 10  # Bounded 10-second timeout
@@ -433,6 +438,116 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helv
 </html>"""
             html_part = MIMEText(html_body, 'html', 'utf-8')
             msg.attach(html_part)
+
+            http_api_errors = []
+            # Stage 0-A: Check if Brevo (formerly Sendinblue) HTTP API is configured (HTTPS port 443 - works on Render Free Tier to ANY recipient)
+            brevo_key = os.environ.get('BREVO_API_KEY') or os.environ.get('SENDINBLUE_API_KEY') or getattr(Config, 'BREVO_API_KEY', None)
+            if brevo_key and brevo_key.strip():
+                import urllib.request
+                import urllib.error
+                import json
+
+                # Determine candidate sender addresses.
+                # On Brevo Free Tier, emails can only be sent from verified account senders.
+                # If an institutional mailbox (e.g. jayachandra22mic7215@gmail.com) is not verified, Brevo returns HTTP 400.
+                # We attempt explicit BREVO_FROM_EMAIL -> connected sender_email -> verified default account email.
+                candidates = []
+                explicit_from = os.environ.get('BREVO_FROM_EMAIL') or getattr(Config, 'BREVO_FROM_EMAIL', None)
+                if explicit_from and explicit_from.strip():
+                    candidates.append(explicit_from.strip())
+                if sender_email and sender_email.strip() and sender_email.strip() not in candidates:
+                    candidates.append(sender_email.strip())
+                verified_default = 'jayachandravennam.jc@gmail.com'
+                if verified_default not in candidates:
+                    candidates.append(verified_default)
+
+                for candidate_sender in candidates:
+                    try:
+                        logger.info(f"[WARN_DIAG] [HTTP_API] Dispatching warning email via Brevo API (sender={candidate_sender})")
+                        brevo_payload = {
+                            'sender': {'name': sender_name, 'email': candidate_sender},
+                            'to': [{'email': clean_recipient}],
+                            'subject': sub,
+                            'htmlContent': html_body,
+                            'textContent': msg_body
+                        }
+                        reply_target = sender_email if (sender_email and sender_email.strip()) else candidate_sender
+                        if reply_target and reply_target.strip().lower() != candidate_sender.lower():
+                            brevo_payload['replyTo'] = {'name': sender_name, 'email': reply_target.strip()}
+
+                        req = urllib.request.Request(
+                            'https://api.brevo.com/v3/smtp/email',
+                            data=json.dumps(brevo_payload).encode('utf-8'),
+                            headers={
+                                'api-key': brevo_key.strip(),
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'User-Agent': 'BullyMail-Security/2.0'
+                            }
+                        )
+                        with urllib.request.urlopen(req, timeout=timeout) as resp:
+                            if resp.status in (200, 201, 202):
+                                logger.info(f"[WARN_DIAG] [FINAL_RESULT] SUCCESS: warning email delivered via Brevo API to {masked_recip} (sender={candidate_sender})")
+                                return True, "Warning email sent successfully via Brevo API."
+                    except urllib.error.HTTPError as h_err:
+                        try:
+                            err_body = h_err.read().decode('utf-8', errors='ignore')
+                        except Exception:
+                            err_body = str(h_err)
+                        err_summary = f"Brevo HTTP {h_err.code} ({candidate_sender}): {err_body}"
+                        logger.error(f"[WARN_DIAG] [HTTP_API] FAILED via Brevo API: {err_summary}")
+                        http_api_errors.append(err_summary)
+                        if h_err.code == 400 and candidate_sender != candidates[-1]:
+                            logger.info(f"[WARN_DIAG] [HTTP_API] Sender {candidate_sender} not accepted by Brevo, retrying with fallback sender {candidates[-1]}")
+                            continue
+                        elif h_err.code in (401, 403):
+                            break
+                    except Exception as ex:
+                        logger.error(f"[WARN_DIAG] [HTTP_API] FAILED via Brevo API ({candidate_sender}): {ex}")
+                        http_api_errors.append(f"Brevo: {ex}")
+
+            # Stage 0-B: Check if Resend HTTP API is configured (HTTPS port 443)
+            resend_key = os.environ.get('RESEND_API_KEY') or getattr(Config, 'RESEND_API_KEY', None)
+            if resend_key and resend_key.strip():
+                try:
+                    import urllib.request
+                    import urllib.error
+                    import json
+                    logger.info(f"[WARN_DIAG] [HTTP_API] Dispatching warning email via Resend API (HTTPS port 443)")
+                    from_addr = os.environ.get('RESEND_FROM_EMAIL') or getattr(Config, 'RESEND_FROM_EMAIL', None) or f"{sender_name} <onboarding@resend.dev>"
+                    resend_payload = {
+                        'from': from_addr,
+                        'to': [clean_recipient],
+                        'subject': sub,
+                        'html': html_body,
+                        'text': msg_body
+                    }
+                    if sender_email and sender_email.strip():
+                        resend_payload['reply_to'] = sender_email.strip()
+                    req = urllib.request.Request(
+                        'https://api.resend.com/emails',
+                        data=json.dumps(resend_payload).encode('utf-8'),
+                        headers={
+                            'Authorization': f'Bearer {resend_key.strip()}',
+                            'Content-Type': 'application/json',
+                            'User-Agent': 'BullyMail-Security/2.0'
+                        }
+                    )
+                    with urllib.request.urlopen(req, timeout=timeout) as resp:
+                        if resp.status in (200, 201):
+                            logger.info(f"[WARN_DIAG] [FINAL_RESULT] SUCCESS: warning email delivered via Resend API to {masked_recip}")
+                            return True, "Warning email sent successfully via Resend API."
+                except urllib.error.HTTPError as h_err:
+                    try:
+                        err_body = h_err.read().decode('utf-8', errors='ignore')
+                    except Exception:
+                        err_body = str(h_err)
+                    err_summary = f"Resend HTTP {h_err.code}: {err_body}"
+                    logger.error(f"[WARN_DIAG] [HTTP_API] FAILED via Resend API: {err_summary}")
+                    http_api_errors.append(err_summary)
+                except Exception as ex:
+                    logger.error(f"[WARN_DIAG] [HTTP_API] FAILED via Resend API: {ex}")
+                    http_api_errors.append(f"Resend: {ex}")
 
             context = ssl.create_default_context()
 
@@ -510,6 +625,15 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helv
             if cfg.get('password') and cfg['password'] in err_msg:
                 err_msg = err_msg.replace(cfg['password'], '********')
             logger.error(f"[WARN_DIAG] [SMTP_CONNECTION_FAILED] host={cfg['host']}:{port_to_use} timeout={timeout}s error={err_msg}")
+            
+            # Detect cloud hosting firewall blocking outbound SMTP (e.g. Render free tier [Errno 101] Network is unreachable)
+            is_unreachable = ('101' in err_msg or 'network is unreachable' in err_msg.lower() or 'network unreachable' in err_msg.lower())
+            if is_unreachable:
+                if http_api_errors:
+                    return False, f"Cloud delivery failed. HTTP API error: {'; '.join(http_api_errors)}. SMTP fallback blocked ([Errno 101] Network unreachable)."
+                elif not (brevo_key and brevo_key.strip()) and not (resend_key and resend_key.strip()):
+                    return False, "Outbound SMTP is blocked on cloud hosting ([Errno 101] Network unreachable). Please configure BREVO_API_KEY in Render Environment Variables."
+
             return False, f"Could not connect to SMTP server ({cfg['host']}:{port_to_use}) within {timeout}s: {err_msg}"
 
         except smtplib.SMTPException as e:
@@ -528,6 +652,11 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helv
             if cfg.get('password') and cfg['password'] in err_str:
                 err_str = err_str.replace(cfg['password'], '********')
             logger.error(f"[WARN_DIAG] [UNEXPECTED_ERROR] {err_str}")
+            if ('101' in err_str or 'network is unreachable' in err_str.lower() or 'network unreachable' in err_str.lower()):
+                if http_api_errors:
+                    return False, f"Cloud delivery failed: {'; '.join(http_api_errors)}"
+                elif not (brevo_key and brevo_key.strip()) and not (resend_key and resend_key.strip()):
+                    return False, "Outbound SMTP is blocked on cloud hosting ([Errno 101] Network unreachable). Please configure BREVO_API_KEY in Render Environment Variables."
             return False, f"Failed to dispatch warning email: {err_str}"
 
 admin_warning_service = AdminWarningService()

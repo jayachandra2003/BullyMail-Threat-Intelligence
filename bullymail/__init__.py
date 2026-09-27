@@ -49,7 +49,8 @@ def create_app(config_class=Config):
     
     # Initialize Database Schema
     try:
-        init_db()
+        with app.app_context():
+            init_db()
     except Exception as e:
         import traceback
         print(f"[BullyMail Schema Setup ERROR] Database schema initialization failed: {e}")
@@ -148,5 +149,12 @@ def create_app(config_class=Config):
         if request.path.startswith('/api/') or request.is_json:
             return jsonify({'success': False, 'error': 'An internal security exception occurred.'}), 500
         return "Internal Server Error", 500
+
+    # Execute non-blocking keepalive check on startup
+    try:
+        from .services.brevo_keepalive_service import brevo_keepalive_service
+        brevo_keepalive_service.check_and_ping_async()
+    except Exception:
+        pass
 
     return app

@@ -744,3 +744,47 @@ def test_email_service_resend_api_dispatch(monkeypatch):
     assert 'Bearer re_test_key_12345' in captured_req['headers']['Authorization']
     assert captured_req['data']['to'] == ['operator@target.com']
     assert captured_req['data']['subject'] == 'Resend Test Subject'
+
+
+def test_email_service_brevo_api_dispatch(monkeypatch):
+    """Verify that when BREVO_API_KEY is configured, EmailService dispatches via HTTPS Brevo API."""
+    import urllib.request
+    import json
+    from bullymail.services.email_service import EmailService
+
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.setenv("BREVO_API_KEY", "xkeysib-test-brevo-key-12345")
+    monkeypatch.setenv("BREVO_FROM_EMAIL", "security@bullymail.org")
+
+    captured_req = {}
+
+    class MockResponse:
+        status = 201
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    def mock_urlopen(req, timeout=None):
+        captured_req['url'] = req.full_url
+        captured_req['headers'] = dict(req.headers)
+        captured_req['data'] = json.loads(req.data.decode('utf-8'))
+        return MockResponse()
+
+    monkeypatch.setattr(urllib.request, 'urlopen', mock_urlopen)
+
+    svc = EmailService()
+    success, msg = svc.send_email(
+        to_email="cocanvascontact@gmail.com",
+        subject="Brevo Test Subject",
+        body="Plain body",
+        html_body="<p>HTML body</p>"
+    )
+
+    assert success is True
+    assert "Brevo API" in msg
+    assert captured_req['url'] == 'https://api.brevo.com/v3/smtp/email'
+    assert captured_req['headers']['Api-key'] == 'xkeysib-test-brevo-key-12345'
+    assert captured_req['data']['to'] == [{'email': 'cocanvascontact@gmail.com'}]
+    assert captured_req['data']['subject'] == 'Brevo Test Subject'
+
