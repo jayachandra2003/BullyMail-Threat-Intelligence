@@ -3438,19 +3438,90 @@ function renderSecureMailboxesSummary(mailboxes) {
 
 window.inFlightMailboxSyncs = new Set();
 
-function renderSecureMailboxesList(mailboxes, container) {
-    window.currentMailboxesList = mailboxes;
+window.mailboxSearchQuery = '';
+window.mailboxStatusFilter = 'all';
+
+function handleMailboxSearch(query) {
+    window.mailboxSearchQuery = (query || '').toLowerCase().trim();
+    applyMailboxFilters();
+}
+
+function handleMailboxFilterStatus(status) {
+    window.mailboxStatusFilter = status || 'all';
+    applyMailboxFilters();
+}
+
+function resetMailboxFilters() {
+    window.mailboxSearchQuery = '';
+    window.mailboxStatusFilter = 'all';
+    const sInput = document.getElementById('inputMailboxSearch');
+    const sSelect = document.getElementById('selectMailboxStatusFilter');
+    if (sInput) sInput.value = '';
+    if (sSelect) sSelect.value = 'all';
+    applyMailboxFilters();
+}
+
+function applyMailboxFilters() {
+    const listContainer = document.getElementById('connectedMailboxesList');
+    if (!listContainer) return;
+    const baseList = (cachedMailboxes && cachedMailboxes.length > 0) ? cachedMailboxes : (window.currentMailboxesList || []);
+
+    let filtered = baseList;
+
+    if (window.mailboxSearchQuery) {
+        const q = window.mailboxSearchQuery;
+        filtered = filtered.filter(m => {
+            const email = (m.email_address || '').toLowerCase();
+            const provider = (m.provider || '').toLowerCase();
+            const server = (m.imap_server || '').toLowerCase();
+            return email.includes(q) || provider.includes(q) || server.includes(q);
+        });
+    }
+
+    if (window.mailboxStatusFilter && window.mailboxStatusFilter !== 'all') {
+        const sf = window.mailboxStatusFilter;
+        if (sf === 'active') {
+            filtered = filtered.filter(m => m.status === 'active' && !m.last_error && m.sync_status !== 'ERROR' && m.sync_status !== 'FAILED');
+        } else if (sf === 'disabled') {
+            filtered = filtered.filter(m => m.status !== 'active');
+        } else if (sf === 'error') {
+            filtered = filtered.filter(m => m.last_error || m.sync_status === 'ERROR' || m.sync_status === 'FAILED');
+        }
+    }
+
+    renderSecureMailboxesList(filtered, listContainer, true);
+}
+
+function renderSecureMailboxesList(mailboxes, container, isFiltered = false) {
+    if (!isFiltered) {
+        window.currentMailboxesList = mailboxes;
+    }
+    if (!container) return;
+
     if (!mailboxes || mailboxes.length === 0) {
-        container.innerHTML = `
-            <div class="soc-panel p-4 text-center">
-                <div class="text-muted mb-2"><i class="fas fa-inbox fa-2x"></i></div>
-                <h6 class="fw-bold font-mono mb-1" style="color: var(--text-primary);">No Institutional Mailboxes Configured</h6>
-                <p class="text-muted small mb-3">Add a TLS-encrypted IMAP mailbox to enable background threat ingestion.</p>
-                <button type="button" class="btn-soc-primary btn-sm font-mono" data-bs-toggle="modal" data-bs-target="#addMailboxModal">
-                    <i class="fas fa-plus me-1"></i> Add Mailbox
-                </button>
-            </div>
-        `;
+        if (isFiltered) {
+            container.innerHTML = `
+                <div class="soc-panel p-4 text-center">
+                    <div class="text-muted mb-2"><i class="fas fa-filter-circle-xmark fa-2x"></i></div>
+                    <h6 class="fw-bold font-mono mb-1" style="color: var(--text-primary);">No Matching Mailboxes Found</h6>
+                    <p class="text-muted small mb-3">No configured institutional mailboxes matched your active search or status filter.</p>
+                    <button type="button" class="btn-soc-outline btn-sm font-mono" onclick="resetMailboxFilters()">
+                        <i class="fas fa-rotate-left me-1"></i> Reset Filters
+                    </button>
+                </div>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="soc-panel p-4 text-center">
+                    <div class="text-muted mb-2"><i class="fas fa-inbox fa-2x"></i></div>
+                    <h6 class="fw-bold font-mono mb-1" style="color: var(--text-primary);">No Institutional Mailboxes Configured</h6>
+                    <p class="text-muted small mb-3">Add a TLS-encrypted IMAP mailbox to enable background threat ingestion.</p>
+                    <button type="button" class="btn-soc-primary btn-sm font-mono" data-bs-toggle="modal" data-bs-target="#addMailboxModal">
+                        <i class="fas fa-plus me-1"></i> Add Mailbox
+                    </button>
+                </div>
+            `;
+        }
         return;
     }
 
@@ -3482,71 +3553,100 @@ function renderSecureMailboxesList(mailboxes, container) {
         const formattedConfigured = m.configured_at ? new Date(m.configured_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
         const isAdmin = canManageTenant();
         const isGmail = (m.email_address || '').toLowerCase().includes('gmail');
+        const providerName = escapeHtml(m.provider || (isGmail ? 'Gmail' : 'IMAP'));
+        const serverHost = escapeHtml(m.imap_server || (isGmail ? 'imap.gmail.com' : 'imap.server'));
 
         html += `
-            <div class="soc-mailbox-card">
-                <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-                    <!-- Left: Mailbox Identity -->
-                    <div class="d-flex align-items-center gap-3" style="min-width: 280px;">
-                        <div class="soc-mailbox-provider-icon">
-                            <i class="${isGmail ? 'fab fa-google text-primary' : 'fas fa-inbox text-accent'} fa-lg"></i>
+            <div class="soc-mailbox-card" id="mailbox-card-${m.id}">
+                <!-- Tier 1: Identity & Executive Actions -->
+                <div class="mailbox-card-header">
+                    <!-- Left: Identity -->
+                    <div class="mailbox-identity">
+                        <div class="soc-mailbox-provider-icon" title="${providerName}">
+                            <i class="${isGmail ? 'fab fa-google text-primary' : 'fas fa-inbox text-accent'}"></i>
                         </div>
-                        <div>
-                            <div class="d-flex align-items-center gap-2 mb-1">
-                                <h6 class="mb-0 fw-bold font-mono" style="color: var(--text-primary);">${escapeHtml(m.email_address)}</h6>
+                        <div class="mailbox-title-block">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="mailbox-email font-mono">${escapeHtml(m.email_address)}</span>
                                 <span class="${badgeClass}">${badgeText}</span>
                             </div>
-                            <div class="text-muted small font-mono">
-                                <span>${escapeHtml(m.provider || 'Gmail')}</span> • <span>IMAP: ${escapeHtml(m.imap_server || 'imap.gmail.com')}</span>
+                            <div class="mailbox-server-meta">
+                                <span>${providerName}</span>
+                                <span class="meta-dot">•</span>
+                                <span>IMAP: ${serverHost}</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Middle: Detail Metrics -->
-                    <div class="d-flex gap-4 font-mono small text-muted flex-wrap align-items-center">
-                        <div>
-                            <div class="text-uppercase" style="font-size: 0.65rem; letter-spacing: 0.05em;">LAST SYNC</div>
-                            <strong style="color: var(--text-primary);">${formattedLastSync}</strong>
-                        </div>
-                        <div>
-                            <div class="text-uppercase" style="font-size: 0.65rem; letter-spacing: 0.05em;">EMAILS INGESTED</div>
-                            <strong class="text-accent">${m.total_ingested_count || 0}</strong> <span class="small text-muted">Total emails</span>
-                        </div>
-                        <div>
-                            <div class="text-uppercase" style="font-size: 0.65rem; letter-spacing: 0.05em;">CONFIGURED ON</div>
-                            <strong style="color: var(--text-primary);">${formattedConfigured}</strong>
-                        </div>
-                        <div>
-                            <div class="text-uppercase" style="font-size: 0.65rem; letter-spacing: 0.05em;">STATUS</div>
-                            <strong class="${m.last_error ? 'text-danger' : 'text-success'}">${m.last_error ? 'Connection Error' : 'Clean (No errors)'}</strong>
-                        </div>
-                    </div>
-
-                    <!-- Right: Action Buttons -->
-                    <div class="d-flex gap-2 flex-wrap align-items-center">
-                        <button type="button" class="btn-soc-primary btn-sm px-3 font-mono" onclick="openMailboxInbox(${m.id})">
+                    <!-- Right: Primary Action & Quick Controls -->
+                    <div class="mailbox-actions-group">
+                        <button type="button" class="btn-soc-primary mailbox-open-btn font-mono" onclick="openMailboxInbox(${m.id})">
                             <i class="fas fa-envelope-open me-1"></i> Open Inbox
                         </button>
                         ${isAdmin ? `
-                        <button type="button" class="btn-soc-outline btn-sm font-mono" id="btnSync-${m.id}" onclick="handleMailboxSync(${m.id})" ${!isEnabled ? 'disabled' : ''}>
-                            <i class="fas fa-arrows-rotate me-1"></i> Sync Now
-                        </button>
-                        <button type="button" class="btn-soc-outline btn-sm font-mono" id="btnTest-${m.id}" onclick="handleMailboxTest(${m.id})">
-                            <i class="fas fa-plug me-1"></i> Test Connection
-                        </button>
-                        <button type="button" class="btn-soc-outline btn-sm font-mono" id="btnEdit-${m.id}" onclick="openEditMailboxModal(${m.id})">
-                            <i class="fas fa-key me-1"></i> Edit Credentials
-                        </button>
-                        <button type="button" class="btn-soc-outline btn-sm font-mono ${isEnabled ? 'text-warning' : 'text-success'}" onclick="handleMailboxToggle(${m.id}, '${m.status}')">
-                            <i class="fas ${isEnabled ? 'fa-pause' : 'fa-play'} me-1"></i> ${isEnabled ? 'Disable' : 'Enable'}
-                        </button>
-                        <button type="button" class="btn-soc-outline btn-sm font-mono text-danger" onclick="handleMailboxDelete(${m.id}, '${escapeHtml(m.email_address)}')">
-                            <i class="fas fa-trash me-1"></i> Delete
+                        <button type="button" class="btn-soc-outline mailbox-sync-btn font-mono" id="btnSync-${m.id}" onclick="handleMailboxSync(${m.id})" ${!isEnabled ? 'disabled' : ''} title="Synchronize mail now">
+                            <i class="fas fa-arrows-rotate me-1"></i> Sync
                         </button>
                         ` : ''}
-                        <button type="button" class="btn-soc-outline btn-sm font-mono" onclick="openMailboxDetails(${m.id})">
-                            <i class="fas fa-chart-line me-1"></i> Activity Details
-                        </button>
+                        <div class="dropdown">
+                            <button type="button" class="btn-soc-outline mailbox-menu-btn" data-bs-toggle="dropdown" aria-expanded="false" title="More Mailbox Actions">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end soc-dropdown-menu">
+                                <li>
+                                    <button type="button" class="dropdown-item" onclick="openMailboxDetails(${m.id})">
+                                        <i class="fas fa-chart-line text-muted me-2"></i>Activity & Telemetry
+                                    </button>
+                                </li>
+                                ${isAdmin ? `
+                                <li>
+                                    <button type="button" class="dropdown-item" id="btnTest-${m.id}" onclick="handleMailboxTest(${m.id})">
+                                        <i class="fas fa-plug text-muted me-2"></i>Test Connection
+                                    </button>
+                                </li>
+                                <li>
+                                    <button type="button" class="dropdown-item" id="btnEdit-${m.id}" onclick="openEditMailboxModal(${m.id})">
+                                        <i class="fas fa-key text-muted me-2"></i>Edit Credentials
+                                    </button>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <button type="button" class="dropdown-item ${isEnabled ? 'text-warning' : 'text-success'}" onclick="handleMailboxToggle(${m.id}, '${m.status}')">
+                                        <i class="fas ${isEnabled ? 'fa-pause' : 'fa-play'} me-2"></i>${isEnabled ? 'Disable Mailbox' : 'Enable Mailbox'}
+                                    </button>
+                                </li>
+                                <li>
+                                    <button type="button" class="dropdown-item text-danger" onclick="handleMailboxDelete(${m.id}, '${escapeHtml(m.email_address)}')">
+                                        <i class="fas fa-trash me-2"></i>Delete Mailbox
+                                    </button>
+                                </li>
+                                ` : ''}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tier 2: Inset Telemetry Strip -->
+                <div class="mailbox-telemetry-strip">
+                    <div class="telemetry-cell">
+                        <span class="telemetry-label">LAST SYNC</span>
+                        <span class="telemetry-value font-mono">${formattedLastSync}</span>
+                    </div>
+                    <div class="telemetry-cell">
+                        <span class="telemetry-label">EMAILS INGESTED</span>
+                        <span class="telemetry-value font-mono"><strong class="text-accent">${m.total_ingested_count || 0}</strong> <span class="small text-muted">total</span></span>
+                    </div>
+                    <div class="telemetry-cell">
+                        <span class="telemetry-label">CONFIGURED ON</span>
+                        <span class="telemetry-value font-mono">${formattedConfigured}</span>
+                    </div>
+                    <div class="telemetry-cell">
+                        <span class="telemetry-label">SYSTEM HEALTH</span>
+                        <span class="telemetry-value font-mono">
+                            <span class="${m.last_error ? 'text-danger' : 'text-success'}">
+                                <i class="fas ${m.last_error ? 'fa-circle-exclamation' : 'fa-check-circle'} me-1"></i>${m.last_error ? 'Error Detected' : 'Operational'}
+                            </span>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -3592,7 +3692,7 @@ async function handleMailboxDelete(mailboxId, emailAddress) {
 }
 
 function openEditMailboxModal(mailboxId) {
-    const list = window.currentMailboxesList || [];
+    const list = (cachedMailboxes && cachedMailboxes.length > 0) ? cachedMailboxes : (window.currentMailboxesList || []);
     const mb = list.find(m => m.id === mailboxId);
     if (!mb) {
         if (typeof showToast === 'function') showToast('Mailbox details not found.', 'warning');
