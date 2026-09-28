@@ -35,9 +35,9 @@
 }
 
 [data-theme="light"] .sidebar-v2 {
-    background: #e0e5ec;
+    background: #f4f3ef;
     border-right-color: var(--neu-rim);
-    box-shadow: 6px 0 20px rgba(163, 177, 198, 0.45);
+    box-shadow: 6px 0 20px rgba(195, 190, 180, 0.45);
 }
 
 .brand-header {
@@ -519,13 +519,13 @@
 }
 
 [data-theme="light"] .top-command-bar {
-    background-color: #e0e5ec !important;
-    background: #e0e5ec !important;
+    background-color: #f4f3ef !important;
+    background: #f4f3ef !important;
     opacity: 1 !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     border-bottom: 1px solid var(--neu-rim) !important;
-    box-shadow: 0 10px 24px -4px rgba(163, 177, 198, 0.7) !important;
+    box-shadow: 0 10px 24px -4px rgba(195, 190, 180, 0.6) !important;
 }
 
 .command-bar-title h1 {
@@ -1010,13 +1010,13 @@
 }
 
 [data-theme="light"] .soc-stream-row {
-    background: #e0e5ec;
+    background: #f7f6f2;
     border-color: var(--neu-rim);
     box-shadow: var(--neu-flat);
 }
 
 [data-theme="light"] .soc-stream-row:hover {
-    background: #e8ecf4;
+    background: #eeebe4;
     border-color: var(--neu-rim);
     box-shadow: var(--neu-raised);
 }
@@ -3223,13 +3223,13 @@
 
 /* 1. Header & Top Command Bar */
 [data-theme="light"] .top-command-bar {
-    background-color: #e0e5ec !important;
-    background: #e0e5ec !important;
+    background-color: #f4f3ef !important;
+    background: #f4f3ef !important;
     opacity: 1 !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     border-bottom: 1px solid var(--neu-rim) !important;
-    box-shadow: 0 10px 24px -4px rgba(163, 177, 198, 0.7) !important;
+    box-shadow: 0 10px 24px -4px rgba(195, 190, 180, 0.6) !important;
 }
 
 [data-theme="light"] .command-bar-title h1,
@@ -3477,7 +3477,7 @@
 
 /* 8. Gauge & Engine Segmented Control in Light Mode */
 [data-theme="light"] .gauge-bg {
-    stroke: rgba(163, 177, 198, 0.4);
+    stroke: rgba(195, 190, 180, 0.4);
 }
 
 [data-theme="light"] .gauge-center-text {
