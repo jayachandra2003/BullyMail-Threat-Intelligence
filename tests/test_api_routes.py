@@ -110,4 +110,13 @@ def test_index_page_seo_and_social_tags(client):
     assert b'meta name="twitter:card"' in res.data
     assert b'meta property="og:title"' in res.data
 
+def test_contact_page_route(client):
+    res = client.get('/contact')
+    assert res.status_code == 200
+    assert b'Jaya Chandra Vennam' in res.data
+    assert b'bullymail.project@gmail.com' in res.data
+    assert b'https://www.instagram.com/jaya_chandra_v' in res.data
+    assert b'https://www.linkedin.com/in/jaya-chandra-vennam/' in res.data
+    assert b'https://github.com/jayachandra2003' in res.data
+
 

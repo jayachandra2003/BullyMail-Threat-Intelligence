@@ -50,6 +50,26 @@
     flex-shrink: 0;
 }
 
+.brand-identity-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none !important;
+    color: inherit !important;
+    flex: 1;
+    min-width: 0;
+    transition: opacity var(--transition-fast, 0.15s ease);
+}
+
+.brand-identity-link:hover .brand-name {
+    color: var(--accent-primary) !important;
+}
+
+.sidebar-v2.collapsed .brand-identity-link {
+    justify-content: center;
+    width: 100%;
+}
+
 .brand-logo {
     width: 36px;
     height: 36px;

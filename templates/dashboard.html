@@ -51,15 +51,17 @@
         <aside class="sidebar-v2" id="sidebarNav" aria-label="Main Navigation">
             <!-- Brand Header -->
             <div class="brand-header">
-                <div class="brand-logo" title="BullyMail Threat Intelligence">
-                    <img src="{{ url_for('static', filename='img/logo.png') }}?v=2.7.2" alt="BullyMail Logo" class="brand-logo-img">
-                </div>
-                <div class="brand-info">
-                    <div class="brand-name">
-                        BullyMail
+                <a href="javascript:void(0)" onclick="if(typeof switchTab==='function')switchTab('tab-overview')" class="brand-identity-link" title="Return to Overview Console">
+                    <div class="brand-logo" title="BullyMail Threat Intelligence">
+                        <img src="{{ url_for('static', filename='img/logo.png') }}?v=2.7.2" alt="BullyMail Logo" class="brand-logo-img">
                     </div>
-                    <div class="brand-subtitle">Threat Intelligence</div>
-                </div>
+                    <div class="brand-info">
+                        <div class="brand-name">
+                            BullyMail
+                        </div>
+                        <div class="brand-subtitle">Threat Intelligence</div>
+                    </div>
+                </a>
                 <button type="button" class="btn-sidebar-toggle" id="sidebarToggleBtn" title="Collapse Navigation Rail" aria-label="Toggle Sidebar">
                     <i class="fas fa-angles-left"></i>
                 </button>

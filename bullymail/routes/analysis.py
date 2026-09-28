@@ -15,9 +15,28 @@ def _resolve_target_institution_id(current_user, requested_inst_id=None, strict_
     """Delegates to canonical resolve_tenant_id for consistent tenant isolation."""
     return resolve_tenant_id(current_user, requested_inst_id, allow_global=True, strict_403=strict_403)
 
+import time
+
+# Lightweight in-memory rate limiter for public demo analysis (30 requests/min per IP)
+_demo_rate_limits = {}
+
+def _check_demo_rate_limit(ip, max_requests=30, window_seconds=60):
+    now = time.time()
+    # Purge old records periodically
+    timestamps = [t for t in _demo_rate_limits.get(ip, []) if now - t < window_seconds]
+    if len(timestamps) >= max_requests:
+        return False
+    timestamps.append(now)
+    _demo_rate_limits[ip] = timestamps
+    return True
+
 @analysis_bp.route('/api/quick-demo-analyze', methods=['POST'])
 def quick_demo_analyze():
-    """Unauthenticated quick demo endpoint for instant interactive evaluation."""
+    """Unauthenticated quick demo endpoint for instant interactive evaluation with rate limiting."""
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr or '127.0.0.1').split(',')[0].strip()
+    if not _check_demo_rate_limit(client_ip):
+        return jsonify({'success': False, 'error': 'Rate limit exceeded. Please wait a minute before analyzing more demo emails.'}), 429
+
     data = request.get_json() or {}
     text = (data.get('email_text') or '').strip()
     subject = (data.get('email_subject') or '').strip()

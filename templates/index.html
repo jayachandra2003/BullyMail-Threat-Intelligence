@@ -41,9 +41,9 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
     <!-- BullyMail V2 Core CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.6.4">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.7.3">
     <!-- Theme Core -->
-    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.6.4"></script>
+    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.7.3"></script>
     
     <style>
         .hero-v2-soc {
@@ -196,6 +196,414 @@
             .interactive-demo-card {
                 padding: 20px 16px;
                 border-radius: 18px;
+            }
+        }
+
+        /* 3-Way Balanced Executive Footer Bar */
+        .footer-soc {
+            background: var(--bg-surface);
+            border-top: 1px solid var(--neu-rim-subtle);
+            padding: 18px 0;
+        }
+
+        .footer-brand-title {
+            font-size: 0.96rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+            line-height: 1.2;
+        }
+
+        .footer-tagline {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-bottom: 0;
+            line-height: 1.35;
+        }
+
+        .footer-center-nav {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.82rem;
+            font-weight: 500;
+            transition: color var(--transition-fast, 0.15s ease);
+        }
+
+        .footer-link:hover {
+            color: var(--accent-primary);
+        }
+
+        .footer-link-contact {
+            color: var(--accent-primary);
+            font-weight: 600;
+        }
+
+        .footer-sep {
+            color: var(--text-muted);
+            opacity: 0.35;
+            font-size: 0.75rem;
+            user-select: none;
+        }
+
+        .footer-author {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-bottom: 2px;
+            line-height: 1.35;
+        }
+
+        .footer-author strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .footer-copyright {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            line-height: 1.35;
+            margin-bottom: 0;
+        }
+
+        @media (max-width: 991px) {
+            .footer-soc {
+                padding: 20px 0 16px;
+            }
+            .footer-center-nav {
+                margin: 6px 0;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .footer-sep {
+                display: none;
+            }
+            .footer-center-nav {
+                gap: 8px 16px;
+            }
+        }
+
+        /* Contact Modal Styles */
+        .contact-modal-dialog {
+            max-width: 560px;
+            margin: 1.75rem auto;
+        }
+
+        .contact-modal-content {
+            background: var(--bg-surface-elevated);
+            border: 1.5px solid var(--neu-rim);
+            border-radius: 24px;
+            box-shadow: var(--neu-raised);
+            padding: 30px 28px;
+            color: var(--text-primary);
+            position: relative;
+        }
+
+        [data-theme="light"] .contact-modal-content {
+            box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.12), var(--neu-raised);
+        }
+
+        .contact-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 22px;
+        }
+
+        .contact-header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+            margin: 0;
+        }
+
+        .contact-header-emoji {
+            font-size: 1.55rem;
+            line-height: 1;
+        }
+
+        .btn-contact-close-icon {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.25rem;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .btn-contact-close-icon:hover {
+            color: var(--text-primary);
+            background: var(--bg-surface-hover);
+            transform: scale(1.08);
+        }
+
+        /* Creator Profile Card */
+        .contact-creator-card {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.14) 0%, rgba(139, 92, 246, 0.08) 100%);
+            border: 1.5px solid rgba(99, 102, 241, 0.35);
+            border-radius: 18px;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        [data-theme="light"] .contact-creator-card {
+            background: linear-gradient(135deg, #e0f2fe 0%, #ede9fe 100%);
+            border-color: #bae6fd;
+        }
+
+        .creator-info {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .creator-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--bg-surface-elevated);
+            border: 2px solid rgba(99, 102, 241, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+            box-shadow: var(--neu-flat);
+        }
+
+        [data-theme="light"] .creator-avatar {
+            background: #ffffff;
+            border-color: #93c5fd;
+        }
+
+        .creator-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.25;
+            margin-bottom: 2px;
+        }
+
+        .creator-role {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            line-height: 1.25;
+            margin-bottom: 0;
+        }
+
+        .creator-socials {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .creator-social-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            background: var(--bg-surface);
+            border: 1px solid var(--neu-rim);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            text-decoration: none;
+            box-shadow: var(--neu-flat);
+            transition: all 0.15s ease;
+        }
+
+        [data-theme="light"] .creator-social-btn {
+            background: #ffffff;
+            border-color: #cbd5e1;
+            color: #334155;
+        }
+
+        .creator-social-btn:hover {
+            color: var(--accent-primary);
+            transform: translateY(-2px);
+            border-color: var(--accent-primary);
+            box-shadow: var(--neu-btn-hover);
+        }
+
+        /* Action Cards */
+        .contact-action-card {
+            background: var(--bg-surface);
+            border: 1.5px solid var(--neu-rim);
+            border-radius: 16px;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 14px;
+            text-decoration: none;
+            color: var(--text-primary);
+            box-shadow: var(--neu-flat);
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .contact-action-card:hover {
+            background: var(--bg-surface-elevated);
+            border-color: var(--accent-primary);
+            transform: translateY(-2px);
+            box-shadow: var(--neu-raised);
+            color: var(--text-primary);
+        }
+
+        [data-theme="light"] .contact-action-card {
+            background: #ffffff;
+            border-color: #e2e8f0;
+        }
+
+        [data-theme="light"] .contact-action-card:hover {
+            background: #ffffff;
+            border-color: #6366f1;
+            box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.15);
+        }
+
+        .contact-action-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .contact-action-emoji {
+            font-size: 1.5rem;
+            line-height: 1;
+            width: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .contact-action-title {
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+            line-height: 1.25;
+        }
+
+        .contact-action-sub {
+            font-size: 0.84rem;
+            color: var(--text-secondary);
+            margin-bottom: 0;
+            line-height: 1.25;
+        }
+
+        .contact-action-sub.font-mono {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+        }
+
+        .contact-action-arrow {
+            color: var(--accent-primary);
+            font-size: 1.15rem;
+            font-weight: 700;
+            transition: transform 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .contact-action-card:hover .contact-action-arrow {
+            transform: translate(3px, -3px);
+        }
+
+        /* Footer in Modal */
+        .contact-card-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 22px;
+            padding-top: 18px;
+            border-top: 1px solid var(--neu-rim-subtle);
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        [data-theme="light"] .contact-card-footer {
+            border-top-color: #e2e8f0;
+        }
+
+        .contact-footer-copy {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        .btn-contact-close-action {
+            background: #fde047;
+            color: #0f172a;
+            font-weight: 700;
+            font-size: 0.88rem;
+            padding: 8px 24px;
+            border-radius: 12px;
+            border: 2px solid #0f172a;
+            box-shadow: 2px 2px 0px #0f172a;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .btn-contact-close-action:hover {
+            background: #facc15;
+            color: #000;
+            transform: translate(-1px, -1px);
+            box-shadow: 3px 3px 0px #0f172a;
+        }
+
+        .btn-contact-close-action:active {
+            transform: translate(1px, 1px);
+            box-shadow: 1px 1px 0px #0f172a;
+        }
+
+        @media (max-width: 576px) {
+            .contact-modal-content {
+                padding: 24px 18px;
+            }
+            .contact-creator-card {
+                padding: 14px 16px;
+            }
+            .creator-socials {
+                width: 100%;
+                justify-content: flex-start;
+                margin-top: 4px;
+            }
+            .contact-card-footer {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+                gap: 14px;
+            }
+            .btn-contact-close-action {
+                width: 100%;
             }
         }
     </style>
@@ -444,12 +852,126 @@
         </div>
     </section>
 
-    <!-- Footer -->
-    <footer class="py-4 border-top border-subtle text-center text-secondary small" style="background: var(--bg-surface);">
+    <!-- Footer: 3-Way Balanced Executive Bar -->
+    <footer class="footer-soc">
         <div class="container">
-            <p class="mb-0" style="font-size: 0.82rem;">BullyMail V2 SOC &bull; Multi-Vector Email Threat Intelligence Platform &bull; Final Year Computer Science & Engineering Capstone Project</p>
+            <div class="row align-items-center gy-3 gy-lg-0 justify-content-between">
+                <!-- Left: Brand & Tagline -->
+                <div class="col-lg-4 text-center text-lg-start">
+                    <div class="d-flex align-items-center gap-2 justify-content-center justify-content-lg-start mb-1">
+                        <img src="{{ url_for('static', filename='img/logo.png') }}?v=2.7.3" alt="BullyMail Logo" width="22" height="22" style="object-fit: contain; filter: drop-shadow(0 2px 4px rgba(245, 158, 11, 0.4));">
+                        <span class="footer-brand-title">BullyMail V2 SOC</span>
+                        <span class="badge bg-secondary font-mono" style="font-size: 0.62rem; padding: 2px 7px;">THREAT INTELLIGENCE</span>
+                    </div>
+                    <p class="footer-tagline">
+                        Multi-Vector Email Threat Intelligence Platform
+                    </p>
+                </div>
+                
+                <!-- Center: Navigation Links -->
+                <div class="col-lg-4 text-center">
+                    <nav class="footer-center-nav" aria-label="Footer Navigation">
+                        <a href="/privacy" class="footer-link">Privacy Policy</a>
+                        <span class="footer-sep">&bull;</span>
+                        <a href="/terms" class="footer-link">Terms of Service</a>
+                        <span class="footer-sep">&bull;</span>
+                        <a href="/contact" data-bs-toggle="modal" data-bs-target="#contactModal" class="footer-link footer-link-contact">
+                            <i class="fas fa-envelope me-1"></i>Contact
+                        </a>
+                    </nav>
+                </div>
+
+                <!-- Right: Built by & Copyright -->
+                <div class="col-lg-4 text-center text-lg-end">
+                    <p class="footer-author">
+                        Built by <strong>Jaya Chandra Vennam</strong>
+                    </p>
+                    <p class="footer-copyright">
+                        &copy; 2026 All rights reserved.
+                    </p>
+                </div>
+            </div>
         </div>
     </footer>
+
+    <!-- Contact Modal -->
+    <div class="modal fade" id="contactModal" tabindex="-1" aria-labelledby="contactModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered contact-modal-dialog">
+            <div class="modal-content contact-modal-content">
+                <!-- Header -->
+                <div class="contact-header">
+                    <h2 class="contact-header-title" id="contactModalLabel">
+                        <span class="contact-header-emoji">📫</span> Contact
+                    </h2>
+                    <button type="button" class="btn-contact-close-icon" data-bs-dismiss="modal" aria-label="Close" title="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <!-- Creator Profile Card -->
+                <div class="contact-creator-card">
+                    <div class="creator-info">
+                        <div class="creator-avatar" aria-hidden="true">
+                            👨‍💻
+                        </div>
+                        <div>
+                            <div class="creator-name">Jaya Chandra Vennam</div>
+                            <p class="creator-role">Creator &amp; Lead Developer of BullyMail</p>
+                        </div>
+                    </div>
+                    <div class="creator-socials">
+                        <a href="https://www.instagram.com/jaya_chandra_v?stkn=Mm1remxkbmtja2pl" target="_blank" rel="noopener noreferrer" class="creator-social-btn" aria-label="Instagram Profile" title="Instagram">
+                            <i class="fab fa-instagram"></i>
+                        </a>
+                        <a href="https://www.linkedin.com/in/jaya-chandra-vennam/" target="_blank" rel="noopener noreferrer" class="creator-social-btn" aria-label="LinkedIn Profile" title="LinkedIn">
+                            <i class="fab fa-linkedin-in"></i>
+                        </a>
+                        <a href="https://github.com/jayachandra2003" target="_blank" rel="noopener noreferrer" class="creator-social-btn" aria-label="GitHub Profile" title="GitHub">
+                            <i class="fab fa-github"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Action Card: Email Support -->
+                <a href="mailto:bullymail.project@gmail.com" class="contact-action-card">
+                    <div class="contact-action-left">
+                        <div class="contact-action-emoji" aria-hidden="true">✉️</div>
+                        <div>
+                            <div class="contact-action-title">Email Support</div>
+                            <p class="contact-action-sub font-mono">bullymail.project@gmail.com</p>
+                        </div>
+                    </div>
+                    <div class="contact-action-arrow">
+                        <i class="fas fa-arrow-up-right-from-square"></i>
+                    </div>
+                </a>
+
+                <!-- Action Card: GitHub Repository -->
+                <a href="https://github.com/jayachandra2003/BullyMail-Threat-Intelligence" target="_blank" rel="noopener noreferrer" class="contact-action-card">
+                    <div class="contact-action-left">
+                        <div class="contact-action-emoji" aria-hidden="true">🐙</div>
+                        <div>
+                            <div class="contact-action-title">GitHub Repository</div>
+                            <p class="contact-action-sub">Star project &amp; explore source code</p>
+                        </div>
+                    </div>
+                    <div class="contact-action-arrow">
+                        <i class="fas fa-arrow-up-right-from-square"></i>
+                    </div>
+                </a>
+
+                <!-- Footer -->
+                <div class="contact-card-footer">
+                    <p class="contact-footer-copy">
+                        BullyMail &copy; 2026 &bull; Built by Jaya Chandra Vennam
+                    </p>
+                    <button type="button" class="btn-contact-close-action" data-bs-dismiss="modal">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
