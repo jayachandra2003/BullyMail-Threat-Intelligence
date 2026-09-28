@@ -606,6 +606,98 @@
                 width: 100%;
             }
         }
+
+        /* Legal Modals (Privacy & Terms) */
+        .legal-modal-dialog {
+            max-width: 680px;
+            margin: 1.75rem auto;
+        }
+
+        .legal-modal-content {
+            background: var(--bg-surface-elevated);
+            border: 1.5px solid var(--neu-rim);
+            border-radius: 24px;
+            box-shadow: var(--neu-raised);
+            padding: 28px 28px 22px;
+            color: var(--text-primary);
+            position: relative;
+        }
+
+        [data-theme="light"] .legal-modal-content {
+            box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.12), var(--neu-raised);
+        }
+
+        .legal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .legal-header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin: 0;
+            letter-spacing: -0.01em;
+        }
+
+        .legal-modal-body {
+            max-height: 55vh;
+            overflow-y: auto;
+            padding-right: 8px;
+            margin-bottom: 14px;
+        }
+
+        .legal-section-title {
+            color: var(--text-primary);
+            font-size: 0.98rem;
+            font-weight: 700;
+            margin-top: 16px;
+            margin-bottom: 6px;
+        }
+
+        .legal-section-text {
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+
+        .legal-card-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 16px;
+            border-top: 1px solid var(--neu-rim-subtle);
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        [data-theme="light"] .legal-card-footer {
+            border-top-color: #e2e8f0;
+        }
+
+        .legal-footer-copy {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        @media (max-width: 576px) {
+            .legal-modal-content {
+                padding: 22px 18px;
+            }
+            .legal-card-footer {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+                gap: 14px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -871,9 +963,9 @@
                 <!-- Center: Navigation Links -->
                 <div class="col-lg-4 text-center">
                     <nav class="footer-center-nav" aria-label="Footer Navigation">
-                        <a href="/privacy" class="footer-link">Privacy Policy</a>
+                        <a href="/privacy" data-bs-toggle="modal" data-bs-target="#privacyModal" class="footer-link">Privacy Policy</a>
                         <span class="footer-sep">&bull;</span>
-                        <a href="/terms" class="footer-link">Terms of Service</a>
+                        <a href="/terms" data-bs-toggle="modal" data-bs-target="#termsModal" class="footer-link">Terms of Service</a>
                         <span class="footer-sep">&bull;</span>
                         <a href="/contact" data-bs-toggle="modal" data-bs-target="#contactModal" class="footer-link footer-link-contact">
                             <i class="fas fa-envelope me-1"></i>Contact
@@ -893,6 +985,92 @@
             </div>
         </div>
     </footer>
+
+    <!-- Privacy Policy Modal -->
+    <div class="modal fade" id="privacyModal" tabindex="-1" aria-labelledby="privacyModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered legal-modal-dialog">
+            <div class="modal-content legal-modal-content">
+                <!-- Header -->
+                <div class="legal-header">
+                    <h2 class="legal-header-title" id="privacyModalLabel">
+                        <i class="fas fa-user-shield text-primary"></i> Privacy Policy
+                    </h2>
+                    <button type="button" class="btn-contact-close-icon" data-bs-dismiss="modal" aria-label="Close" title="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <p class="text-secondary small mb-3">Effective Date: September 2026</p>
+
+                <div class="legal-modal-body">
+                    <h3 class="legal-section-title">1. Information We Collect</h3>
+                    <p class="legal-section-text">BullyMail processes email headers, text snippets, and uploaded security telemetry submitted for cyberbullying and threat intelligence analysis. User authentication records include username, institutional email address, and role assignments.</p>
+
+                    <h3 class="legal-section-title">2. Data Usage &amp; Confidentiality</h3>
+                    <p class="legal-section-text">Submitted email telemetry is processed strictly for risk scoring, threat classification, and explainable evidence extraction. We do not sell, rent, or distribute ingested data to third-party advertisers.</p>
+
+                    <h3 class="legal-section-title">3. Security Controls &amp; Encryption</h3>
+                    <p class="legal-section-text">All stored operational credentials and mail server credentials are encrypted at rest using AES-128-CBC + HMAC-SHA256 (Fernet master keys). Session cookies are protected via HttpOnly and SameSite attributes.</p>
+
+                    <h3 class="legal-section-title">4. Inquiries &amp; Security Contact</h3>
+                    <p class="legal-section-text">For privacy questions, data governance inquiries, or compliance support, contact <a href="mailto:bullymail.project@gmail.com" class="text-accent text-decoration-none">bullymail.project@gmail.com</a> or open our <a href="#" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#contactModal" class="text-accent text-decoration-none">Contact Desk</a>.</p>
+                </div>
+
+                <!-- Footer -->
+                <div class="legal-card-footer">
+                    <p class="legal-footer-copy">
+                        BullyMail &copy; 2026 &bull; Built by Jaya Chandra Vennam
+                    </p>
+                    <button type="button" class="btn-contact-close-action" data-bs-dismiss="modal">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Terms & Conditions Modal -->
+    <div class="modal fade" id="termsModal" tabindex="-1" aria-labelledby="termsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered legal-modal-dialog">
+            <div class="modal-content legal-modal-content">
+                <!-- Header -->
+                <div class="legal-header">
+                    <h2 class="legal-header-title" id="termsModalLabel">
+                        <i class="fas fa-file-contract text-primary"></i> Terms &amp; Conditions
+                    </h2>
+                    <button type="button" class="btn-contact-close-icon" data-bs-dismiss="modal" aria-label="Close" title="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <p class="text-secondary small mb-3">Effective Date: September 2026</p>
+
+                <div class="legal-modal-body">
+                    <h3 class="legal-section-title">1. Authorized Institutional Use</h3>
+                    <p class="legal-section-text">BullyMail Threat Intelligence Platform is designed for authorized SOC operators, cybersecurity analysts, and academic institutions. Unauthorized automated access, credential sharing, or malicious ingestion is strictly prohibited.</p>
+
+                    <h3 class="legal-section-title">2. Machine Learning &amp; Threat Telemetry Disclaimers</h3>
+                    <p class="legal-section-text">Automated risk scores and explainable threat evidence are generated via calibrated machine learning classifiers and multi-vector heuristic rules. Security analysts should review high-severity incidents prior to taking disciplinary or administrative action.</p>
+
+                    <h3 class="legal-section-title">3. System Availability</h3>
+                    <p class="legal-section-text">The platform is provided "as is" with enterprise availability features. Maintenance windows and background model retraining operations may occur periodically.</p>
+
+                    <h3 class="legal-section-title">4. Inquiries &amp; Legal Contact</h3>
+                    <p class="legal-section-text">For inquiries regarding platform terms, operational acceptable use, or service access agreements, contact <a href="mailto:bullymail.project@gmail.com" class="text-accent text-decoration-none">bullymail.project@gmail.com</a> or open our <a href="#" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#contactModal" class="text-accent text-decoration-none">Contact Desk</a>.</p>
+                </div>
+
+                <!-- Footer -->
+                <div class="legal-card-footer">
+                    <p class="legal-footer-copy">
+                        BullyMail &copy; 2026 &bull; Built by Jaya Chandra Vennam
+                    </p>
+                    <button type="button" class="btn-contact-close-action" data-bs-dismiss="modal">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Contact Modal -->
     <div class="modal fade" id="contactModal" tabindex="-1" aria-labelledby="contactModalLabel" aria-hidden="true">

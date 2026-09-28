@@ -29,39 +29,245 @@
             min-height: 100vh;
             font-family: 'Inter', sans-serif;
             padding: 40px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
         }
+
         .legal-card {
             background: var(--bg-surface-elevated);
-            border: 1px solid var(--neu-rim);
+            border: 1.5px solid var(--neu-rim);
             border-radius: 24px;
             box-shadow: var(--neu-raised);
-            padding: 40px;
+            padding: 36px 32px;
             max-width: 800px;
+            width: 100%;
             margin: 0 auto;
+            position: relative;
+        }
+
+        [data-theme="light"] .legal-card {
+            box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.12), var(--neu-raised);
+        }
+
+        .legal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .legal-header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.45rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin: 0;
+            letter-spacing: -0.01em;
+        }
+
+        .btn-contact-close-icon {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.25rem;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.15s ease;
+        }
+
+        .btn-contact-close-icon:hover {
+            color: var(--text-primary);
+            background: var(--bg-surface-hover);
+            transform: scale(1.08);
+        }
+
+        .legal-section-title {
+            color: var(--text-primary);
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-top: 24px;
+            margin-bottom: 8px;
+        }
+
+        .legal-section-text {
+            color: var(--text-secondary);
+            font-size: 0.92rem;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .legal-card-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 32px;
+            padding-top: 20px;
+            border-top: 1px solid var(--neu-rim-subtle);
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        [data-theme="light"] .legal-card-footer {
+            border-top-color: #e2e8f0;
+        }
+
+        .legal-footer-copy {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        .btn-contact-close-action {
+            background: #fde047;
+            color: #0f172a;
+            font-weight: 700;
+            font-size: 0.88rem;
+            padding: 8px 24px;
+            border-radius: 12px;
+            border: 2px solid #0f172a;
+            box-shadow: 2px 2px 0px #0f172a;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .btn-contact-close-action:hover {
+            background: #facc15;
+            color: #000;
+            transform: translate(-1px, -1px);
+            box-shadow: 3px 3px 0px #0f172a;
+        }
+
+        .theme-toggle-fixed {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+        }
+
+        .theme-toggle-btn {
+            background: var(--bg-surface-elevated);
+            border: 1px solid var(--neu-rim);
+            border-radius: 50%;
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-primary);
+            cursor: pointer;
+            box-shadow: var(--neu-flat);
+            transition: all 0.2s ease;
+        }
+
+        .theme-toggle-btn:hover {
+            transform: rotate(15deg) scale(1.05);
+            border-color: var(--accent-primary);
+        }
+
+        @media (max-width: 576px) {
+            .legal-card {
+                padding: 24px 18px;
+            }
+            .legal-card-footer {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+            .legal-card-footer .d-flex {
+                width: 100%;
+                justify-content: center;
+            }
         }
     </style>
 </head>
 <body>
+
+    <!-- Fixed Theme Toggle -->
+    <div class="theme-toggle-fixed">
+        <button type="button" class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark/light theme" title="Toggle Theme">
+            <i class="fas fa-sun" id="themeIcon"></i>
+        </button>
+    </div>
+
     <div class="legal-card">
-        <h2 class="fw-bold mb-4"><i class="fas fa-file-contract me-3 text-primary"></i>Terms & Conditions</h2>
-        <p class="text-secondary mb-4">Effective Date: September 2026</p>
+        <!-- Header with Title and Close X Button -->
+        <div class="legal-header">
+            <h1 class="legal-header-title">
+                <i class="fas fa-file-contract text-primary"></i> Terms &amp; Conditions
+            </h1>
+            <a href="{{ url_for('main.index') }}" class="btn-contact-close-icon" aria-label="Close" title="Back to Home">
+                <i class="fas fa-times"></i>
+            </a>
+        </div>
         
-        <h5 class="fw-semibold text-light mt-4">1. Authorized Institutional Use</h5>
-        <p class="text-secondary">BullyMail Threat Intelligence Platform is designed for authorized SOC operators, cybersecurity analysts, and academic institutions. Unauthorized automated access, credential sharing, or malicious ingestion is strictly prohibited.</p>
+        <p class="text-secondary small mb-4">Effective Date: September 2026</p>
+        
+        <h2 class="legal-section-title">1. Authorized Institutional Use</h2>
+        <p class="legal-section-text">BullyMail Threat Intelligence Platform is designed for authorized SOC operators, cybersecurity analysts, and academic institutions. Unauthorized automated access, credential sharing, or malicious ingestion is strictly prohibited.</p>
 
-        <h5 class="fw-semibold text-light mt-4">2. Machine Learning & Threat Telemetry Disclaimers</h5>
-        <p class="text-secondary">Automated risk scores and explainable threat evidence are generated via calibrated machine learning classifiers and multi-vector heuristic rules. Security analysts should review high-severity incidents prior to taking disciplinary or administrative action.</p>
+        <h2 class="legal-section-title">2. Machine Learning &amp; Threat Telemetry Disclaimers</h2>
+        <p class="legal-section-text">Automated risk scores and explainable threat evidence are generated via calibrated machine learning classifiers and multi-vector heuristic rules. Security analysts should review high-severity incidents prior to taking disciplinary or administrative action.</p>
 
-        <h5 class="fw-semibold text-light mt-4">3. System Availability</h5>
-        <p class="text-secondary">The platform is provided "as is" with enterprise availability features. Maintenance windows and background model retraining operations may occur periodically.</p>
+        <h2 class="legal-section-title">3. System Availability</h2>
+        <p class="legal-section-text">The platform is provided "as is" with enterprise availability features. Maintenance windows and background model retraining operations may occur periodically.</p>
 
-        <h5 class="fw-semibold text-light mt-4">4. Inquiries & Legal Contact</h5>
-        <p class="text-secondary">For inquiries regarding platform terms, operational acceptable use, or service access agreements, contact <a href="mailto:bullymail.project@gmail.com" class="text-accent text-decoration-none">bullymail.project@gmail.com</a> or visit our <a href="/contact" class="text-accent text-decoration-none">Contact Desk</a>.</p>
+        <h2 class="legal-section-title">4. Inquiries &amp; Legal Contact</h2>
+        <p class="legal-section-text">For inquiries regarding platform terms, operational acceptable use, or service access agreements, contact <a href="mailto:bullymail.project@gmail.com" class="text-accent text-decoration-none">bullymail.project@gmail.com</a> or visit our <a href="/contact" class="text-accent text-decoration-none">Contact Desk</a>.</p>
 
-        <div class="mt-5 pt-3 border-top border-secondary border-opacity-25 d-flex justify-content-between">
-            <a href="{{ url_for('main.index') }}" class="btn btn-outline-light"><i class="fas fa-arrow-left me-2"></i>Back to Home</a>
-            <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary"><i class="fas fa-shield-halved me-2"></i>SOC Console</a>
+        <!-- Footer with Attribution and Close Action -->
+        <div class="legal-card-footer">
+            <p class="legal-footer-copy">
+                BullyMail &copy; 2026 &bull; Built by Jaya Chandra Vennam
+            </p>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('main.index') }}" class="btn-contact-close-action">
+                    Close
+                </a>
+                <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-primary btn-sm rounded-3 d-inline-flex align-items-center">
+                    <i class="fas fa-shield-halved me-1"></i>SOC Console
+                </a>
+            </div>
         </div>
     </div>
+
+    <!-- Theme Controller Script -->
+    <script>
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+        const themeIcon = document.getElementById('themeIcon');
+
+        function updateThemeIcon(theme) {
+            if (theme === 'light') {
+                themeIcon.className = 'fas fa-moon';
+            } else {
+                themeIcon.className = 'fas fa-sun';
+            }
+        }
+
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+        updateThemeIcon(currentTheme);
+
+        themeToggleBtn.addEventListener('click', () => {
+            const now = document.documentElement.getAttribute('data-theme') || 'dark';
+            const next = now === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            document.documentElement.style.colorScheme = next;
+            localStorage.setItem('bullymail_theme', next);
+            updateThemeIcon(next);
+        });
+    </script>
 </body>
 </html>
