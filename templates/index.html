@@ -39,52 +39,48 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
     <!-- BullyMail V2 Core CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.5.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.6.1">
     <!-- Theme Core -->
-    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.5.0"></script>
+    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.6.1"></script>
     
     <style>
         .hero-v2-soc {
             padding: 56px 0 44px;
             background: transparent;
-            border-bottom: 1px solid var(--border-subtle);
+            border-bottom: 1px solid var(--neu-rim-subtle);
             position: relative;
         }
 
-        [data-theme="light"] .hero-v2-soc {
-            background: transparent;
-        }
-
         .vector-card-hero {
-            background: var(--bg-glass);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-lg, 12px);
-            padding: 22px 24px;
+            background: var(--bg-surface-elevated);
+            border: 1px solid var(--neu-rim);
+            border-radius: 20px;
+            padding: 24px;
             height: 100%;
-            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-            box-shadow: inset 0 1px 0 var(--glass-specular), var(--shadow-sm);
+            transition: all var(--transition-fast);
+            box-shadow: var(--neu-raised);
             position: relative;
             overflow: hidden;
         }
 
         .vector-card-hero:hover {
-            border-color: rgba(99, 102, 241, 0.45);
-            box-shadow: inset 0 1px 0 var(--glass-specular-bright), 0 10px 28px -4px rgba(99, 102, 241, 0.22);
-            transform: translateY(-3px);
+            border-color: var(--neu-rim);
+            box-shadow: var(--neu-raised-hover);
+            transform: translateY(-2px);
         }
 
         .vector-icon-circle {
-            width: 40px;
-            height: 40px;
-            border-radius: var(--radius-md);
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.1rem;
+            font-size: 1.15rem;
             flex-shrink: 0;
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+            background: var(--bg-inset);
+            box-shadow: var(--neu-inset);
+            border: 1px solid var(--neu-rim-subtle);
             transition: transform 0.2s ease;
         }
 
@@ -93,25 +89,13 @@
         }
 
         .interactive-demo-card {
-            background: var(--bg-glass);
-            backdrop-filter: blur(20px) saturate(170%);
-            -webkit-backdrop-filter: blur(20px) saturate(170%);
-            border: 1px solid rgba(99, 102, 241, 0.25);
-            border-radius: var(--radius-xl, 16px);
-            padding: 28px 32px;
-            box-shadow: inset 0 1px 0 var(--glass-specular-bright), 0 12px 36px -4px rgba(0, 0, 0, 0.45);
+            background: var(--bg-surface-elevated);
+            border: 1px solid var(--neu-rim);
+            border-radius: 24px;
+            padding: 32px;
+            box-shadow: var(--neu-raised);
             position: relative;
             overflow: hidden;
-        }
-
-        .interactive-demo-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--cyan), var(--accent-primary), var(--purple));
         }
 
         .sample-pill-group {
@@ -122,69 +106,57 @@
         }
 
         .sample-pill {
-            background: var(--bg-glass);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            border: 1px solid var(--border-subtle);
+            background: var(--bg-surface-elevated);
+            border: 1px solid var(--neu-rim);
             color: var(--text-secondary);
-            font-size: 0.76rem;
-            font-weight: 500;
-            padding: 6px 14px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 7px 16px;
             border-radius: var(--radius-full);
             cursor: pointer;
             transition: all var(--transition-fast);
-            box-shadow: inset 0 1px 0 var(--glass-specular);
+            box-shadow: var(--neu-btn);
         }
 
         .sample-pill:hover {
-            background: rgba(99, 102, 241, 0.16);
-            color: #ffffff;
-            border-color: var(--accent-primary);
-            box-shadow: inset 0 1px 0 var(--glass-specular-bright), 0 2px 8px rgba(99, 102, 241, 0.3);
+            box-shadow: var(--neu-btn-hover);
+            color: var(--accent-primary);
             transform: translateY(-1px);
         }
 
-        [data-theme="light"] .sample-pill {
-            background: rgba(255, 255, 255, 0.85);
-            color: #334155;
-            border-color: #cbd5e1;
-            box-shadow: inset 0 1px 0 #ffffff, 0 1px 3px rgba(0, 0, 0, 0.04);
-        }
-
-        [data-theme="light"] .sample-pill:hover {
-            background: #eff6ff;
-            color: #1e40af;
-            border-color: #93c5fd;
+        .sample-pill:active {
+            box-shadow: var(--neu-btn-pressed) !important;
+            transform: translateY(1px);
         }
 
         .navbar-soc {
-            background: rgba(7, 11, 20, 0.85);
-            backdrop-filter: blur(16px) saturate(160%);
-            -webkit-backdrop-filter: blur(16px) saturate(160%);
-            border-bottom: 1px solid var(--border-subtle);
+            background-color: var(--bg-app, #181c24) !important;
+            background: var(--bg-app, #181c24) !important;
+            opacity: 1 !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            border-bottom: 1px solid var(--neu-rim);
+            box-shadow: 0 4px 20px var(--neu-dark-shadow);
             position: sticky;
             top: 0;
             z-index: 1000;
         }
 
         [data-theme="light"] .navbar-soc {
-            background: rgba(255, 255, 255, 0.9);
-            border-color: #e2e8f0;
+            background-color: #e0e5ec !important;
+            background: #e0e5ec !important;
+            border-bottom: 1px solid var(--neu-rim) !important;
+            box-shadow: 0 4px 20px rgba(163, 177, 198, 0.65) !important;
         }
 
         @media (max-width: 991px) {
             .navbar-soc .navbar-collapse {
-                background: var(--bg-surface-elevated, #111a2d);
-                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
-                border-radius: var(--radius-md, 8px);
-                padding: 14px 16px;
+                background: var(--bg-surface-elevated);
+                border: 1px solid var(--neu-rim);
+                border-radius: 16px;
+                padding: 16px;
                 margin-top: 10px;
-                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-            }
-            [data-theme="light"] .navbar-soc .navbar-collapse {
-                background: #ffffff;
-                border-color: #e2e8f0;
-                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+                box-shadow: var(--neu-raised);
             }
             .navbar-soc .navbar-nav {
                 gap: 8px !important;
@@ -192,14 +164,11 @@
             }
             .navbar-soc .nav-link {
                 padding: 8px 12px !important;
-                border-radius: 6px;
+                border-radius: 10px;
                 font-size: 0.9rem !important;
             }
             .navbar-soc .nav-link:hover {
-                background: rgba(255, 255, 255, 0.06);
-            }
-            [data-theme="light"] .navbar-soc .nav-link:hover {
-                background: #f1f5f9;
+                background: var(--bg-surface-hover);
             }
             .navbar-soc .btn-soc-primary {
                 width: 100%;
@@ -223,7 +192,8 @@
                 font-size: 1.75rem !important;
             }
             .interactive-demo-card {
-                padding: 18px 16px;
+                padding: 20px 16px;
+                border-radius: 18px;
             }
         }
     </style>

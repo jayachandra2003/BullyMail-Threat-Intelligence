@@ -30,13 +30,13 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 
     <!-- BullyMail V2 Core CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.5.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.6.1">
     <!-- Theme Core -->
-    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.5.0"></script>
+    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.6.1"></script>
     
     <style>
         body {
-            background-color: var(--bg-app);
+            background-color: var(--bg-canvas);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -46,38 +46,16 @@
             font-family: 'Inter', sans-serif;
         }
 
-        [data-theme="light"] body {
-            background-color: #f8fafc;
-        }
-
         .auth-card-v2 {
             max-width: 480px;
             width: 100%;
-            background: var(--bg-glass);
-            backdrop-filter: blur(20px) saturate(170%);
-            -webkit-backdrop-filter: blur(20px) saturate(170%);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-xl, 16px);
-            box-shadow: inset 0 1px 0 var(--glass-specular-bright), 0 16px 40px -4px rgba(0, 0, 0, 0.45);
+            background: var(--bg-surface-elevated);
+            border: 1px solid var(--neu-rim);
+            border-radius: 24px;
+            box-shadow: var(--neu-raised);
             padding: 34px;
             position: relative;
             overflow: hidden;
-        }
-
-        .auth-card-v2::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--cyan), var(--accent-primary), var(--purple));
-        }
-
-        [data-theme="light"] .auth-card-v2 {
-            background: rgba(255, 255, 255, 0.9);
-            border-color: #cbd5e1;
-            box-shadow: inset 0 1px 0 #ffffff, 0 12px 32px rgba(15, 23, 42, 0.08);
         }
 
         @media (max-width: 480px) {
@@ -86,7 +64,7 @@
             }
             .auth-card-v2 {
                 padding: 24px 18px;
-                border-radius: 12px;
+                border-radius: 18px;
             }
         }
 
@@ -96,18 +74,18 @@
         }
 
         .auth-brand-logo {
-            width: 44px;
-            height: 44px;
-            background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
-            border-radius: 10px;
+            width: 48px;
+            height: 48px;
+            background: var(--bg-surface-elevated);
+            border-radius: 14px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.2rem;
-            color: #ffffff;
+            font-size: 1.25rem;
+            color: var(--accent-primary);
             margin-bottom: 12px;
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 0 18px var(--accent-glow);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: var(--neu-raised);
+            border: 1px solid var(--neu-rim);
         }
 
         .auth-title {
@@ -151,28 +129,21 @@
         }
 
         .form-control-auth {
-            height: 42px;
+            height: 44px;
             font-size: 0.86rem;
-            border-radius: 8px;
-            border: 1px solid var(--border-subtle);
-            background: var(--bg-surface);
+            border-radius: 12px;
+            border: 1px solid var(--neu-rim-subtle);
+            background: var(--bg-inset);
             color: var(--text-primary);
-            padding: 0 12px;
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+            padding: 0 14px;
+            box-shadow: var(--neu-inset);
             transition: all var(--transition-fast);
-        }
-
-        [data-theme="light"] .form-control-auth {
-            background: #ffffff;
-            border-color: #cbd5e1;
-            color: #0f172a;
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
         }
 
         .form-control-auth:focus {
             border-color: var(--accent-primary);
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25), 0 0 14px rgba(99, 102, 241, 0.2);
-            background: var(--bg-surface);
+            box-shadow: var(--neu-inset), 0 0 0 2px var(--accent-glow);
+            background: var(--bg-inset);
             color: var(--text-primary);
         }
 
@@ -183,43 +154,27 @@
             margin-bottom: 4px;
         }
 
-        [data-theme="light"] .auth-label {
-            color: #334155;
-        }
-
         .btn-auth-primary {
-            height: 44px;
+            height: 46px;
             font-size: 0.92rem;
-            font-weight: 600;
-            border-radius: 8px;
-            background: linear-gradient(180deg, #6366f1 0%, #4f46e5 100%);
-            border: 1px solid rgba(255, 255, 255, 0.18);
+            font-weight: 700;
+            border-radius: 12px;
+            background: var(--accent-primary);
+            border: 1px solid var(--neu-rim);
             color: #ffffff;
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 4px 14px rgba(79, 70, 229, 0.4);
-            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: var(--neu-btn);
+            transition: all var(--transition-fast);
         }
 
         .btn-auth-primary:hover {
-            background: linear-gradient(180deg, #7175f5 0%, #4338ca 100%);
-            border-color: rgba(255, 255, 255, 0.3);
+            box-shadow: var(--neu-btn-hover);
             color: #ffffff;
             transform: translateY(-1px);
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 6px 20px rgba(99, 102, 241, 0.55);
         }
 
         .btn-auth-primary:active {
+            box-shadow: var(--neu-btn-pressed) !important;
             transform: translateY(1px) scale(0.98);
-        }
-
-        [data-theme="light"] .btn-auth-primary {
-            background: linear-gradient(180deg, #4f46e5 0%, #4338ca 100%);
-            border-color: rgba(79, 70, 229, 0.5);
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 3px 10px rgba(79, 70, 229, 0.3);
-        }
-
-        [data-theme="light"] .btn-auth-primary:hover {
-            background: linear-gradient(180deg, #4338ca 0%, #3730a3 100%);
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 6px 18px rgba(79, 70, 229, 0.4);
         }
     </style>
 </head>

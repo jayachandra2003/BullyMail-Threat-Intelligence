@@ -30,13 +30,13 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
     <!-- BullyMail V2 Cyber SOC Stylesheets (Cache-Busted) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.5.2">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=2.5.2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.6.2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=2.6.2">
     
     <!-- Chart.js 4 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Theme Core -->
-    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.5.2"></script>
+    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.6.2"></script>
 </head>
 <body>
     <div class="dashboard-layout">
@@ -234,18 +234,12 @@
                     <div>
                         <h1 class="page-title text-primary-soc mb-0 d-flex align-items-center flex-wrap">
                             <span><i class="fas fa-shield-alt text-accent me-2"></i>{% if is_platform_owner %}BullyMail Platform / Super Admin Command Center{% else %}{{ institution_name or 'Organization' }} Security Operations Center{% endif %}</span>
-                            <span class="badge soc-title-badge ms-2">ENTERPRISE SOC PRO v2.4.1</span>
                         </h1>
                         <p class="text-muted small mb-0">{% if is_platform_owner %}Platform-wide tenant administration, registration governance & threat intelligence.{% else %}Multi-vector email threat detection, ML powered analysis & member protection for {{ institution_name or 'your organization' }}.{% endif %}</p>
                     </div>
                 </div>
 
                 <div class="telemetry-chip-group">
-                    <!-- Sync Action -->
-                    <button class="btn-soc-secondary btn-sm font-mono" id="btnHeaderSyncTelemetry" onclick="triggerHeaderSyncTelemetry(this)" title="Sync Telemetry" aria-label="Sync Telemetry">
-                        <i class="fas fa-arrows-rotate me-1"></i> Sync Now
-                    </button>
-
                     <!-- Single-Click Theme Toggle Button -->
                     <button type="button" class="soc-theme-toggle-btn" aria-label="Switch Theme" title="Switch Theme">
                         <i class="fas fa-moon"></i>
@@ -264,69 +258,7 @@
                  SECTION 1: Executive Dashboard Tab (Mission Control Architecture)
                  ============================================================== -->
             <section id="tab-dashboard" class="tab-content-pane">
-                {% if session.get('role') in ('org_admin', 'organization_admin', 'admin') %}
-                <!-- Organization Tenant Operational Command Banner -->
-                <div class="soc-panel p-3 mb-4 bg-base border-subtle">
-                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                        <div class="d-flex align-items-center gap-3" style="min-width: 0; max-width: 100%;">
-                            <div class="brand-logo flex-shrink-0" style="width: 44px; height: 44px; border-radius: 8px; background: rgba(56, 189, 248, 0.1); display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 1.3rem;">
-                                <i class="fas fa-building-shield"></i>
-                            </div>
-                            <div style="min-width: 0; flex: 1;">
-                                <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
-                                    <h4 class="fw-bold mb-0 text-primary-soc font-mono" style="font-size: 1.15rem; word-break: break-word;" id="tenantBannerName">{{ session.get('institution_name') or 'Organization' }}</h4>
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle font-mono px-2 py-1 text-wrap" style="font-size: 0.7rem; max-width: 100%;">
-                                        <i class="fas fa-circle-check me-1"></i>ACTIVE TENANT
-                                    </span>
-                                </div>
-                                <div class="text-muted small font-mono" style="word-break: break-word;">Isolated Security Operations Center • Dedicated Mailbox Ingestion & Member Protection</div>
-                            </div>
-                        </div>
-                        <div class="d-flex gap-2 flex-wrap align-items-center">
-                            <button type="button" class="btn-soc-primary btn-sm font-mono" onclick="switchTab('tab-members')">
-                                <i class="fas fa-users-gear me-1"></i> Members (<span id="tenantStatMembers">0</span>)
-                            </button>
-                            <button type="button" class="btn-soc-outline btn-sm font-mono" onclick="switchTab('tab-email')">
-                                <i class="fas fa-inbox me-1"></i> Mailboxes (<span id="tenantStatMailboxes">0</span>)
-                            </button>
-                            <button type="button" class="btn-soc-outline btn-sm font-mono" onclick="switchTab('tab-analyze')">
-                                <i class="fas fa-microscope me-1"></i> Threat Analyzer
-                            </button>
-                            <button type="button" class="btn-soc-outline btn-sm font-mono" onclick="switchTab('tab-history')">
-                                <i class="fas fa-clock-rotate-left me-1"></i> Incident History
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                {% elif session.get('role') in ('platform_owner', 'super_admin') %}
-                <!-- Platform Owner Command Banner -->
-                <div class="soc-panel p-3 mb-4 bg-base border-subtle">
-                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                        <div class="d-flex align-items-center gap-3" style="min-width: 0; max-width: 100%;">
-                            <div class="brand-logo flex-shrink-0" style="width: 44px; height: 44px; border-radius: 8px; background: rgba(245, 158, 11, 0.1); display: flex; align-items: center; justify-content: center; color: var(--bs-warning, #f59e0b); font-size: 1.3rem;">
-                                <i class="fas fa-crown"></i>
-                            </div>
-                            <div style="min-width: 0; flex: 1;">
-                                <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
-                                    <h4 class="fw-bold mb-0 text-primary-soc font-mono" style="font-size: 1.15rem; word-break: break-word;">BullyMail Platform Command Center</h4>
-                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle font-mono px-2 py-1 text-wrap" style="font-size: 0.7rem; max-width: 100%;">
-                                        <i class="fas fa-shield me-1"></i>PLATFORM OWNER: JAYA CHANDRA VENNAM
-                                    </span>
-                                </div>
-                                <div class="text-muted small font-mono" style="word-break: break-word;">Global Multi-Tenant Administration, Registration Approvals & Security Governance</div>
-                            </div>
-                        </div>
-                        <div class="d-flex gap-2 flex-wrap align-items-center">
-                            <button type="button" class="btn-soc-warning btn-sm font-mono" onclick="switchTab('tab-pending-approvals')">
-                                <i class="fas fa-user-clock me-1"></i> Pending Approvals
-                            </button>
-                            <button type="button" class="btn-soc-outline btn-sm font-mono" onclick="switchTab('tab-organizations')">
-                                <i class="fas fa-sitemap me-1"></i> Organizations
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
+
 
                 <!-- 1. Executive Security Summary Strip (5 Futuristic KPI Cards) -->
                 <div class="soc-kpi-grid mb-4" id="socExecutiveSummaryStrip">
@@ -2062,7 +1994,7 @@
         window.isAnalystUser = {{ 'true' if is_analyst else 'false' }};
         window.institutionName = {{ ((institution_name or session.get('institution_name', '')) | tojson) }};
     </script>
-    <script src="{{ url_for('static', filename='js/core/toast.js') }}?v=2.5.2"></script>
-    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=2.5.2"></script>
+    <script src="{{ url_for('static', filename='js/core/toast.js') }}?v=2.6.2"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=2.6.2"></script>
 </body>
 </html>
