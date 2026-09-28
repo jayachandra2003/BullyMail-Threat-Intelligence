@@ -92,6 +92,38 @@ def test_analyst_cannot_access_admin_endpoints(client, app):
     res4 = client.get('/api/admin/pending-users')
     assert res4.status_code == 403
 
+def test_org_admin_cannot_access_platform_intelligence_endpoints(client, app):
+    with app.app_context():
+        user_id = UserModel.create_user(
+            username='org_admin_tester',
+            password='TestPassword123!',
+            email='org_admin_tester@test.com',
+            status='ACTIVE',
+            role='org_admin',
+            institution_id=1
+        )
+    client.post('/login', json={'username': 'org_admin_tester', 'password': 'TestPassword123!'})
+
+    # Train model (Super Admin only)
+    res1 = client.post('/api/train-model', json={})
+    assert res1.status_code == 403
+
+    # Generate dataset (Super Admin only)
+    res2 = client.post('/api/generate-dataset', json={})
+    assert res2.status_code == 403
+
+    # Load model (Super Admin only)
+    res3 = client.post('/api/load-model', json={'model_type': 'latest'})
+    assert res3.status_code == 403
+
+    # Model status (Super Admin only)
+    res4 = client.get('/api/model-status')
+    assert res4.status_code == 403
+
+    # Available datasets (Super Admin only)
+    res5 = client.get('/api/available-datasets')
+    assert res5.status_code == 403
+
 def test_admin_can_access_admin_endpoints(client, app):
     with app.app_context():
         user_id = UserModel.create_user(

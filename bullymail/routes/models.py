@@ -11,7 +11,7 @@ models_bp = Blueprint('models', __name__)
 detector = BullyingDetector()
 
 @models_bp.route('/api/model-status', methods=['GET'])
-@require_auth
+@require_role('platform_owner', 'super_admin')
 def get_model_status(current_user):
     """Retrieves current model status, list of serialized artifacts, and training history."""
     try:
@@ -41,7 +41,7 @@ def get_model_status(current_user):
         return jsonify({'success': False, 'error': 'Failed to retrieve model registry status.'}), 500
 
 @models_bp.route('/api/train-model', methods=['POST'])
-@require_role('admin')
+@require_role('platform_owner', 'super_admin')
 def train_model(current_user):
     """Trains a new cyberbullying model on generated or uploaded data with proper evaluation metrics (Admin Only)."""
     import logging
@@ -105,7 +105,7 @@ def train_model(current_user):
         }), 500
 
 @models_bp.route('/api/load-model', methods=['POST'])
-@require_role('admin')
+@require_role('platform_owner', 'super_admin')
 def load_model(current_user):
     """Atomically loads a specific model and its paired vectorizer from saved_models directory (Admin Only)."""
     data = request.get_json() or {}

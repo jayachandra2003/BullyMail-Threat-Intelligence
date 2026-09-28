@@ -34,6 +34,29 @@ def test_train_model_requires_admin_role(client, app):
     res_load_analyst = client.post('/api/load-model', json={'model_type': 'latest'})
     assert res_load_analyst.status_code == 403
 
+    # 3. Org Admin role request (must be rejected from platform-wide model retraining)
+    with app.app_context():
+        org_admin_id = UserModel.create_user(
+            username='org_admin_user',
+            password='TestPassword123!',
+            email='org_admin@test.com',
+            status='PENDING_EMAIL_VERIFICATION'
+        )
+        UserModel.activate_user_email(org_admin_id)
+        UserModel.approve_user_by_admin(org_admin_id, role='org_admin', institution_id=1)
+
+    with client.session_transaction() as sess:
+        sess['user_id'] = org_admin_id
+        sess['username'] = 'org_admin_user'
+        sess['role'] = 'org_admin'
+
+    res_org_admin = client.post('/api/train-model', json={'model_type': 'logistic', 'training_samples': 1000})
+    assert res_org_admin.status_code == 403
+    res_load_org_admin = client.post('/api/load-model', json={'model_type': 'latest'})
+    assert res_load_org_admin.status_code == 403
+    res_status_org_admin = client.get('/api/model-status')
+    assert res_status_org_admin.status_code == 403
+
 def test_train_model_logistic_success_2000_samples(auth_client):
     """Verifies that training Logistic Regression with 2,000 samples succeeds end-to-end."""
     res = auth_client.post('/api/train-model', json={

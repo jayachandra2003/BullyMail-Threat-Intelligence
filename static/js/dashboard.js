@@ -60,10 +60,10 @@ document.addEventListener('DOMContentLoaded', () => {
     loadDashboardStats();
     loadThreatTrendData('7d');
     loadAnalysisHistory();
-    loadModelStatus();
-    loadAvailableDatasets();
 
     if (isPlatformOwner()) {
+        loadModelStatus();
+        loadAvailableDatasets();
         loadPendingRegistrations();
         loadPlatformOrganizations();
     } else if (isOrganizationAdmin()) {

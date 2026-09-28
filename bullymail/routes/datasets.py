@@ -235,7 +235,7 @@ from .auth import get_current_user, require_role, require_auth
 
 @datasets_bp.route('/api/generate-dataset', methods=['POST'])
 @datasets_bp.route('/api/generate-large-dataset', methods=['POST'])
-@require_role('admin')
+@require_role('platform_owner', 'super_admin')
 def generate_dataset_route(current_user):
     """Generates diverse, deduplicated synthetic multi-sheet Excel datasets (Admin Only)."""
     data = request.get_json() or {}
@@ -292,7 +292,7 @@ def generate_dataset_route(current_user):
         return jsonify({'success': False, 'error': 'Failed to generate synthetic dataset.'}), 500
 
 @datasets_bp.route('/api/download-dataset/<filename>')
-@require_auth
+@require_role('platform_owner', 'super_admin')
 def download_dataset(current_user, filename):
     """Safely serves generated datasets for download with path traversal defense."""
     safe_fn = secure_filename(filename)
@@ -306,7 +306,7 @@ def download_dataset(current_user, filename):
     return send_file(filepath, as_attachment=True, download_name=safe_fn)
 
 @datasets_bp.route('/api/available-datasets')
-@require_auth
+@require_role('platform_owner', 'super_admin')
 def available_datasets(current_user):
     """Lists all available dataset files."""
     datasets = []
@@ -328,7 +328,7 @@ def available_datasets(current_user):
         return jsonify({'success': False, 'error': 'Failed to list available datasets.'}), 500
 
 @datasets_bp.route('/api/dataset-history')
-@require_auth
+@require_role('platform_owner', 'super_admin')
 def dataset_history(current_user):
     """Fetches generation log history."""
     try:
