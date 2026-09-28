@@ -30,13 +30,13 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
     <!-- BullyMail V2 Cyber SOC Stylesheets (Cache-Busted) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.6.8">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=2.6.8">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.6.9">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=2.6.9">
     
     <!-- Chart.js 4 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Theme Core -->
-    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.6.8"></script>
+    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.6.9"></script>
 </head>
 <body>
     <div class="dashboard-layout">
@@ -797,9 +797,17 @@
                                 <p class="text-muted small mb-0">Manage your institutional mailbox connections and synchronization.</p>
                             </div>
                             {% if session.get('role') in ('platform_owner', 'super_admin', 'org_admin', 'organization_admin', 'admin') %}
-                            <button type="button" class="btn-soc-primary btn-sm font-mono" onclick="openAddMailboxModal()">
-                                <i class="fas fa-plus me-1"></i> Add Secure Mailbox
-                            </button>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <a href="/api/mailboxes/template-csv" class="btn-soc-outline btn-sm font-mono" title="Download sample CSV template">
+                                    <i class="fas fa-download me-1"></i> CSV Template
+                                </a>
+                                <button type="button" class="btn-soc-secondary btn-sm font-mono" onclick="openImportMailboxCsvModal()">
+                                    <i class="fas fa-file-import me-1"></i> Bulk Import CSV
+                                </button>
+                                <button type="button" class="btn-soc-primary btn-sm font-mono" onclick="openAddMailboxModal()">
+                                    <i class="fas fa-plus me-1"></i> Add Secure Mailbox
+                                </button>
+                            </div>
                             {% endif %}
                         </div>
 
@@ -1633,6 +1641,48 @@
             </div>
             {% endif %}
 
+            <!-- Bulk Import Secure Mailboxes (CSV) Modal -->
+            <div class="modal fade soc-action-modal" id="importMailboxCsvModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content soc-panel p-2">
+                        <div class="modal-header border-0">
+                            <h5 class="modal-title text-primary-soc font-mono">
+                                <i class="fas fa-file-csv text-accent me-2"></i>Bulk Import Secure Mailboxes (CSV)
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="formImportMailboxCsv" onsubmit="event.preventDefault(); submitMailboxCsvImport();">
+                                <p class="text-muted font-mono small mb-3">
+                                    Upload a CSV file containing mailboxes to connect. Expected columns: <code>email_address,app_password,provider,imap_server,smtp_server,smtp_port</code>.
+                                </p>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">TARGET WORKSPACE</label>
+                                    <input type="text" class="form-control soc-input font-mono fw-bold" id="inputMailboxImportInstName" readonly>
+                                    <input type="hidden" id="inputMailboxImportInstId">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="intake-field-label">CSV FILE</label>
+                                    <input type="file" class="form-control soc-input font-mono" id="inputMailboxCsvFile" accept=".csv" required>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <a href="/api/mailboxes/template-csv" class="font-mono small text-accent text-decoration-none">
+                                        <i class="fas fa-download me-1"></i> Download Sample CSV
+                                    </a>
+                                </div>
+                                <div id="importMailboxCsvResults" class="d-none mb-3"></div>
+                                <div class="d-flex justify-content-end gap-2 mt-4">
+                                    <button type="button" class="btn-soc-outline btn-sm font-mono" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn-soc-primary btn-sm font-mono" id="btnSubmitImportMailboxCsv">
+                                        <i class="fas fa-upload me-1"></i> Upload & Import
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Add Mailbox Modal -->
             <div class="modal fade" id="addMailboxModal" tabindex="-1" aria-labelledby="addMailboxModalLabel" aria-hidden="true">
                 <div class="modal-dialog modal-dialog-centered">
@@ -1975,7 +2025,7 @@
         window.isAnalystUser = {{ 'true' if is_analyst else 'false' }};
         window.institutionName = {{ ((institution_name or session.get('institution_name', '')) | tojson) }};
     </script>
-    <script src="{{ url_for('static', filename='js/core/toast.js') }}?v=2.6.8"></script>
-    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=2.6.8"></script>
+    <script src="{{ url_for('static', filename='js/core/toast.js') }}?v=2.6.9"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=2.6.9"></script>
 </body>
 </html>

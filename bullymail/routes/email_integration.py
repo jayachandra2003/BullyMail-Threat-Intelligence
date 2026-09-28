@@ -1,4 +1,7 @@
-from flask import Blueprint, request, jsonify, session
+import csv
+import io
+import re
+from flask import Blueprint, request, jsonify, session, Response
 from ..database.connection import fetch_one
 from ..services.email_service import EmailService, email_service
 from ..services.risk_engine import UnifiedRiskEngine
@@ -306,6 +309,154 @@ def create_mailbox(current_user):
         'message': 'Mailbox configured and verified successfully.',
         'mailbox_id': mailbox.get('id')
     })
+
+@email_bp.route('/api/mailboxes/template-csv', methods=['GET'])
+@require_role('admin', 'org_admin', 'platform_owner')
+def download_mailbox_template(current_user):
+    """Returns downloadable sample CSV template for bulk mailbox onboarding."""
+    sample_csv = (
+        "email_address,app_password,provider,imap_server,smtp_server,smtp_port\r\n"
+        "\"counseling@example.edu\",\"abcd efgh ijkl mnop\",\"gmail\",\"imap.gmail.com\",\"smtp.gmail.com\",587\r\n"
+        "\"helpdesk@example.edu\",\"qrst uvwx yzab cdef\",\"gmail\",\"imap.gmail.com\",\"smtp.gmail.com\",587\r\n"
+        "\"security@example.edu\",\"ghij klmn opqr stuv\",\"outlook\",\"outlook.office365.com\",\"smtp.office365.com\",587\r\n"
+    )
+    return Response(
+        sample_csv,
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment;filename=bullymail_mailboxes_template.csv'}
+    )
+
+@email_bp.route('/api/mailboxes/import-csv', methods=['POST'])
+@require_role('admin', 'org_admin', 'platform_owner')
+def import_mailboxes_csv(current_user):
+    """Bulk imports institutional mailboxes via CSV file upload (Tenant Scoped)."""
+    try:
+        req_inst = request.form.get('institution_id') or request.args.get('institution_id')
+        inst_id, err = resolve_tenant_id(current_user, req_inst, allow_global=False, strict_403=True)
+        if err:
+            msg, code = err
+            return jsonify({'success': False, 'error': msg}), code
+
+        if 'file' in request.files:
+            uploaded_file = request.files['file']
+            if not uploaded_file.filename:
+                return jsonify({'success': False, 'error': 'No file selected.'}), 400
+            content = uploaded_file.read().decode('utf-8', errors='replace')
+        elif request.data:
+            content = request.data.decode('utf-8', errors='replace')
+        else:
+            return jsonify({'success': False, 'error': 'CSV file or content is required.'}), 400
+
+        # Parse CSV
+        stream = io.StringIO(content.strip())
+        reader = csv.DictReader(stream)
+        if not reader.fieldnames:
+            return jsonify({'success': False, 'error': 'CSV file is empty or missing headers.'}), 400
+
+        # Normalize fieldnames
+        field_map = {fn.strip().lower(): fn for fn in reader.fieldnames if fn}
+        email_key = field_map.get('email_address') or field_map.get('email')
+        password_key = field_map.get('app_password') or field_map.get('password') or field_map.get('apppassword')
+        provider_key = field_map.get('provider')
+        imap_key = field_map.get('imap_server') or field_map.get('imap')
+        smtp_key = field_map.get('smtp_server') or field_map.get('smtp')
+        port_key = field_map.get('smtp_port') or field_map.get('port')
+
+        if not email_key or not password_key:
+            return jsonify({
+                'success': False,
+                'error': 'CSV must include "email_address" and "app_password" columns.'
+            }), 400
+
+        imported = 0
+        updated = 0
+        skipped = 0
+        errors = []
+
+        EMAIL_REGEX = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+        for row_idx, row in enumerate(reader, start=2):
+            raw_email = (row.get(email_key) or '').strip()
+            raw_pw = (row.get(password_key) or '').strip()
+
+            if not raw_email and not raw_pw:
+                continue
+
+            if not raw_email or not EMAIL_REGEX.match(raw_email):
+                errors.append(f"Row {row_idx}: Invalid or missing email address '{raw_email}'.")
+                continue
+
+            if not raw_pw:
+                errors.append(f"Row {row_idx}: Missing App Password for {raw_email}.")
+                continue
+
+            # Determine provider & servers
+            raw_provider = (row.get(provider_key) or '').strip().lower() if provider_key else ''
+            imap_server = (row.get(imap_key) or '').strip() if imap_key else ''
+            smtp_server = (row.get(smtp_key) or '').strip() if smtp_key else ''
+            smtp_port_raw = (row.get(port_key) or '').strip() if port_key else '587'
+
+            try:
+                smtp_port = int(smtp_port_raw) if smtp_port_raw else 587
+            except ValueError:
+                smtp_port = 587
+
+            domain = raw_email.split('@')[-1].lower() if '@' in raw_email else ''
+            if not imap_server:
+                if raw_provider == 'outlook' or 'outlook' in domain or 'office365' in domain:
+                    imap_server = 'outlook.office365.com'
+                else:
+                    imap_server = 'imap.gmail.com'
+
+            if not smtp_server:
+                if raw_provider == 'outlook' or 'outlook' in domain or 'office365' in domain:
+                    smtp_server = 'smtp.office365.com'
+                else:
+                    smtp_server = 'smtp.gmail.com'
+
+            # Check if mailbox already exists for this institution
+            existing = fetch_one(
+                "SELECT id FROM email_config WHERE institution_id = %s AND LOWER(email_address) = LOWER(%s)",
+                (inst_id, raw_email)
+            )
+
+            try:
+                if existing:
+                    email_service.update_mailbox_credentials(
+                        mailbox_id=existing['id'],
+                        institution_id=inst_id,
+                        email_address=raw_email,
+                        app_password=raw_pw,
+                        imap_server=imap_server,
+                        smtp_server=smtp_server,
+                        smtp_port=smtp_port
+                    )
+                    updated += 1
+                else:
+                    email_service.configure_mailbox(
+                        institution_id=inst_id,
+                        email_address=raw_email,
+                        app_password=raw_pw,
+                        imap_server=imap_server,
+                        smtp_server=smtp_server,
+                        smtp_port=smtp_port
+                    )
+                    imported += 1
+            except Exception as ex:
+                errors.append(f"Row {row_idx} ({raw_email}): {str(ex)}")
+
+        return jsonify({
+            'success': True,
+            'imported': imported,
+            'updated': updated,
+            'skipped': skipped,
+            'errors': errors,
+            'message': f"Processed CSV: {imported} imported, {updated} updated, {len(errors)} error(s)."
+        })
+    except ValueError as ve:
+        return jsonify({'success': False, 'error': str(ve)}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': f"Mailbox CSV import failed: {e}"}), 500
 
 @email_bp.route('/api/mailbox/<int:mailbox_id>/sync', methods=['POST'])
 @email_bp.route('/api/mailboxes/<int:mailbox_id>/sync', methods=['POST'])

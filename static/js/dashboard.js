@@ -5101,6 +5101,123 @@ async function submitMemberCsvImport() {
     }
 }
 
+function openImportMailboxCsvModal() {
+    const instId = getCurrentInstitutionId();
+    let instName = window.institutionName || '';
+    if (instId && window.cachedInstitutions && window.cachedInstitutions.length > 0) {
+        const inst = window.cachedInstitutions.find(i => i.id === instId);
+        if (inst) instName = `${inst.name} (${inst.code || 'INST'})`;
+    }
+    if (!instName) {
+        instName = instId ? `Institution #${instId}` : (isPlatformOwner() ? 'Select an Organization' : 'My Organization');
+    }
+
+    const nameEl = document.getElementById('inputMailboxImportInstName');
+    const idEl = document.getElementById('inputMailboxImportInstId');
+    if (nameEl) nameEl.value = instName;
+    if (idEl) idEl.value = instId || '';
+
+    const resultsContainer = document.getElementById('importMailboxCsvResults');
+    if (resultsContainer) {
+        resultsContainer.innerHTML = '';
+        resultsContainer.classList.add('d-none');
+    }
+    const fileInput = document.getElementById('inputMailboxCsvFile');
+    if (fileInput) fileInput.value = '';
+
+    const modalEl = document.getElementById('importMailboxCsvModal');
+    if (modalEl && window.bootstrap) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+}
+
+async function submitMailboxCsvImport() {
+    const fileInput = document.getElementById('inputMailboxCsvFile');
+    const file = fileInput?.files?.[0];
+    if (!file) {
+        if (window.SOCToast) SOCToast.error('Please select a CSV file to upload.', 'Mailbox Import');
+        return;
+    }
+
+    const btn = document.getElementById('btnSubmitImportMailboxCsv');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin me-1"></i> Importing...`;
+    }
+
+    const resultsContainer = document.getElementById('importMailboxCsvResults');
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const curInst = getCurrentInstitutionId();
+        if (curInst) formData.append('institution_id', curInst);
+
+        const res = await fetch('/api/mailboxes/import-csv', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            if (resultsContainer) {
+                resultsContainer.classList.remove('d-none');
+                let errHtml = '';
+                if (data.errors && data.errors.length > 0) {
+                    errHtml = `
+                        <div class="mt-2 text-danger small font-mono" style="max-height: 100px; overflow-y: auto;">
+                            <strong>Import Notices:</strong>
+                            <ul class="mb-0 ps-3">
+                                ${data.errors.slice(0, 5).map(e => `<li>${escapeHtml(e)}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+                resultsContainer.innerHTML = `
+                    <div class="alert alert-success font-mono small mb-0 p-3">
+                        <i class="fas fa-check-circle me-1 text-success"></i>
+                        Successfully imported <strong>${data.imported}</strong> mailbox(es), updated <strong>${data.updated || 0}</strong>.
+                        ${errHtml}
+                    </div>
+                `;
+            }
+
+            if (window.SOCToast) SOCToast.success(`Imported ${data.imported} mailboxes successfully.`, 'Bulk CSV Import');
+            if (typeof loadSecureMailboxes === 'function') {
+                await loadSecureMailboxes();
+            }
+
+            if (!data.errors || data.errors.length === 0) {
+                setTimeout(() => {
+                    const modalEl = document.getElementById('importMailboxCsvModal');
+                    if (modalEl && window.bootstrap) {
+                        const inst = bootstrap.Modal.getInstance(modalEl);
+                        if (inst) inst.hide();
+                    }
+                }, 2200);
+            }
+        } else {
+            if (resultsContainer) {
+                resultsContainer.classList.remove('d-none');
+                resultsContainer.innerHTML = `<div class="alert alert-danger font-mono small mb-0 p-3">${escapeHtml(data.error || 'CSV import failed.')}</div>`;
+            }
+            if (window.SOCToast) SOCToast.error(data.error || 'Failed to import CSV.', 'Mailbox Import');
+        }
+    } catch (e) {
+        if (resultsContainer) {
+            resultsContainer.classList.remove('d-none');
+            resultsContainer.innerHTML = `<div class="alert alert-danger font-mono small mb-0 p-3">Error: ${escapeHtml(e.message)}</div>`;
+        }
+        if (window.SOCToast) SOCToast.error(`Error: ${e.message}`, 'Mailbox Import');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+}
+
 /* ==========================================================================
    SECTION: Organization Profile & Settings (Org Admin)
    ========================================================================== */
