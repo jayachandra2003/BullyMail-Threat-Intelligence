@@ -1669,16 +1669,13 @@ function renderLLMSecurityReport(rep, container) {
     const explanation = rep.explanation || (isThreat ? 'Direct threat indicators identified in communication.' : 'No malicious threat vectors identified.');
     const modelName = rep.model || 'nvidia/nemotron-3.5-lightning:free';
 
-    let sevBadge = '<span class="badge bg-success px-2 py-1 font-mono">LOW</span>';
+    let sevBadge = `<span class="badge-risk ${severity}">${severity}</span>`;
     let sevBorderClass = 'border-success';
     if (severity === 'CRITICAL') {
-        sevBadge = '<span class="badge bg-danger px-2 py-1 font-mono">CRITICAL</span>';
         sevBorderClass = 'border-danger';
     } else if (severity === 'HIGH') {
-        sevBadge = '<span class="badge bg-warning text-dark px-2 py-1 font-mono">HIGH</span>';
         sevBorderClass = 'border-warning';
     } else if (severity === 'MEDIUM') {
-        sevBadge = '<span class="badge bg-info text-dark px-2 py-1 font-mono">MEDIUM</span>';
         sevBorderClass = 'border-info';
     }
 
@@ -3366,10 +3363,7 @@ async function loadInstitutionEmails(instId) {
         data.emails.forEach(item => {
             const dateStr = item.created_at ? new Date(item.created_at).toLocaleString() : 'N/A';
             const risk = item.overall_risk_level || 'LOW';
-            let riskBadge = '<span class="badge bg-success">LOW</span>';
-            if (risk === 'CRITICAL') riskBadge = '<span class="badge bg-danger">CRITICAL</span>';
-            else if (risk === 'HIGH') riskBadge = '<span class="badge bg-warning text-dark">HIGH</span>';
-            else if (risk === 'MEDIUM') riskBadge = '<span class="badge bg-info text-dark">MEDIUM</span>';
+            let riskBadge = `<span class="badge-risk ${risk}">${risk}</span>`;
 
             let vector = 'Clean';
             if (item.is_bullying) vector = 'Cyberbullying';
@@ -3778,10 +3772,7 @@ function renderMailboxInboxTableRows(emails, tbody) {
         const dateStr = item.created_at ? new Date(item.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A';
         const risk = item.overall_risk_level || 'LOW';
 
-        let riskBadge = '<span class="badge bg-success font-mono">LOW</span>';
-        if (risk === 'CRITICAL') riskBadge = '<span class="badge bg-danger font-mono">CRITICAL</span>';
-        else if (risk === 'HIGH') riskBadge = '<span class="badge bg-warning text-dark font-mono">HIGH</span>';
-        else if (risk === 'MEDIUM') riskBadge = '<span class="badge bg-info text-dark font-mono">MEDIUM</span>';
+        let riskBadge = `<span class="badge-risk ${risk}">${risk}</span>`;
 
         let vector = 'Clean';
         if (item.is_bullying) vector = 'Cyberbullying';

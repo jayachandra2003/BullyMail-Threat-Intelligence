@@ -609,16 +609,18 @@
     background: var(--threat-safe-bg);
     border: 1px solid var(--threat-safe-border);
     color: var(--threat-safe);
-    padding: 5px 12px;
+    padding: 0 10px;
+    height: 22px;
+    box-sizing: border-box;
     border-radius: var(--radius-full);
-    font-size: 0.72rem;
-    font-family: 'JetBrains Mono', monospace;
-    font-weight: 700;
+    font-size: 0.68rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+    font-weight: 600;
     display: inline-flex;
     align-items: center;
     gap: 6px;
     letter-spacing: 0.04em;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 0 10px rgba(16, 185, 129, 0.2);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .telemetry-chip {
@@ -2981,13 +2983,15 @@
     background: rgba(239, 68, 68, 0.15);
     color: #ef4444;
     border: 1px solid rgba(239, 68, 68, 0.35);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.65rem;
-    font-weight: 700;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+    font-size: 0.68rem;
+    font-weight: 600;
     letter-spacing: 0.04em;
-    padding: 2px 8px;
+    padding: 0 8px;
+    height: 22px;
+    box-sizing: border-box;
     border-radius: var(--radius-full, 9999px);
-    line-height: 1.4;
+    line-height: 1;
     white-space: nowrap;
 }
 
@@ -3004,13 +3008,15 @@
     background: rgba(249, 115, 22, 0.15);
     color: #f97316;
     border: 1px solid rgba(249, 115, 22, 0.35);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.65rem;
-    font-weight: 700;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+    font-size: 0.68rem;
+    font-weight: 600;
     letter-spacing: 0.04em;
-    padding: 2px 8px;
+    padding: 0 8px;
+    height: 22px;
+    box-sizing: border-box;
     border-radius: var(--radius-full, 9999px);
-    line-height: 1.4;
+    line-height: 1;
     white-space: nowrap;
 }
 
@@ -3027,13 +3033,15 @@
     background: rgba(99, 102, 241, 0.15);
     color: #818cf8;
     border: 1px solid rgba(99, 102, 241, 0.3);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.65rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+    font-size: 0.68rem;
     font-weight: 600;
     letter-spacing: 0.04em;
-    padding: 2px 8px;
+    padding: 0 8px;
+    height: 22px;
+    box-sizing: border-box;
     border-radius: var(--radius-full, 9999px);
-    line-height: 1.4;
+    line-height: 1;
     white-space: nowrap;
 }
 
@@ -3050,13 +3058,15 @@
     background: rgba(148, 163, 184, 0.12);
     color: #94a3b8;
     border: 1px solid rgba(148, 163, 184, 0.25);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.65rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+    font-size: 0.68rem;
     font-weight: 500;
     letter-spacing: 0.04em;
-    padding: 2px 8px;
+    padding: 0 8px;
+    height: 22px;
+    box-sizing: border-box;
     border-radius: var(--radius-full, 9999px);
-    line-height: 1.4;
+    line-height: 1;
     white-space: nowrap;
 }
 
@@ -3073,13 +3083,15 @@
     background: rgba(16, 185, 129, 0.15);
     color: #10b981;
     border: 1px solid rgba(16, 185, 129, 0.35);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.65rem;
-    font-weight: 700;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+    font-size: 0.68rem;
+    font-weight: 600;
     letter-spacing: 0.04em;
-    padding: 2px 8px;
+    padding: 0 8px;
+    height: 22px;
+    box-sizing: border-box;
     border-radius: var(--radius-full, 9999px);
-    line-height: 1.4;
+    line-height: 1;
     white-space: nowrap;
 }
 
@@ -3094,13 +3106,15 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 2px 9px;
+    padding: 0 9px;
+    height: 22px;
+    box-sizing: border-box;
     border-radius: var(--radius-full, 9999px);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
-    font-weight: 700;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+    font-size: 0.68rem;
+    font-weight: 600;
     letter-spacing: 0.03em;
-    line-height: 1.4;
+    line-height: 1;
     white-space: nowrap;
 }
 

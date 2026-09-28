@@ -362,66 +362,93 @@ code, pre, .font-mono {
 }
 
 /* ==========================================================================
-   6. Threat Badges (Neumorphic Micro-Pill Architecture)
+   6. Threat Badges (Enterprise SOC Precision Micro-Pills)
    ========================================================================== */
 .badge-risk {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-    padding: 4px 11px;
-    border-radius: var(--radius-full);
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    height: 22px;
+    padding: 0 9px;
+    border-radius: 9999px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", sans-serif;
     white-space: nowrap;
-    box-shadow: var(--neu-flat);
-    border: 1px solid var(--neu-rim);
+    line-height: 1;
+    vertical-align: middle;
+    box-sizing: border-box;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    -webkit-font-smoothing: antialiased;
 }
 
 .badge-risk::before {
     content: '';
     display: inline-block;
-    width: 6px;
-    height: 6px;
+    width: 5.5px;
+    height: 5.5px;
     border-radius: 50%;
+    flex-shrink: 0;
+    position: relative;
 }
 
-.badge-risk.SAFE, .badge-risk.LOW {
-    background: var(--threat-safe-bg);
-    color: var(--threat-safe);
-    border: 1px solid var(--threat-safe-border);
+/* If icon is manually placed inside badge-risk, hide pseudo-element to avoid double indicator */
+.badge-risk:has(> i)::before {
+    display: none;
 }
-.badge-risk.SAFE::before, .badge-risk.LOW::before {
-    background: var(--threat-safe);
+
+.badge-risk.SAFE, .badge-risk.LOW, .badge-risk.CLEAN {
+    background: rgba(16, 185, 129, 0.12);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.28);
+}
+.badge-risk.SAFE::before, .badge-risk.LOW::before, .badge-risk.CLEAN::before {
+    background: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.28);
 }
 
 .badge-risk.MEDIUM, .badge-risk.SUSPICIOUS {
-    background: var(--threat-medium-bg);
-    color: var(--threat-medium);
-    border: 1px solid var(--threat-medium-border);
+    background: rgba(245, 158, 11, 0.12);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.30);
 }
 .badge-risk.MEDIUM::before, .badge-risk.SUSPICIOUS::before {
-    background: var(--threat-medium);
+    background: #f59e0b;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.28);
 }
 
 .badge-risk.HIGH, .badge-risk.HIGH_RISK {
-    background: var(--threat-high-bg);
-    color: var(--threat-high);
-    border: 1px solid var(--threat-high-border);
+    background: rgba(249, 115, 22, 0.14);
+    color: #fb923c;
+    border: 1px solid rgba(249, 115, 22, 0.32);
 }
 .badge-risk.HIGH::before, .badge-risk.HIGH_RISK::before {
-    background: var(--threat-high);
+    background: #f97316;
+    box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.28), 0 0 6px rgba(249, 115, 22, 0.25);
 }
 
 .badge-risk.CRITICAL, .badge-risk.MALICIOUS {
-    background: var(--threat-critical-bg);
-    color: var(--threat-critical);
-    border: 1px solid var(--threat-critical-border);
+    background: rgba(239, 68, 68, 0.16);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.36);
 }
 .badge-risk.CRITICAL::before, .badge-risk.MALICIOUS::before {
-    background: var(--threat-critical);
+    background: #ef4444;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.32), 0 0 6px rgba(239, 68, 68, 0.35);
+}
+
+.badge-risk.CLEAR, .badge-risk.INFO, .badge-risk.UNKNOWN {
+    background: rgba(148, 163, 184, 0.12);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+}
+.badge-risk.CLEAR::before, .badge-risk.INFO::before, .badge-risk.UNKNOWN::before {
+    background: #94a3b8;
+    box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.25);
 }
 
 /* ==========================================================================
@@ -903,36 +930,76 @@ body:has(.soc-action-modal.show) .modal-backdrop {
     box-shadow: var(--neu-raised) !important;
 }
 
-[data-theme="light"] .badge.bg-success,
-[data-theme="light"] .badge-risk.SAFE {
-    background-color: #e0e5ec !important;
-    color: #15803d !important;
-    border: 1px solid rgba(21, 128, 61, 0.25) !important;
-    box-shadow: var(--neu-flat) !important;
+[data-theme="light"] .badge-risk {
+    box-shadow: 1px 1px 2px rgba(163, 177, 198, 0.35), -1px -1px 2px rgba(255, 255, 255, 0.85);
 }
 
-[data-theme="light"] .badge.bg-danger,
-[data-theme="light"] .badge-risk.CRITICAL {
-    background-color: #e0e5ec !important;
-    color: #b91c1c !important;
-    border: 1px solid rgba(185, 28, 28, 0.25) !important;
-    box-shadow: var(--neu-flat) !important;
+[data-theme="light"] .badge-risk.SAFE,
+[data-theme="light"] .badge-risk.LOW,
+[data-theme="light"] .badge-risk.CLEAN,
+[data-theme="light"] .badge.bg-success {
+    background: rgba(16, 185, 129, 0.12) !important;
+    color: #047857 !important;
+    border: 1px solid rgba(16, 185, 129, 0.30) !important;
+}
+[data-theme="light"] .badge-risk.SAFE::before,
+[data-theme="light"] .badge-risk.LOW::before,
+[data-theme="light"] .badge-risk.CLEAN::before {
+    background: #10b981 !important;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25) !important;
 }
 
-[data-theme="light"] .badge.bg-warning,
-[data-theme="light"] .badge-risk.MEDIUM {
-    background-color: #e0e5ec !important;
+[data-theme="light"] .badge-risk.MEDIUM,
+[data-theme="light"] .badge-risk.SUSPICIOUS,
+[data-theme="light"] .badge.bg-warning {
+    background: rgba(217, 119, 6, 0.12) !important;
     color: #b45309 !important;
-    border: 1px solid rgba(180, 83, 9, 0.25) !important;
-    box-shadow: var(--neu-flat) !important;
+    border: 1px solid rgba(217, 119, 6, 0.30) !important;
+}
+[data-theme="light"] .badge-risk.MEDIUM::before,
+[data-theme="light"] .badge-risk.SUSPICIOUS::before {
+    background: #f59e0b !important;
+    box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.25) !important;
 }
 
-[data-theme="light"] .badge.bg-secondary,
-[data-theme="light"] .badge-risk.CLEAR {
-    background-color: #e0e5ec !important;
-    color: #334155 !important;
-    border: 1px solid var(--neu-rim) !important;
-    box-shadow: var(--neu-flat) !important;
+[data-theme="light"] .badge-risk.HIGH,
+[data-theme="light"] .badge-risk.HIGH_RISK {
+    background: rgba(234, 88, 12, 0.12) !important;
+    color: #c2410c !important;
+    border: 1px solid rgba(234, 88, 12, 0.30) !important;
+}
+[data-theme="light"] .badge-risk.HIGH::before,
+[data-theme="light"] .badge-risk.HIGH_RISK::before {
+    background: #f97316 !important;
+    box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.25), 0 0 5px rgba(234, 88, 12, 0.20) !important;
+}
+
+[data-theme="light"] .badge-risk.CRITICAL,
+[data-theme="light"] .badge-risk.MALICIOUS,
+[data-theme="light"] .badge.bg-danger {
+    background: rgba(220, 38, 38, 0.12) !important;
+    color: #b91c1c !important;
+    border: 1px solid rgba(220, 38, 38, 0.32) !important;
+}
+[data-theme="light"] .badge-risk.CRITICAL::before,
+[data-theme="light"] .badge-risk.MALICIOUS::before {
+    background: #ef4444 !important;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.25), 0 0 5px rgba(220, 38, 38, 0.20) !important;
+}
+
+[data-theme="light"] .badge-risk.CLEAR,
+[data-theme="light"] .badge-risk.INFO,
+[data-theme="light"] .badge-risk.UNKNOWN,
+[data-theme="light"] .badge.bg-secondary {
+    background: rgba(100, 116, 139, 0.10) !important;
+    color: #475569 !important;
+    border: 1px solid rgba(100, 116, 139, 0.25) !important;
+}
+[data-theme="light"] .badge-risk.CLEAR::before,
+[data-theme="light"] .badge-risk.INFO::before,
+[data-theme="light"] .badge-risk.UNKNOWN::before {
+    background: #64748b !important;
+    box-shadow: 0 0 0 2px rgba(100, 116, 139, 0.22) !important;
 }
 
 [data-theme="light"] .soc-badge-active {
