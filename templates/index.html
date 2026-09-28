@@ -131,58 +131,238 @@
             transform: translateY(1px);
         }
 
+        /* Tactile Neumorphic Top Bar */
         .navbar-soc {
-            background-color: var(--bg-app, #181c24) !important;
-            background: var(--bg-app, #181c24) !important;
-            opacity: 1 !important;
-            backdrop-filter: none !important;
-            -webkit-backdrop-filter: none !important;
+            background-color: rgba(24, 28, 36, 0.96) !important;
+            background: rgba(24, 28, 36, 0.96) !important;
+            backdrop-filter: blur(14px) !important;
+            -webkit-backdrop-filter: blur(14px) !important;
             border-bottom: 1px solid var(--neu-rim);
             box-shadow: 0 4px 20px var(--neu-dark-shadow);
             position: sticky;
             top: 0;
             z-index: 1000;
+            padding: 12px 0;
+            transition: all var(--transition-base, 0.2s ease);
         }
 
         [data-theme="light"] .navbar-soc {
-            background-color: #f4f3ef !important;
-            background: #f4f3ef !important;
-            border-bottom: 1px solid var(--neu-rim) !important;
-            box-shadow: 0 4px 20px rgba(195, 190, 180, 0.55) !important;
+            background-color: rgba(244, 243, 239, 0.96) !important;
+            background: rgba(244, 243, 239, 0.96) !important;
+            border-bottom: 1px solid rgba(195, 190, 180, 0.5) !important;
+            box-shadow: 0 4px 18px rgba(195, 190, 180, 0.45) !important;
+        }
+
+        .topbar-brand-name {
+            font-size: 1.18rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+        }
+
+        /* Inset Neumorphic V2 SOC Badge */
+        .topbar-soc-badge {
+            background: #14161d;
+            box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.65), inset -2px -2px 4px rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            color: #818cf8;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 20px;
+            letter-spacing: 0.05em;
+        }
+
+        [data-theme="light"] .topbar-soc-badge {
+            background: #eae8e2;
+            box-shadow: inset 2px 2px 4px rgba(195, 190, 180, 0.6), inset -2px -2px 4px rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.85);
+            color: #d97706;
+        }
+
+        /* Tactile Inset Neumorphic Navigation Dock */
+        .topbar-nav-dock {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 6px;
+            background: #14161d;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 9999px;
+            box-shadow: inset 3px 3px 7px rgba(0, 0, 0, 0.75), inset -3px -3px 7px rgba(255, 255, 255, 0.04);
+        }
+
+        [data-theme="light"] .topbar-nav-dock {
+            background: #ebeae4;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            box-shadow: inset 3px 3px 6px rgba(195, 190, 180, 0.65), inset -3px -3px 6px rgba(255, 255, 255, 0.95);
+        }
+
+        .topbar-nav-link {
+            color: var(--text-secondary);
+            font-size: 0.86rem;
+            font-weight: 600;
+            padding: 7px 18px !important;
+            border-radius: 9999px;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .topbar-nav-link:hover {
+            color: #ffffff;
+            background: #1a1e27;
+            box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.7), -3px -3px 8px rgba(255, 255, 255, 0.05);
+            transform: translateY(-1px);
+        }
+
+        [data-theme="light"] .topbar-nav-link:hover {
+            color: #0f172a;
+            background: #fcfbfa;
+            box-shadow: 2px 2px 6px rgba(195, 190, 180, 0.55), -2px -2px 6px rgba(255, 255, 255, 0.95);
+            transform: translateY(-1px);
+        }
+
+        .topbar-nav-link:active {
+            transform: translateY(1px);
+            box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.6), inset -2px -2px 5px rgba(255, 255, 255, 0.04);
+        }
+
+        [data-theme="light"] .topbar-nav-link:active {
+            box-shadow: inset 2px 2px 5px rgba(195, 190, 180, 0.7), inset -2px -2px 5px rgba(255, 255, 255, 0.9);
+        }
+
+        /* Tactile Raised Theme Toggle */
+        .soc-theme-toggle-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #1a1e27;
+            box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.7), -4px -4px 10px rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            color: #fbbf24;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        [data-theme="light"] .soc-theme-toggle-btn {
+            background: #fcfbfa;
+            box-shadow: 4px 4px 9px rgba(195, 190, 180, 0.58), -4px -4px 9px rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            color: #d97706;
+        }
+
+        .soc-theme-toggle-btn:hover {
+            transform: translateY(-1px) rotate(15deg);
+            box-shadow: 6px 6px 14px rgba(0, 0, 0, 0.8), -6px -6px 14px rgba(255, 255, 255, 0.08);
+        }
+
+        [data-theme="light"] .soc-theme-toggle-btn:hover {
+            box-shadow: 6px 6px 14px rgba(195, 190, 180, 0.7), -6px -6px 14px rgba(255, 255, 255, 1);
+        }
+
+        .soc-theme-toggle-btn:active {
+            transform: translateY(1px);
+            box-shadow: inset 3px 3px 6px rgba(0, 0, 0, 0.7), inset -3px -3px 6px rgba(255, 255, 255, 0.04);
+        }
+
+        [data-theme="light"] .soc-theme-toggle-btn:active {
+            box-shadow: inset 3px 3px 6px rgba(195, 190, 180, 0.7), inset -3px -3px 6px rgba(255, 255, 255, 0.95);
+        }
+
+        /* Tactile Raised SOC Portal Access Button */
+        .topbar-action-btn {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            color: #ffffff !important;
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 8px 22px;
+            border-radius: 9999px;
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 4px 4px 12px rgba(79, 70, 229, 0.4), -2px -2px 6px rgba(255, 255, 255, 0.15);
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+
+        .topbar-action-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 6px 6px 18px rgba(79, 70, 229, 0.55);
+            color: #ffffff;
+        }
+
+        .topbar-action-btn:active {
+            transform: translateY(1px);
+            box-shadow: 2px 2px 6px rgba(79, 70, 229, 0.4);
+        }
+
+        .navbar-soc .navbar-toggler {
+            border: 1px solid var(--neu-rim);
+            background: var(--bg-surface-elevated);
+            box-shadow: var(--neu-flat);
+            border-radius: 12px;
+            padding: 8px 12px;
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+        }
+
+        .navbar-soc .navbar-toggler:hover {
+            box-shadow: var(--neu-btn-hover);
+            transform: translateY(-1px);
+        }
+
+        .navbar-soc .navbar-toggler:focus {
+            box-shadow: var(--neu-btn-pressed);
+            outline: none;
+        }
+
+        @media (min-width: 992px) {
+            .topbar-brand-col {
+                flex: 1 1 0;
+            }
+            .topbar-actions-col {
+                flex: 1 1 0;
+                justify-content: flex-end;
+            }
         }
 
         @media (max-width: 991px) {
             .navbar-soc .navbar-collapse {
                 background: var(--bg-surface-elevated);
                 border: 1px solid var(--neu-rim);
-                border-radius: 16px;
-                padding: 16px;
+                border-radius: 20px;
+                padding: 18px;
                 margin-top: 10px;
                 box-shadow: var(--neu-raised);
             }
-            .navbar-soc .navbar-nav {
-                gap: 8px !important;
-                align-items: stretch !important;
+            .topbar-nav-dock {
+                display: flex;
+                flex-direction: column;
+                background: transparent;
+                box-shadow: none;
+                border: none;
+                width: 100%;
+                gap: 6px;
+                padding: 0;
             }
-            .navbar-soc .nav-link {
-                padding: 8px 12px !important;
-                border-radius: 10px;
-                font-size: 0.9rem !important;
-            }
-            .navbar-soc .nav-link:hover {
-                background: var(--bg-surface-hover);
-            }
-            .navbar-soc .btn-soc-primary {
+            .topbar-nav-link {
                 width: 100%;
                 text-align: center;
-                justify-content: center;
-                display: flex;
                 padding: 9px 14px !important;
-                margin-top: 4px;
+                border-radius: 12px;
+                background: var(--bg-surface);
+                border: 1px solid var(--neu-rim);
+                box-shadow: var(--neu-flat);
             }
-            .navbar-soc .soc-theme-toggle-btn {
-                margin: 4px 0;
-                align-self: flex-start;
+            .navbar-soc .topbar-action-btn {
+                width: 100%;
+                justify-content: center;
+                padding: 10px 16px !important;
             }
         }
 
@@ -701,35 +881,50 @@
     </style>
 </head>
 <body>
-    <!-- Top Navigation Bar -->
-    <nav class="navbar navbar-expand-lg navbar-soc py-2">
-        <div class="container">
-            <a class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary-soc" href="/" style="font-size: 1.15rem;">
-                <img src="{{ url_for('static', filename='img/logo.png') }}?v=2.7.2" alt="BullyMail Logo" width="34" height="34" style="object-fit: contain; filter: drop-shadow(0 2px 5px rgba(245, 158, 11, 0.4));">
-                BullyMail <span class="badge soc-title-badge ms-1" style="font-size: 0.68rem;">V2 SOC</span>
-            </a>
-            <button class="navbar-toggler border-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+    <!-- Top Navigation Bar: Executive Cyber Command Bar -->
+    <nav class="navbar navbar-expand-lg navbar-soc">
+        <div class="container d-flex align-items-center justify-content-between">
+            <!-- Left: Brand -->
+            <div class="topbar-brand-col d-flex align-items-center">
+                <a class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary-soc m-0" href="/">
+                    <img src="{{ url_for('static', filename='img/logo.png') }}?v=2.7.3" alt="BullyMail Logo" width="30" height="30" style="object-fit: contain; filter: drop-shadow(0 2px 5px rgba(245, 158, 11, 0.4));">
+                    <span class="topbar-brand-name">BullyMail</span>
+                    <span class="badge topbar-soc-badge">V2 SOC</span>
+                </a>
+            </div>
+
+            <!-- Mobile Toggler -->
+            <button class="navbar-toggler border-secondary d-lg-none" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            <div class="collapse navbar-collapse" id="navbarContent">
-                <ul class="navbar-nav ms-auto align-items-center gap-3">
-                    <li class="nav-item"><a class="nav-link text-secondary-soc fw-medium" href="#vectors" style="font-size: 0.88rem;">Threat Vectors</a></li>
-                    <li class="nav-item"><a class="nav-link text-secondary-soc fw-medium" href="#demo" style="font-size: 0.88rem;">Live Demo</a></li>
-                    <li class="nav-item"><a class="nav-link text-secondary-soc fw-medium" href="#architecture" style="font-size: 0.88rem;">Architecture</a></li>
-                    
-                    <!-- Single-Click Theme Toggle Button -->
-                    <li class="nav-item">
-                        <button type="button" class="soc-theme-toggle-btn" aria-label="Switch to light mode" title="Switch to light mode">
-                            <i class="fas fa-sun"></i>
-                        </button>
-                    </li>
 
-                    <li class="nav-item">
-                        <a href="/login" class="btn-soc-primary btn-sm text-decoration-none px-3 py-1.5" style="font-size: 0.82rem;">
-                            <i class="fas fa-lock me-1"></i> SOC Portal Access
-                        </a>
-                    </li>
-                </ul>
+            <!-- Center: Navigation Links -->
+            <div class="collapse navbar-collapse justify-content-center" id="navbarContent">
+                <div class="topbar-nav-dock my-2 my-lg-0">
+                    <a class="topbar-nav-link" href="#vectors">Threat Vectors</a>
+                    <a class="topbar-nav-link" href="#demo">Live Demo</a>
+                    <a class="topbar-nav-link" href="#architecture">Architecture</a>
+                </div>
+
+                <!-- Mobile Action Items (Inside Collapse) -->
+                <div class="d-flex align-items-center gap-3 d-lg-none mt-3 pt-3 border-top border-secondary border-opacity-25 w-100 justify-content-center">
+                    <button type="button" class="soc-theme-toggle-btn" aria-label="Switch theme" title="Switch theme">
+                        <i class="fas fa-sun"></i>
+                    </button>
+                    <a href="/login" class="topbar-action-btn text-decoration-none">
+                        <i class="fas fa-lock me-1.5"></i> SOC Portal Access
+                    </a>
+                </div>
+            </div>
+
+            <!-- Right: Actions (Desktop) -->
+            <div class="topbar-actions-col d-none d-lg-flex align-items-center gap-3">
+                <button type="button" class="soc-theme-toggle-btn" aria-label="Switch theme" title="Switch theme">
+                    <i class="fas fa-sun"></i>
+                </button>
+                <a href="/login" class="topbar-action-btn text-decoration-none">
+                    <i class="fas fa-lock me-1.5"></i> SOC Portal Access
+                </a>
             </div>
         </div>
     </nav>
