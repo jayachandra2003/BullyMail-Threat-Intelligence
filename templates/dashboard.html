@@ -30,13 +30,13 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
     <!-- BullyMail V2 Cyber SOC Stylesheets (Cache-Busted) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.6.9">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=2.6.9">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.7.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=2.7.0">
     
     <!-- Chart.js 4 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Theme Core -->
-    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.6.9"></script>
+    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.7.0"></script>
 </head>
 <body>
     <div class="dashboard-layout">
@@ -432,10 +432,12 @@
                         </div>
                         <div class="soc-engine-toggle-group" id="threatAnalyzerEngineToggle" role="group" aria-label="Analysis Engine Mode">
                             <button type="button" class="btn-engine-toggle active" id="btnEngineNormal" onclick="setThreatAnalyzerEngine('normal')" title="Standard ML and Multi-Vector Rule Engine">
-                                <i class="fas fa-shield-alt me-1"></i> NORMAL
+                                <i class="fas fa-shield-alt"></i>
+                                <span>Standard ML</span>
                             </button>
                             <button type="button" class="btn-engine-toggle" id="btnEngineLLM" onclick="setThreatAnalyzerEngine('llm')" title="NVIDIA Nemotron 3.5 Lightning AI Threat Engine">
-                                <i class="fas fa-brain me-1 text-accent"></i> AI
+                                <i class="fas fa-brain text-accent"></i>
+                                <span>AI Reasoning</span>
                             </button>
                         </div>
                     </div>
@@ -2025,7 +2027,7 @@
         window.isAnalystUser = {{ 'true' if is_analyst else 'false' }};
         window.institutionName = {{ ((institution_name or session.get('institution_name', '')) | tojson) }};
     </script>
-    <script src="{{ url_for('static', filename='js/core/toast.js') }}?v=2.6.9"></script>
-    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=2.6.9"></script>
+    <script src="{{ url_for('static', filename='js/core/toast.js') }}?v=2.7.0"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=2.7.0"></script>
 </body>
 </html>
