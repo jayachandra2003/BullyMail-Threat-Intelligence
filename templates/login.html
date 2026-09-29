@@ -166,27 +166,90 @@
             margin-bottom: 6px;
         }
 
-        .btn-auth-primary {
-            height: 46px;
-            font-size: 0.92rem;
+        .btn-auth-primary,
+        .btn.btn-auth-primary {
+            height: 48px;
+            font-size: 0.94rem;
             font-weight: 700;
             border-radius: 12px;
-            background: var(--accent-primary);
-            border: 1px solid var(--neu-rim);
-            color: #ffffff;
-            box-shadow: var(--neu-btn);
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+            background-color: #4f46e5 !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4), var(--neu-btn) !important;
             transition: all var(--transition-fast);
+            cursor: pointer;
+            letter-spacing: 0.02em;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .btn-auth-primary:hover {
-            box-shadow: var(--neu-btn-hover);
-            color: #ffffff;
+        .btn-auth-primary:hover,
+        .btn.btn-auth-primary:hover {
+            background: linear-gradient(135deg, #7175f5 0%, #4338ca 100%) !important;
+            background-color: #4338ca !important;
+            color: #ffffff !important;
+            box-shadow: 0 6px 18px rgba(99, 102, 241, 0.55), var(--neu-btn-hover) !important;
             transform: translateY(-1px);
         }
 
-        .btn-auth-primary:active {
-            box-shadow: var(--neu-btn-pressed) !important;
-            transform: translateY(1px) scale(0.98);
+        .btn-auth-primary:focus,
+        .btn-auth-primary:focus-visible,
+        .btn.btn-auth-primary:focus,
+        .btn.btn-auth-primary:focus-visible {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+            background-color: #4f46e5 !important;
+            color: #ffffff !important;
+            outline: none !important;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4), var(--neu-btn) !important;
+        }
+
+        .btn-auth-primary:active,
+        .btn.btn-auth-primary:active {
+            background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%) !important;
+            background-color: #3730a3 !important;
+            color: #ffffff !important;
+            box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.45) !important;
+            transform: translateY(1px) scale(0.99);
+        }
+
+        /* Light Theme Overrides */
+        [data-theme="light"] .btn-auth-primary,
+        [data-theme="light"] .btn.btn-auth-primary {
+            background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
+            background-color: #4338ca !important;
+            border: 1px solid rgba(255, 255, 255, 0.3) !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35), 4px 4px 10px rgba(195, 190, 180, 0.4) !important;
+        }
+
+        [data-theme="light"] .btn-auth-primary:hover,
+        [data-theme="light"] .btn.btn-auth-primary:hover {
+            background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%) !important;
+            background-color: #3730a3 !important;
+            color: #ffffff !important;
+            box-shadow: 0 6px 18px rgba(79, 70, 229, 0.45), 6px 6px 14px rgba(195, 190, 180, 0.5) !important;
+        }
+
+        [data-theme="light"] .btn-auth-primary:focus,
+        [data-theme="light"] .btn-auth-primary:focus-visible,
+        [data-theme="light"] .btn.btn-auth-primary:focus,
+        [data-theme="light"] .btn.btn-auth-primary:focus-visible {
+            background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
+            background-color: #4338ca !important;
+            color: #ffffff !important;
+            outline: none !important;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.35) !important;
+        }
+
+        [data-theme="light"] .btn-auth-primary:active,
+        [data-theme="light"] .btn.btn-auth-primary:active {
+            background: linear-gradient(135deg, #3730a3 0%, #312e81 100%) !important;
+            background-color: #312e81 !important;
+            color: #ffffff !important;
+            box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.35) !important;
+            transform: translateY(1px) scale(0.99);
         }
     </style>
 </head>
@@ -225,6 +288,18 @@
             <div>{{ success }}</div>
         </div>
         {% endif %}
+
+        {% if info %}
+        <div class="alert alert-warning d-flex align-items-center mb-3 py-2 px-3" style="font-size: 0.84rem; border-radius: 6px;" role="alert">
+            <i class="fas fa-clock me-2"></i>
+            <div>{{ info }}</div>
+        </div>
+        {% endif %}
+
+        <div id="dynamicNotice" style="display:none;" class="alert alert-warning align-items-center mb-3 py-2 px-3" style="font-size: 0.84rem; border-radius: 6px;" role="alert">
+            <i class="fas fa-info-circle me-2" id="dynamicNoticeIcon"></i>
+            <div id="dynamicNoticeText"></div>
+        </div>
 
         <form method="POST" action="/login">
             <div class="mb-3">
@@ -269,6 +344,25 @@
                     passInput.type = isPass ? 'text' : 'password';
                     passIcon.className = isPass ? 'fas fa-eye-slash' : 'fas fa-eye';
                 });
+            }
+
+            // Client-side detection of expired session or sign out query flags
+            const urlParams = new URLSearchParams(window.location.search);
+            const noticeBox = document.getElementById('dynamicNotice');
+            const noticeText = document.getElementById('dynamicNoticeText');
+            const noticeIcon = document.getElementById('dynamicNoticeIcon');
+            if (noticeBox && noticeText && !document.querySelector('.alert:not(#dynamicNotice)')) {
+                if (urlParams.get('expired') === '1') {
+                    noticeText.textContent = 'Your session has expired due to 10 minutes of inactivity. Please sign in again.';
+                    noticeBox.className = 'alert alert-warning d-flex align-items-center mb-3 py-2 px-3';
+                    if (noticeIcon) noticeIcon.className = 'fas fa-clock me-2';
+                    noticeBox.style.display = 'flex';
+                } else if (urlParams.get('logged_out') === '1') {
+                    noticeText.textContent = 'You have been successfully signed out. Please enter credentials to sign in.';
+                    noticeBox.className = 'alert alert-info d-flex align-items-center mb-3 py-2 px-3';
+                    if (noticeIcon) noticeIcon.className = 'fas fa-info-circle me-2';
+                    noticeBox.style.display = 'flex';
+                }
             }
         });
     </script>

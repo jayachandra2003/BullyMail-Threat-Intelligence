@@ -1,5 +1,5 @@
 import os
-from flask import Blueprint, render_template, session, redirect, url_for, send_from_directory, current_app, jsonify
+from flask import Blueprint, render_template, session, redirect, url_for, send_from_directory, current_app, jsonify, make_response
 
 from .auth import get_current_user
 
@@ -39,7 +39,7 @@ def dashboard():
     is_org_admin = (user_role == 'org_admin') or (user_role == 'admin' and user.get('institution_id'))
     is_analyst = not is_platform_owner and not is_org_admin
 
-    return render_template(
+    resp = make_response(render_template(
         'dashboard.html',
         current_user=user,
         current_role=user_role,
@@ -47,19 +47,11 @@ def dashboard():
         is_org_admin=is_org_admin,
         is_analyst=is_analyst,
         institution_name=inst_name
-    )
-
-@main_bp.route('/login')
-def login():
-    user = get_current_user()
-    if user:
-        return redirect(url_for('main.dashboard'))
-    return render_template('login.html')
-
-@main_bp.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('main.index'))
+    ))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0, private'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 @main_bp.route('/favicon.ico')
 def favicon():

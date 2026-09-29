@@ -37,9 +37,9 @@
 
         .legal-card {
             background: var(--bg-surface-elevated);
-            border: 1.5px solid var(--neu-rim);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 24px;
-            box-shadow: var(--neu-raised);
+            box-shadow: 0 24px 50px -12px rgba(0, 0, 0, 0.85);
             padding: 36px 32px;
             max-width: 800px;
             width: 100%;
@@ -48,7 +48,9 @@
         }
 
         [data-theme="light"] .legal-card {
-            box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.12), var(--neu-raised);
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.04) !important;
         }
 
         .legal-header {
@@ -70,10 +72,10 @@
         }
 
         .btn-contact-close-icon {
-            background: transparent;
-            border: none;
+            background: var(--bg-surface);
+            border: 1px solid var(--neu-rim-subtle);
             color: var(--text-muted);
-            font-size: 1.25rem;
+            font-size: 1.1rem;
             width: 36px;
             height: 36px;
             border-radius: 50%;
@@ -82,13 +84,26 @@
             justify-content: center;
             cursor: pointer;
             text-decoration: none;
-            transition: all 0.15s ease;
+            box-shadow: var(--neu-btn);
+            transition: all 0.2s ease;
+        }
+
+        [data-theme="light"] .btn-contact-close-icon {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.08), -2px -2px 5px rgba(255, 255, 255, 0.8) !important;
+            color: var(--text-secondary) !important;
         }
 
         .btn-contact-close-icon:hover {
-            color: var(--text-primary);
-            background: var(--bg-surface-hover);
-            transform: scale(1.08);
+            color: var(--text-primary) !important;
+            transform: translateY(-1px);
+            box-shadow: var(--neu-btn-hover);
+        }
+
+        .btn-contact-close-icon:active {
+            transform: translateY(1px);
+            box-shadow: var(--neu-btn-pressed) !important;
         }
 
         .legal-section-title {
@@ -112,13 +127,13 @@
             justify-content: space-between;
             margin-top: 32px;
             padding-top: 20px;
-            border-top: 1px solid var(--neu-rim-subtle);
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
             gap: 12px;
             flex-wrap: wrap;
         }
 
         [data-theme="light"] .legal-card-footer {
-            border-top-color: #e2e8f0;
+            border-top-color: rgba(0, 0, 0, 0.07);
         }
 
         .legal-footer-copy {
@@ -128,27 +143,43 @@
         }
 
         .btn-contact-close-action {
-            background: #fde047;
-            color: #0f172a;
-            font-weight: 700;
+            background: var(--bg-surface-elevated);
+            color: var(--text-primary) !important;
+            font-weight: 600;
             font-size: 0.88rem;
-            padding: 8px 24px;
-            border-radius: 12px;
-            border: 2px solid #0f172a;
-            box-shadow: 2px 2px 0px #0f172a;
+            padding: 9px 24px;
+            border-radius: 9999px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: var(--neu-btn);
             text-decoration: none;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: all 0.15s ease;
+            transition: all 0.2s ease;
+        }
+
+        [data-theme="light"] .btn-contact-close-action {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.08), -2px -2px 6px rgba(255, 255, 255, 0.8) !important;
+            color: var(--text-primary) !important;
         }
 
         .btn-contact-close-action:hover {
-            background: #facc15;
-            color: #000;
-            transform: translate(-1px, -1px);
-            box-shadow: 3px 3px 0px #0f172a;
+            box-shadow: var(--neu-btn-hover);
+            transform: translateY(-1px);
+            color: var(--text-primary) !important;
+        }
+
+        [data-theme="light"] .btn-contact-close-action:hover {
+            box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.12), -3px -3px 8px rgba(255, 255, 255, 0.95) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .btn-contact-close-action:active {
+            box-shadow: var(--neu-btn-pressed) !important;
+            transform: translateY(1px);
         }
 
         .theme-toggle-fixed {

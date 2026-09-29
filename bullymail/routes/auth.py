@@ -1,7 +1,8 @@
+import os
 import time
 import re
 import secrets
-from flask import Blueprint, request, jsonify, session, redirect, url_for, render_template, make_response
+from flask import Blueprint, request, jsonify, session, redirect, url_for, render_template, make_response, current_app
 from ..models.user import UserModel
 from ..models.institution import InstitutionModel
 from ..services.rate_limiter import auth_rate_limiter
@@ -10,6 +11,8 @@ from ..services.auth_email_service import auth_email_service
 from ..services.captcha_service import CaptchaService
 
 auth_bp = Blueprint('auth', __name__)
+
+INACTIVITY_TIMEOUT_SECONDS = 600  # 10 minutes session inactivity timeout
 
 def _get_client_ip():
     """Extracts client IP considering potential proxy forwarding."""
@@ -24,9 +27,6 @@ def _get_client_ip():
 
 @auth_bp.route('/signup', methods=['GET', 'POST'])
 def signup():
-    if request.method == 'GET' and 'user_id' in session:
-        return redirect(url_for('main.dashboard'))
-
     if request.method == 'POST':
         client_ip = _get_client_ip()
 
@@ -366,14 +366,29 @@ class AuthUser(dict):
 def get_current_user():
     """
     Retrieves fresh user data from DB using session['user_id'].
+    Enforces strict 10-minute inactivity session expiration.
     Prevents stale role vulnerabilities and immediately blocks disabled/unapproved/suspended users.
     Returns AuthUser or None.
     """
     user_id = session.get('user_id')
     if not user_id:
         return None
+
+    # Enforce 10-minute session inactivity timeout
+    now = time.time()
+    last_activity = session.get('last_activity')
+    if last_activity is not None:
+        try:
+            if (now - float(last_activity)) > INACTIVITY_TIMEOUT_SECONDS:
+                session.clear()
+                session.modified = True
+                return None
+        except (ValueError, TypeError):
+            pass
+
     user = UserModel.get_by_id(user_id)
     if not user or user.get('status') != 'ACTIVE':
+        session.clear()
         return None
 
     auth_user = AuthUser(user)
@@ -383,7 +398,12 @@ def get_current_user():
         from ..models.institution import InstitutionModel
         inst = InstitutionModel.get_by_id(auth_user.organization_id)
         if not inst or (inst.get('status') or '').upper() not in ('ACTIVE', 'APPROVED'):
+            session.clear()
             return None
+
+    # Sliding session activity window: do not update if request is automated background polling
+    if not request.headers.get('X-Background-Poll'):
+        session['last_activity'] = now
 
     return auth_user
 
@@ -677,12 +697,25 @@ def resend_verification():
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'GET' and 'user_id' in session:
-        user = get_current_user()
-        if user:
-            return redirect(url_for('main.dashboard'))
-        else:
-            session.clear()
+    if request.method == 'GET':
+        if 'user_id' in session:
+            user = get_current_user()
+            if user:
+                return redirect(url_for('main.dashboard'))
+            else:
+                session.clear()
+
+        info_msg = None
+        if request.args.get('expired'):
+            info_msg = "Your session expired after 10 minutes of inactivity. Please sign in again."
+        elif request.args.get('logged_out'):
+            info_msg = "You have been successfully signed out."
+
+        resp = make_response(render_template('login.html', info=info_msg))
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0, private'
+        resp.headers['Pragma'] = 'no-cache'
+        resp.headers['Expires'] = '0'
+        return resp
 
     if request.method == 'POST':
         client_ip = _get_client_ip()
@@ -735,6 +768,7 @@ def login():
             session['role'] = user.get('role', 'analyst')
             session['institution_id'] = user.get('institution_id')
             session['auth_time'] = time.time()
+            session['last_activity'] = time.time()
             session.permanent = True
 
             if request.is_json:
@@ -921,13 +955,45 @@ def reset_password():
 # 6. SESSION MANAGEMENT & LOGOUT
 # =========================================================================
 
-@auth_bp.route('/logout')
+@auth_bp.route('/logout', methods=['GET', 'POST'])
 def logout():
     session.clear()
-    resp = make_response(redirect(url_for('main.index')))
-    # Ensure session cookies are cleared
-    resp.delete_cookie('session')
+    session.modified = True
+
+    reason = request.args.get('reason')
+    if reason == 'inactivity':
+        target = url_for('auth.login', expired=1)
+    else:
+        target = url_for('auth.login', logged_out=1)
+
+    if request.is_json or (request.path.startswith('/api/') and request.headers.get('Accept') == 'application/json'):
+        resp = make_response(jsonify({'success': True, 'message': 'Logged out successfully', 'redirect': target}))
+    else:
+        resp = make_response(redirect(target))
+
+    # Aggressively delete session cookie with identical attributes across transport modes
+    cookie_name = current_app.config.get('SESSION_COOKIE_NAME', 'session')
+    raw_domain = current_app.config.get('SESSION_COOKIE_DOMAIN')
+    domain = raw_domain if isinstance(raw_domain, str) and raw_domain.strip() else None
+    path = current_app.config.get('SESSION_COOKIE_PATH', '/')
+    samesite = current_app.config.get('SESSION_COOKIE_SAMESITE', 'Lax')
+    is_secure = request.is_secure or current_app.config.get('SESSION_COOKIE_SECURE', False) or (os.environ.get('RENDER') is not None)
+
+    # Delete with secure flag matching incoming transport and without
+    resp.delete_cookie(cookie_name, path=path, domain=domain, secure=is_secure, httponly=True, samesite=samesite)
+    resp.delete_cookie(cookie_name, path=path, domain=domain, secure=False, httponly=True, samesite=samesite)
+    resp.delete_cookie(cookie_name, path='/')
+    resp.delete_cookie(cookie_name)
+
+    # Strict cache-control headers preventing any back-button or bfcache re-entry
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0, private'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
     return resp
+
+@auth_bp.route('/api/auth/logout', methods=['GET', 'POST'])
+def api_logout():
+    return logout()
 
 @auth_bp.route('/api/auth/status')
 def auth_status():

@@ -72,8 +72,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     initForms();
     
-    // Auto-refresh stats and live stream every 25s
+    // =========================================================================
+    // 10-Minute User Inactivity Tracker & Auto-Logout Guard (600,000 ms)
+    // =========================================================================
+    const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+    let lastUserInteractionTime = Date.now();
+    let isSessionTerminated = false;
+
+    window.isUserInactive = function() {
+        return (Date.now() - lastUserInteractionTime) >= INACTIVITY_TIMEOUT_MS;
+    };
+
+    function recordUserInteraction() {
+        lastUserInteractionTime = Date.now();
+    }
+
+    ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'].forEach(evtName => {
+        window.addEventListener(evtName, recordUserInteraction, { passive: true });
+    });
+
     setInterval(() => {
+        if (isSessionTerminated) return;
+        const elapsed = Date.now() - lastUserInteractionTime;
+        if (elapsed >= INACTIVITY_TIMEOUT_MS) {
+            isSessionTerminated = true;
+            console.warn('[BullyMail SOC] 10 minutes of inactivity detected. Redirecting to logout.');
+            window.location.href = '/logout?reason=inactivity';
+        }
+    }, 5000);
+
+    // Auto-refresh stats and live stream every 25s (suspended when user is inactive)
+    setInterval(() => {
+        if (isSessionTerminated || window.isUserInactive()) return;
         loadDashboardStats();
     }, 25000);
 
@@ -313,9 +343,16 @@ window.recentAnalysisHistory = [];
 
 async function loadDashboardStats() {
     try {
+        if (typeof window.isUserInactive === 'function' && window.isUserInactive()) return;
         const instId = getCurrentInstitutionId();
         const url = instId ? `/api/system-stats?institution_id=${encodeURIComponent(instId)}` : '/api/system-stats';
-        const res = await fetch(url);
+        const res = await fetch(url, {
+            headers: { 'X-Background-Poll': '1' }
+        });
+        if (res.status === 401) {
+            window.location.href = '/logout?reason=inactivity';
+            return;
+        }
         const data = await res.json();
         if (data.success) {
             const s = data.stats;
@@ -3148,7 +3185,7 @@ function initMailboxAutoSync() {
     updateAutoSyncUI('idle', window.mailboxCountdownSeconds);
 
     window.mailboxAutoSyncTimer = setInterval(() => {
-        if (window.isAutoSyncing) return;
+        if (window.isAutoSyncing || (typeof window.isUserInactive === 'function' && window.isUserInactive())) return;
 
         window.mailboxCountdownSeconds--;
         if (window.mailboxCountdownSeconds <= 0) {

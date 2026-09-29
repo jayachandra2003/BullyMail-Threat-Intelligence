@@ -18,6 +18,10 @@ def create_app(config_class=Config):
     if app.config.get('FLASK_ENV') == 'production' and not app.config.get('SECRET_KEY'):
         raise ValueError("CRITICAL SECURITY CONFIGURATION ERROR: SECRET_KEY must be explicitly defined in environment for production deployments.")
     
+    # Enable reverse proxy trust headers (Render / SSL reverse proxies)
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
     # Configure CORS
     CORS(app, supports_credentials=True)
     
@@ -96,9 +100,9 @@ def create_app(config_class=Config):
         ]
         response.headers['Content-Security-Policy'] = "; ".join(csp_directives)
         
-        # Force zero-cache response headers for static files to guarantee instant updates
-        if request.path.startswith('/static/'):
-            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        # Force zero-cache response headers for static files, dynamic auth, and dashboard
+        if request.path.startswith('/static/') or request.path in ('/login', '/logout', '/dashboard') or request.path.startswith('/api/'):
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0, private'
             response.headers['Pragma'] = 'no-cache'
             response.headers['Expires'] = '0'
 

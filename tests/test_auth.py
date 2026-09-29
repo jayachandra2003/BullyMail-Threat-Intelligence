@@ -196,3 +196,56 @@ def test_admin_credential_synchronization_on_startup(app):
     assert auth_user is not None
     assert status == 'SUCCESS'
     assert auth_user['username'] == new_admin_user
+
+def test_logout_clears_session_and_prevents_direct_relogin(client):
+    """15. Test that logout thoroughly clears session, deletes cookies, and subsequent /login requests prompt for credentials."""
+    # 1. Perform login
+    login_res = client.post('/login', json={
+        'username': TestConfig.ADMIN_USERNAME,
+        'password': TestConfig.ADMIN_PASSWORD
+    })
+    assert login_res.status_code == 200
+
+    # Verify dashboard accessible
+    dash_res = client.get('/dashboard')
+    assert dash_res.status_code == 200
+
+    # 2. Perform logout
+    logout_res = client.get('/logout')
+    assert logout_res.status_code == 302
+    assert '/login' in logout_res.headers.get('Location', '')
+    assert 'no-store' in logout_res.headers.get('Cache-Control', '')
+
+    # 3. Subsequent visit to /dashboard must redirect to /login
+    dash_after_logout = client.get('/dashboard')
+    assert dash_after_logout.status_code == 302
+    assert '/login' in dash_after_logout.headers.get('Location', '')
+
+    # 4. Subsequent visit to /login must show login form (status 200), NOT redirect to dashboard
+    login_get_res = client.get('/login')
+    assert login_get_res.status_code == 200
+    assert b'Operator Sign In' in login_get_res.data
+
+def test_10_minute_inactivity_session_timeout(client):
+    """16. Test that 10 minutes of inactivity automatically invalidates user session."""
+    import time
+    login_res = client.post('/login', json={
+        'username': TestConfig.ADMIN_USERNAME,
+        'password': TestConfig.ADMIN_PASSWORD
+    })
+    assert login_res.status_code == 200
+
+    # Simulate 11 minutes (660 seconds) elapsed since last activity
+    with client.session_transaction() as sess:
+        sess['last_activity'] = time.time() - 660
+
+    # Next request must be rejected due to inactivity timeout
+    api_res = client.get('/api/system-stats')
+    assert api_res.status_code == 401
+    data = api_res.get_json()
+    assert data.get('success') is False
+
+    # Web request to /dashboard must also redirect to /login
+    dash_res = client.get('/dashboard')
+    assert dash_res.status_code == 302
+    assert '/login' in dash_res.headers.get('Location', '')
