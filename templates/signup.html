@@ -251,6 +251,61 @@
             box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.35) !important;
             transform: translateY(1px) scale(0.99);
         }
+
+        /* Password Strength Meter, Eye Toggles & Trust Row */
+        .strength-bar {
+            height: 4px;
+            border-radius: 9999px;
+            background: var(--bg-inset);
+            box-shadow: var(--neu-inset-subtle, inset 1px 1px 3px rgba(0, 0, 0, 0.3));
+            transition: all var(--transition-fast, 0.2s ease);
+        }
+
+        .strength-bar.active-weak { background: #ef4444 !important; box-shadow: 0 0 6px rgba(239, 68, 68, 0.4); }
+        .strength-bar.active-fair { background: #f97316 !important; box-shadow: 0 0 6px rgba(249, 115, 22, 0.4); }
+        .strength-bar.active-strong { background: #f59e0b !important; box-shadow: 0 0 6px rgba(245, 158, 11, 0.4); }
+        .strength-bar.active-soc { background: #10b981 !important; box-shadow: 0 0 6px rgba(16, 185, 129, 0.4); }
+
+        .trust-badge-row {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            padding-top: 12px;
+            margin-top: 14px;
+            border-top: 1px solid var(--neu-rim-subtle);
+            width: 100%;
+        }
+
+        .trust-badge-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .btn-toggle-eye {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            padding: 0 14px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            z-index: 5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color var(--transition-fast, 0.15s ease);
+        }
+
+        .btn-toggle-eye:hover {
+            color: var(--text-primary);
+        }
     </style>
 </head>
 <body>
@@ -341,17 +396,51 @@
             <div class="row g-2 mb-3">
                 <div class="col-sm-6">
                     <label class="auth-label" for="password">Password</label>
-                    <input type="password" class="form-control form-control-auth" id="password" name="password" placeholder="••••••••••••" required>
+                    <div class="position-relative">
+                        <input type="password" class="form-control form-control-auth pe-5" id="password" name="password" placeholder="••••••••••••" required>
+                        <button class="btn-toggle-eye" type="button" id="togglePasswordBtn" aria-label="Toggle password visibility">
+                            <i class="fas fa-eye" id="togglePasswordIcon"></i>
+                        </button>
+                    </div>
+                    <div class="mt-1.5 px-0.5">
+                        <div class="d-flex gap-1" style="height: 4px;">
+                            <div class="strength-bar flex-fill" id="bar1"></div>
+                            <div class="strength-bar flex-fill" id="bar2"></div>
+                            <div class="strength-bar flex-fill" id="bar3"></div>
+                            <div class="strength-bar flex-fill" id="bar4"></div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-1" style="font-size: 0.68rem;">
+                            <span class="text-muted">Password Strength:</span>
+                            <span id="strengthText" class="fw-bold text-muted">Enter password</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="col-sm-6">
                     <label class="auth-label" for="confirm_password">Confirm Password</label>
-                    <input type="password" class="form-control form-control-auth" id="confirm_password" name="confirm_password" placeholder="••••••••••••" required>
+                    <div class="position-relative">
+                        <input type="password" class="form-control form-control-auth pe-5" id="confirm_password" name="confirm_password" placeholder="••••••••••••" required>
+                        <button class="btn-toggle-eye" type="button" id="toggleConfirmPasswordBtn" aria-label="Toggle confirm password visibility">
+                            <i class="fas fa-eye" id="toggleConfirmPasswordIcon"></i>
+                        </button>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-end mt-1" style="font-size: 0.68rem; height: 16px;">
+                        <span id="matchText" class="fw-semibold" style="display: none;"></span>
+                    </div>
                 </div>
             </div>
 
             <button type="submit" class="btn btn-auth-primary w-100 mt-1">
                 <i class="fas fa-paper-plane me-1"></i> Submit Organization Application
             </button>
+
+            <!-- Subtle Enterprise Security Trust Bar -->
+            <div class="trust-badge-row">
+                <span class="trust-badge-item"><i class="fas fa-lock text-success"></i> 256-Bit TLS</span>
+                <span>&bull;</span>
+                <span class="trust-badge-item"><i class="fas fa-server text-primary"></i> Tenant-Isolated</span>
+                <span>&bull;</span>
+                <span class="trust-badge-item"><i class="fas fa-shield-halved text-warning"></i> SOC 2 Calibrated</span>
+            </div>
 
             <div class="text-center mt-3 small text-muted" style="font-size: 0.82rem;">
                 Already registered? <a href="/login" class="text-decoration-none text-primary fw-medium">Sign in to SOC</a>
@@ -361,5 +450,110 @@
 
     <!-- Bootstrap 5 Bundle JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Password toggle 1
+            const passInput = document.getElementById('password');
+            const passBtn = document.getElementById('togglePasswordBtn');
+            const passIcon = document.getElementById('togglePasswordIcon');
+            if (passBtn && passInput && passIcon) {
+                passBtn.addEventListener('click', () => {
+                    const isPass = passInput.type === 'password';
+                    passInput.type = isPass ? 'text' : 'password';
+                    passIcon.className = isPass ? 'fas fa-eye-slash' : 'fas fa-eye';
+                });
+            }
+
+            // Confirm password toggle 2
+            const confirmInput = document.getElementById('confirm_password');
+            const confirmBtn = document.getElementById('toggleConfirmPasswordBtn');
+            const confirmIcon = document.getElementById('toggleConfirmPasswordIcon');
+            if (confirmBtn && confirmInput && confirmIcon) {
+                confirmBtn.addEventListener('click', () => {
+                    const isPass = confirmInput.type === 'password';
+                    confirmInput.type = isPass ? 'text' : 'password';
+                    confirmIcon.className = isPass ? 'fas fa-eye-slash' : 'fas fa-eye';
+                });
+            }
+
+            // Real-time strength meter
+            const b1 = document.getElementById('bar1');
+            const b2 = document.getElementById('bar2');
+            const b3 = document.getElementById('bar3');
+            const b4 = document.getElementById('bar4');
+            const strText = document.getElementById('strengthText');
+
+            if (passInput && b1 && b2 && b3 && b4 && strText) {
+                passInput.addEventListener('input', () => {
+                    const val = passInput.value || '';
+                    [b1, b2, b3, b4].forEach(b => b.className = 'strength-bar flex-fill');
+
+                    if (!val) {
+                        strText.textContent = 'Enter password';
+                        strText.className = 'fw-bold text-muted';
+                        checkMatch();
+                        return;
+                    }
+
+                    let score = 0;
+                    if (val.length >= 6) score++;
+                    if (val.length >= 8 && /[0-9]/.test(val)) score++;
+                    if (val.length >= 10 && /[A-Z]/.test(val)) score++;
+                    if (/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(val)) score++;
+
+                    if (score <= 1) {
+                        b1.className = 'strength-bar flex-fill active-weak';
+                        strText.textContent = 'Weak';
+                        strText.className = 'fw-bold text-danger';
+                    } else if (score === 2) {
+                        b1.className = 'strength-bar flex-fill active-fair';
+                        b2.className = 'strength-bar flex-fill active-fair';
+                        strText.textContent = 'Fair';
+                        strText.className = 'fw-bold text-warning';
+                    } else if (score === 3) {
+                        b1.className = 'strength-bar flex-fill active-strong';
+                        b2.className = 'strength-bar flex-fill active-strong';
+                        b3.className = 'strength-bar flex-fill active-strong';
+                        strText.textContent = 'Strong';
+                        strText.className = 'fw-bold text-warning';
+                    } else {
+                        b1.className = 'strength-bar flex-fill active-soc';
+                        b2.className = 'strength-bar flex-fill active-soc';
+                        b3.className = 'strength-bar flex-fill active-soc';
+                        b4.className = 'strength-bar flex-fill active-soc';
+                        strText.textContent = 'SOC-Grade 🛡️';
+                        strText.className = 'fw-bold text-success';
+                    }
+                    checkMatch();
+                });
+            }
+
+            // Real-time password match
+            function checkMatch() {
+                const matchEl = document.getElementById('matchText');
+                if (!matchEl || !passInput || !confirmInput) return;
+                const p1 = passInput.value;
+                const p2 = confirmInput.value;
+
+                if (!p2) {
+                    matchEl.style.display = 'none';
+                    return;
+                }
+
+                matchEl.style.display = 'inline-flex';
+                if (p1 === p2) {
+                    matchEl.innerHTML = '<i class="fas fa-check-circle me-1"></i> Passwords match';
+                    matchEl.className = 'fw-semibold text-success';
+                } else {
+                    matchEl.innerHTML = '<i class="fas fa-times-circle me-1"></i> Passwords do not match';
+                    matchEl.className = 'fw-semibold text-danger';
+                }
+            }
+
+            if (confirmInput) {
+                confirmInput.addEventListener('input', checkMatch);
+            }
+        });
+    </script>
 </body>
 </html>
