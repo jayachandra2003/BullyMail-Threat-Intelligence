@@ -93,13 +93,20 @@ def get_connection():
         try:
             import psycopg2
             import psycopg2.extras
-            conn = psycopg2.connect(
-                host=db_host,
-                port=db_port,
-                user=db_user,
-                password=db_pass,
-                dbname=db_name
-            )
+            raw_db_url = _get_config_val('DATABASE_URL')
+            if raw_db_url and ('postgres://' in raw_db_url or 'postgresql://' in raw_db_url):
+                formatted_url = raw_db_url.strip()
+                if formatted_url.startswith('postgres://'):
+                    formatted_url = formatted_url.replace('postgres://', 'postgresql://', 1)
+                conn = psycopg2.connect(formatted_url)
+            else:
+                conn = psycopg2.connect(
+                    host=db_host,
+                    port=db_port,
+                    user=db_user,
+                    password=db_pass,
+                    dbname=db_name
+                )
             conn.autocommit = False
             _active_engine = 'postgres'
             return conn
